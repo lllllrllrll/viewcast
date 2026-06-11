@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ViewCast - Video Analyzer</title>
+    <link rel="stylesheet" href="../components/style.css">
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" aria-label="Dashboard navigation">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19V5" />
+              <path d="M4 19h16" />
+              <path d="m8 15 3-4 3 2 4-7" />
+            </svg>
+          </div>
+          <div>
+            <h1>ViewCast</h1>
+            <span>Audience Studio</span>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <a href="../index.html">
+            <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3z" /><path d="M13 21h8V11h-8z" /><path d="M13 3h8v6h-8z" /><path d="M3 21h8v-6H3z" /></svg>
+            Overview
+            <span class="badge">12</span>
+          </a>
+          <a href="trends.html">
+            <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" /></svg>
+            Trends
+          </a>
+          <a href="analyzer.html" class="active">
+            <svg viewBox="0 0 24 24"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9" /><path d="M7 20h10" /><path d="M12 16v4" /></svg>
+            Video Analyzer
+          </a>
+          <a href="predictor.html">
+            <svg viewBox="0 0 24 24"><path d="M12 3v4" /><path d="M12 17v4" /><path d="M3 12h4" /><path d="M17 12h4" /><path d="m5.6 5.6 2.8 2.8" /><path d="m15.6 15.6 2.8 2.8" /><path d="m18.4 5.6-2.8 2.8" /><path d="m8.4 15.6-2.8 2.8" /></svg>
+            Success Predictor
+          </a>
+          <a href="competitors.html">
+            <svg viewBox="0 0 24 24"><path d="M4 19V5" /><path d="M4 19h16" /><path d="M8 16V9" /><path d="M12 16V6" /><path d="M16 16v-4" /></svg>
+            Competitor Compare
+          </a>
+          <a href="channel.html">
+            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3z" /></svg>
+            My Channel
+          </a>
+          <a href="insights.html">
+            <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /><path d="M9 21h6" /><path d="M10 17h4" /></svg>
+            AI Insights
+            <span class="badge">6</span>
+          </a>
+          <a href="audience.html">
+            <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+            Audience
+          </a>
+          <a href="retention.html">
+            <svg viewBox="0 0 24 24"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg>
+            Retention
+          </a>
+          <a href="settings.html">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.23.36.6.6 1 .6h.6a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z" /></svg>
+            Settings
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <strong>Video Health</strong>
+          <span>Analyze individual video performance and pacing to identify exact points of friction.</span>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="title-block">
+            <h2>Video Analyzer</h2>
+            <p>Break down individual uploads by retention, engagement, pacing, and audience fit.</p>
+          </div>
+          <div class="actions">
+            <label class="search">
+              <select style="appearance: none; -webkit-appearance: none; border: 0; background: transparent; width: 100%; outline: 0;">
+                 <option>Select Video: Editing Breakdown</option>
+                 <option>Setup Tour</option>
+                 <option>Creator Workflow</option>
+              </select>
+            </label>
+          </div>
+        </header>
+
+        <section class="dashboard-grid">
+          <article class="panel full showcase-panel">
+            <div class="panel-head">
+              <div>
+                <h3>Upload Breakdown</h3>
+                <p>Inspect a video from hook to end screen with practical signals for edits and follow-ups.</p>
+              </div>
+            </div>
+            <div class="showcase-grid">
+              <div class="showcase-item">
+                <b>Hook score</b>
+                <span>Measure first-30-second retention, title fit, thumbnail promise, and intro pacing.</span>
+              </div>
+              <div class="showcase-item">
+                <b>Drop-off map</b>
+                <span>Flag the exact moments where viewers leave, replay, skip, or convert.</span>
+              </div>
+              <div class="showcase-item">
+                <b>Action notes</b>
+                <span>Generate a compact edit list for chapters, cuts, cards, and pinned comments.</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-head">
+              <div class="metric-icon teal"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></div>
+              <span class="trend good">84%</span>
+            </div>
+            <div>
+              <h3>Hook Score</h3>
+              <div class="metric-value">Excellent</div>
+            </div>
+            <canvas class="sparkline" data-values="80,82,85,84,86,88,87,85,89,92"></canvas>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-head">
+              <div class="metric-icon blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+              <span class="trend good">+2.1m</span>
+            </div>
+            <div>
+              <h3>Avg. Duration</h3>
+              <div class="metric-value">8:42</div>
+            </div>
+            <canvas class="sparkline" data-values="7.5,7.8,8.1,8,8.2,8.5,8.4,8.6,8.8,9"></canvas>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-head">
+              <div class="metric-icon amber"><svg viewBox="0 0 24 24"><path d="M1 4h6v16H1zM17 4h6v16h-6zM9 9h6v11H9z"></path></svg></div>
+              <span class="trend warn">+0.4%</span>
+            </div>
+            <div>
+              <h3>Replay Rate</h3>
+              <div class="metric-value">12.5%</div>
+            </div>
+            <canvas class="sparkline" data-values="10,11,10.5,12,11.8,12.2,13,12.5,12.8,13.2"></canvas>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-head">
+              <div class="metric-icon rose"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
+              <span class="trend good">+18%</span>
+            </div>
+            <div>
+              <h3>Engagement</h3>
+              <div class="metric-value">High</div>
+            </div>
+            <canvas class="sparkline" data-values="40,45,42,50,48,55,60,58,65,72"></canvas>
+          </article>
+
+          <article class="panel large">
+            <div class="panel-head">
+              <div>
+                <h3>Retention Curve</h3>
+                <p>Audience retention over the duration of the video.</p>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="retentionChart"></canvas>
+            </div>
+          </article>
+
+          <article class="panel side">
+            <div class="panel-head">
+              <div>
+                <h3>Key Moments</h3>
+                <p>Spikes and dips in viewer attention.</p>
+              </div>
+            </div>
+            <div class="activity">
+              <div class="activity-item"><i class="dot"></i><div><b>Intro Hook</b><span>Retention stayed above 90% for first 20s.</span></div><time>0:20</time></div>
+              <div class="activity-item"><i class="dot" style="background: var(--rose);"></i><div><b>Pacing Dip</b><span>Minor drop-off during transition.</span></div><time>2:45</time></div>
+              <div class="activity-item"><i class="dot"></i><div><b>Replay Spike</b><span>Users rewatched the tutorial segment.</span></div><time>5:12</time></div>
+            </div>
+          </article>
+
+          <article class="panel full">
+            <div class="panel-head">
+              <div>
+                <h3>Recommended Edits</h3>
+                <p>Automated suggestions to improve this video's performance.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Segment</th>
+                    <th>Issue</th>
+                    <th>Recommendation</th>
+                    <th>Impact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>2:45 - 3:10</td>
+                    <td>Low Retention</td>
+                    <td>Cut 15s of unnecessary setup talk.</td>
+                    <td><span class="status review">+4% Retention</span></td>
+                  </tr>
+                  <tr>
+                    <td>5:12</td>
+                    <td>High Replay</td>
+                    <td>Add a card linking to the deep-dive video.</td>
+                    <td><span class="status live">+8% CTR</span></td>
+                  </tr>
+                  <tr>
+                    <td>8:30</td>
+                    <td>End screen</td>
+                    <td>Move CTA 5s earlier to avoid exit.</td>
+                    <td><span class="status live">+12% Subs</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <script src="../service/script.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        drawLineChart("retentionChart", [100, 92, 85, 80, 78, 75, 72, 70, 68, 65, 62, 60], [100, 88, 80, 75, 70, 68, 65, 62, 60, 58, 55, 52], ["0m", "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "10m", "End"]);
+      });
+    </script>
+  </body>
+</html>

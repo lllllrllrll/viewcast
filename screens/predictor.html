@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ViewCast - Success Predictor</title>
+    <link rel="stylesheet" href="../components/style.css">
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" aria-label="Dashboard navigation">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19V5" />
+              <path d="M4 19h16" />
+              <path d="m8 15 3-4 3 2 4-7" />
+            </svg>
+          </div>
+          <div>
+            <h1>ViewCast</h1>
+            <span>Audience Studio</span>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <a href="../index.html">
+            <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3z" /><path d="M13 21h8V11h-8z" /><path d="M13 3h8v6h-8z" /><path d="M3 21h8v-6H3z" /></svg>
+            Overview
+          </a>
+          <a href="trends.html">
+            <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" /></svg>
+            Trends
+          </a>
+          <a href="analyzer.html">
+            <svg viewBox="0 0 24 24"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9" /><path d="M7 20h10" /><path d="M12 16v4" /></svg>
+            Video Analyzer
+          </a>
+          <a href="predictor.html" class="active">
+            <svg viewBox="0 0 24 24"><path d="M12 3v4" /><path d="M12 17v4" /><path d="M3 12h4" /><path d="M17 12h4" /><path d="m5.6 5.6 2.8 2.8" /><path d="m15.6 15.6 2.8 2.8" /><path d="m18.4 5.6-2.8 2.8" /><path d="m8.4 15.6-2.8 2.8" /></svg>
+            Success Predictor
+          </a>
+          <a href="competitors.html">
+            <svg viewBox="0 0 24 24"><path d="M4 19V5" /><path d="M4 19h16" /><path d="M8 16V9" /><path d="M12 16V6" /><path d="M16 16v-4" /></svg>
+            Competitor Compare
+          </a>
+          <a href="channel.html">
+            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3z" /></svg>
+            My Channel
+          </a>
+          <a href="insights.html">
+            <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /><path d="M9 21h6" /><path d="M10 17h4" /></svg>
+            AI Insights
+            <span class="badge">6</span>
+          </a>
+          <a href="audience.html">
+            <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+            Audience
+          </a>
+          <a href="retention.html">
+            <svg viewBox="0 0 24 24"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg>
+            Retention
+          </a>
+          <a href="settings.html">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.23.36.6.6 1 .6h.6a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z" /></svg>
+            Settings
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <strong>Smart Forecasting</strong>
+          <span>Leverage historical data and topic trends to predict how your next upload will perform.</span>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="title-block">
+            <h2>Success Predictor</h2>
+            <p>Estimate performance before publishing with title, thumbnail, and topic signals.</p>
+          </div>
+          <div class="actions">
+            <button class="primary-button" type="button">
+              Run New Prediction
+            </button>
+          </div>
+        </header>
+
+        <section class="dashboard-grid">
+          <article class="panel full showcase-panel">
+            <div class="panel-head">
+              <div>
+                <h3>Pre-Publish Forecast</h3>
+                <p>Score your idea against channel history, demand, and competitive saturation.</p>
+              </div>
+            </div>
+            <div class="showcase-grid">
+              <div class="showcase-item">
+                <b>View forecast</b>
+                <span>Predict low, expected, and breakout ranges before the video goes live.</span>
+              </div>
+              <div class="showcase-item">
+                <b>Risk factors</b>
+                <span>Call out weak title clarity, crowded topics, retention risk, or audience mismatch.</span>
+              </div>
+              <div class="showcase-item">
+                <b>Launch checklist</b>
+                <span>Recommend changes to packaging, runtime, and release timing before upload.</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-head">
+              <div class="metric-icon teal"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></div>
+              <span class="trend good">Likely</span>
+            </div>
+            <div>
+              <h3>Expected Views</h3>
+              <div class="metric-value">120K - 180K</div>
+            </div>
+            <canvas class="sparkline" data-values="100,110,120,130,140,150,160,170,180,200"></canvas>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-head">
+              <div class="metric-icon blue"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg></div>
+              <span class="trend good">High</span>
+            </div>
+            <div>
+              <h3>CTR Estimate</h3>
+              <div class="metric-value">9.2%</div>
+            </div>
+            <canvas class="sparkline" data-values="7,7.5,8,8.2,8.5,8.8,9,9.2,9.4,9.5"></canvas>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-head">
+              <div class="metric-icon amber"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></div>
+              <span class="trend warn">Medium</span>
+            </div>
+            <div>
+              <h3>Comp. Score</h3>
+              <div class="metric-value">64/100</div>
+            </div>
+            <canvas class="sparkline" data-values="50,55,60,65,62,64,68,66,63,64"></canvas>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-head">
+              <div class="metric-icon rose"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-13.5 8.38 8.38 0 0 1 3.8.9L21 3z"></path></svg></div>
+              <span class="trend good">Positive</span>
+            </div>
+            <div>
+              <h3>Sentiment</h3>
+              <div class="metric-value">Very High</div>
+            </div>
+            <canvas class="sparkline" data-values="70,72,75,78,80,82,85,88,90,92"></canvas>
+          </article>
+
+          <article class="panel full">
+            <div class="panel-head">
+              <div>
+                <h3>Checklist & Optimization</h3>
+                <p>Follow these steps to maximize your video's potential.</p>
+              </div>
+            </div>
+            <div class="progress-stack">
+              <div class="progress-item">
+                <div class="progress-meta"><b>Title Clarity</b><span>90% Optimized</span></div>
+                <div class="bar"><i style="--value: 90%"></i></div>
+              </div>
+              <div class="progress-item">
+                <div class="progress-meta"><b>Thumbnail Contrast</b><span>75% Optimized</span></div>
+                <div class="bar"><i style="--value: 75%"></i></div>
+              </div>
+              <div class="progress-item">
+                <div class="progress-meta"><b>Topic Demand</b><span>95% Optimized</span></div>
+                <div class="bar"><i style="--value: 95%"></i></div>
+              </div>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <script src="../service/script.js"></script>
+  </body>
+</html>
