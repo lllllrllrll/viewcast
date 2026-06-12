@@ -146,4 +146,7 @@ function initCharts() {
 window.addEventListener("resize", initCharts);
 document.addEventListener("DOMContentLoaded", initCharts);
 
-import("./auth.js");
+import("./auth.js").catch((error) => {
+  console.error("Authentication failed to initialize.", error);
+  document.body.classList.add("auth-ready");
+});

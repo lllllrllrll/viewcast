@@ -176,24 +176,39 @@ if (!firebaseConfigured) {
     window.location.replace(`${loginUrl.href}?setup=required`);
   }
 } else {
-  const app = initializeApp(firebaseConfig);
-  var auth = getAuth(app);
-  await setPersistence(auth, browserLocalPersistence);
+  try {
+    const app = initializeApp(firebaseConfig);
+    var auth = getAuth(app);
+    await setPersistence(auth, browserLocalPersistence);
 
-  if (isLoginPage) setupLoginForm();
+    if (isLoginPage) setupLoginForm();
 
-  onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, (user) => {
+      if (isLoginPage) {
+        if (user) window.location.replace(dashboardUrl.href);
+        return;
+      }
+
+      if (!user) {
+        window.location.replace(loginUrl.href);
+        return;
+      }
+
+      updateUserInterface(user);
+      document.body.classList.add("auth-ready");
+    });
+  } catch (error) {
+    console.error("Firebase Authentication failed to initialize.", error);
     if (isLoginPage) {
-      if (user) window.location.replace(dashboardUrl.href);
-      return;
+      showMessage(
+        "Firebase could not initialize. Check the project configuration and authorized domains.",
+        "error"
+      );
+      document.getElementById("authForm")?.querySelectorAll("button, input").forEach((control) => {
+        control.disabled = true;
+      });
+    } else {
+      document.body.classList.add("auth-ready");
     }
-
-    if (!user) {
-      window.location.replace(loginUrl.href);
-      return;
-    }
-
-    updateUserInterface(user);
-    document.body.classList.add("auth-ready");
-  });
+  }
 }
