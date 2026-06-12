@@ -33,9 +33,9 @@
 
       <section class="auth-panel" aria-labelledby="authHeading">
         <div class="auth-card">
-          <div class="auth-tabs" aria-label="Authentication mode">
-            <button class="active" type="button" data-auth-mode="signin">Sign in</button>
-            <button type="button" data-auth-mode="signup">Create account</button>
+          <div class="auth-tabs" role="tablist" aria-label="Authentication mode">
+            <button class="active" type="button" role="tab" aria-selected="true" data-auth-mode="signin">Sign in</button>
+            <button type="button" role="tab" aria-selected="false" data-auth-mode="signup">Create account</button>
           </div>
 
           <div class="auth-card-heading">
@@ -75,6 +75,7 @@
       </section>
     </main>
 
-    <script type="module" src="service/auth.js?v=2"></script>
+    <script src="service/login-ui.js?v=1"></script>
+    <script type="module" src="service/auth.js?v=3"></script>
   </body>
 </html>

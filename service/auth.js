@@ -96,46 +96,6 @@ function updateUserInterface(user) {
   addAccountControl(user);
 }
 
-function setupAuthTabs() {
-  const tabs = document.querySelectorAll("[data-auth-mode]");
-  const submit = document.getElementById("authSubmit");
-  const modeInput = document.getElementById("authMode");
-  const displayName = document.getElementById("displayName");
-  const confirmPassword = document.getElementById("confirmPassword");
-  const resetButton = document.getElementById("resetPassword");
-  if (!tabs.length || !submit || !modeInput || !displayName || !confirmPassword || !resetButton) {
-    return;
-  }
-
-  tabs.forEach((tab) => {
-    if (tab.dataset.modeReady === "true") return;
-    tab.dataset.modeReady = "true";
-    tab.addEventListener("click", () => {
-      const mode = tab.dataset.authMode;
-      const isSignup = mode === "signup";
-      tabs.forEach((item) => item.classList.toggle("active", item === tab));
-      modeInput.value = mode;
-      submit.dataset.label = isSignup ? "Create account" : "Sign in";
-      submit.textContent = submit.dataset.label;
-      document.querySelectorAll(".auth-signup-fields").forEach((field) => {
-        field.hidden = !isSignup;
-      });
-      displayName.required = isSignup;
-      confirmPassword.required = isSignup;
-      document.getElementById("password").autocomplete =
-        isSignup ? "new-password" : "current-password";
-      resetButton.hidden = isSignup;
-      document.getElementById("authHeading").textContent =
-        isSignup ? "Create your account" : "Welcome back";
-      document.getElementById("authSubheading").textContent =
-        isSignup
-          ? "Start tracking your channel with ViewCast."
-          : "Sign in to continue to your creator dashboard.";
-      document.getElementById("authMessage").hidden = true;
-    });
-  });
-}
-
 function setupLoginForm() {
   const form = document.getElementById("authForm");
   const resetButton = document.getElementById("resetPassword");
@@ -194,8 +154,6 @@ function setupLoginForm() {
     }
   });
 }
-
-if (isLoginPage) setupAuthTabs();
 
 if (!firebaseConfigured) {
   if (isLoginPage) {
