@@ -368,6 +368,10 @@ select {
   line-height: 1;
 }
 
+.metric-value.highlighted {
+  color: var(--green);
+}
+
 .sparkline {
   width: 100%;
   height: 36px;
