@@ -21,6 +21,8 @@ Then open `http://localhost:4173/login.html`.
 3. In **Authentication > Sign-in method**, enable **Email/Password**.
 4. Copy the Firebase web configuration into `service/firebase-config.js`.
 5. In **Authentication > Settings > Authorized domains**, add the domain where ViewCast will be hosted.
+6. Open **Firestore Database**, create the default database, and choose a production location.
+7. In **Firestore Database > Rules**, publish the contents of `firestore.rules`.
 
 For local testing, use `http://localhost:4173` rather than `127.0.0.1`, or add `127.0.0.1` as an authorized domain. For GitHub Pages, add your `username.github.io` hostname.
 
@@ -30,8 +32,11 @@ The app supports:
 - Persistent email/password sign-in
 - Password reset emails
 - Protected dashboard pages
+- Firestore user profiles stored at `users/{uid}`
 - User-aware welcome text
 - Sign out from the sidebar account control
+
+Each Firestore user profile stores the Firebase UID, email address, display name, account creation time, update time, and most recent sign-in time. The included rules restrict each profile to its authenticated owner.
 
 ## Customize
 

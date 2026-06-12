@@ -10,6 +10,12 @@ import {
   signOut,
   updateProfile
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
+import {
+  doc,
+  getFirestore,
+  serverTimestamp,
+  setDoc
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const loginUrl = new URL("../login.html", import.meta.url);
@@ -54,6 +60,12 @@ function setSubmitStatus(message) {
 }
 
 function friendlyError(error) {
+  if (error?.code === "permission-denied") {
+    return "Your account was created, but Firestore blocked the profile save. Publish the user profile security rules.";
+  }
+  if (error?.code === "failed-precondition") {
+    return "Create the Cloud Firestore database in the Firebase console, then try again.";
+  }
   return errorMessages[error?.code] || "Authentication failed. Please try again.";
 }
 
@@ -85,6 +97,7 @@ function addAccountControl(user) {
         <path d="M15 12H3"></path>
         <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
       </svg>
+      <span>Log out</span>
     </button>
   `;
 
@@ -115,6 +128,22 @@ function updateUserInterface(user) {
   });
   addAccountControl(user);
   if (user.displayName) sessionStorage.removeItem("viewcastDisplayName");
+}
+
+async function saveUserProfile(user, displayName, options = {}) {
+  const profile = {
+    uid: user.uid,
+    email: user.email || "",
+    displayName: displayName || displayNameFor(user),
+    updatedAt: serverTimestamp(),
+    lastSignInAt: serverTimestamp()
+  };
+
+  if (options.isNewAccount) {
+    profile.createdAt = serverTimestamp();
+  }
+
+  await setDoc(doc(db, "users", user.uid), profile, { merge: true });
 }
 
 function setupLoginForm() {
@@ -156,9 +185,12 @@ function setupLoginForm() {
         } catch (profileError) {
           console.warn("Profile save will be retried on the homepage.", profileError);
         }
+        setSubmitStatus("Saving account...");
+        await saveUserProfile(credential.user, displayName, { isNewAccount: true });
       } else {
         setSubmitStatus("Signing in...");
-        await signInWithEmailAndPassword(auth, email, password);
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+        await saveUserProfile(credential.user, displayNameFor(credential.user));
       }
       window.location.replace(dashboardUrl.href);
     } catch (error) {
@@ -201,6 +233,7 @@ if (!firebaseConfigured) {
   try {
     const app = initializeApp(firebaseConfig);
     var auth = getAuth(app);
+    var db = getFirestore(app);
     await setPersistence(auth, browserLocalPersistence);
 
     if (isLoginPage) setupLoginForm();
@@ -233,6 +266,12 @@ if (!firebaseConfigured) {
         } catch (error) {
           console.warn("Could not save the pending Firebase display name.", error);
         }
+      }
+
+      try {
+        await saveUserProfile(currentUser, displayNameFor(currentUser));
+      } catch (error) {
+        console.warn("Could not sync the Firebase user profile to Firestore.", error);
       }
 
       updateUserInterface(currentUser);
