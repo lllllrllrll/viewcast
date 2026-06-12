@@ -45,6 +45,11 @@ function setFormBusy(isBusy) {
   if (submit) submit.textContent = isBusy ? "Please wait..." : submit.dataset.label;
 }
 
+function setSubmitStatus(message) {
+  const submit = document.getElementById("authSubmit");
+  if (submit) submit.textContent = message;
+}
+
 function friendlyError(error) {
   return errorMessages[error?.code] || "Authentication failed. Please try again.";
 }
@@ -87,11 +92,18 @@ function addAccountControl(user) {
 }
 
 function updateUserInterface(user) {
+  const displayName = displayNameFor(user);
   document.querySelectorAll("[data-user-name]").forEach((element) => {
-    element.textContent = displayNameFor(user);
+    element.textContent = displayName;
   });
   document.querySelectorAll("[data-user-email]").forEach((element) => {
     element.textContent = user.email || "";
+  });
+  document.querySelectorAll("[data-account-label]").forEach((element) => {
+    element.textContent = `${displayName}'s account`;
+  });
+  document.querySelectorAll(".welcome-login").forEach((link) => {
+    link.href = "#accountControl";
   });
   addAccountControl(user);
 }
@@ -126,9 +138,17 @@ function setupLoginForm() {
 
     try {
       if (mode === "signup") {
+        setSubmitStatus("Creating account...");
         const credential = await createUserWithEmailAndPassword(auth, email, password);
+        setSubmitStatus("Saving profile...");
         await updateProfile(credential.user, { displayName });
+        await credential.user.reload();
+
+        if (auth.currentUser?.displayName !== displayName) {
+          throw new Error("The Firebase user profile did not save correctly.");
+        }
       } else {
+        setSubmitStatus("Signing in...");
         await signInWithEmailAndPassword(auth, email, password);
       }
       window.location.replace(dashboardUrl.href);
@@ -175,7 +195,7 @@ if (!firebaseConfigured) {
 
     if (isLoginPage) setupLoginForm();
 
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       if (isLoginPage) {
         if (user && !authActionInProgress) window.location.replace(dashboardUrl.href);
         return;
@@ -186,7 +206,13 @@ if (!firebaseConfigured) {
         return;
       }
 
-      updateUserInterface(user);
+      try {
+        await user.reload();
+      } catch (error) {
+        console.warn("Could not refresh the Firebase user profile.", error);
+      }
+
+      updateUserInterface(auth.currentUser || user);
       document.body.classList.add("auth-ready");
     });
   } catch (error) {
