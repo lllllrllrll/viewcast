@@ -22,7 +22,10 @@ const errorMessages = {
   "auth/invalid-credential": "The email or password is incorrect.",
   "auth/invalid-email": "Enter a valid email address.",
   "auth/missing-password": "Enter your password.",
+  "auth/network-request-failed": "Could not reach Firebase. Check your connection and try again.",
+  "auth/operation-not-allowed": "Email/password accounts are not enabled in Firebase Authentication.",
   "auth/too-many-requests": "Too many attempts. Please wait and try again.",
+  "auth/unauthorized-domain": `This site domain (${window.location.hostname}) is not authorized in Firebase.`,
   "auth/user-disabled": "This account has been disabled.",
   "auth/weak-password": "Use a password with at least six characters."
 };
@@ -55,7 +58,12 @@ function friendlyError(error) {
 }
 
 function displayNameFor(user) {
-  return user.displayName || user.email?.split("@")[0] || "User";
+  return (
+    user.displayName ||
+    sessionStorage.getItem("viewcastDisplayName") ||
+    user.email?.split("@")[0] ||
+    "User"
+  );
 }
 
 function addAccountControl(user) {
@@ -106,6 +114,7 @@ function updateUserInterface(user) {
     link.href = "#accountControl";
   });
   addAccountControl(user);
+  if (user.displayName) sessionStorage.removeItem("viewcastDisplayName");
 }
 
 function setupLoginForm() {
@@ -140,12 +149,12 @@ function setupLoginForm() {
       if (mode === "signup") {
         setSubmitStatus("Creating account...");
         const credential = await createUserWithEmailAndPassword(auth, email, password);
+        sessionStorage.setItem("viewcastDisplayName", displayName);
         setSubmitStatus("Saving profile...");
-        await updateProfile(credential.user, { displayName });
-        await credential.user.reload();
-
-        if (auth.currentUser?.displayName !== displayName) {
-          throw new Error("The Firebase user profile did not save correctly.");
+        try {
+          await updateProfile(credential.user, { displayName });
+        } catch (profileError) {
+          console.warn("Profile save will be retried on the homepage.", profileError);
         }
       } else {
         setSubmitStatus("Signing in...");
@@ -154,6 +163,7 @@ function setupLoginForm() {
       window.location.replace(dashboardUrl.href);
     } catch (error) {
       authActionInProgress = false;
+      console.error("Firebase authentication request failed.", error);
       showMessage(friendlyError(error));
       setFormBusy(false);
     }
@@ -212,7 +222,20 @@ if (!firebaseConfigured) {
         console.warn("Could not refresh the Firebase user profile.", error);
       }
 
-      updateUserInterface(auth.currentUser || user);
+      let currentUser = auth.currentUser || user;
+      const pendingDisplayName = sessionStorage.getItem("viewcastDisplayName");
+
+      if (pendingDisplayName && !currentUser.displayName) {
+        try {
+          await updateProfile(currentUser, { displayName: pendingDisplayName });
+          await currentUser.reload();
+          currentUser = auth.currentUser || currentUser;
+        } catch (error) {
+          console.warn("Could not save the pending Firebase display name.", error);
+        }
+      }
+
+      updateUserInterface(currentUser);
       document.body.classList.add("auth-ready");
     });
   } catch (error) {

@@ -22,6 +22,8 @@ Then open `http://localhost:4173/login.html`.
 4. Copy the Firebase web configuration into `service/firebase-config.js`.
 5. In **Authentication > Settings > Authorized domains**, add the domain where ViewCast will be hosted.
 
+For local testing, use `http://localhost:4173` rather than `127.0.0.1`, or add `127.0.0.1` as an authorized domain. For GitHub Pages, add your `username.github.io` hostname.
+
 The app supports:
 
 - Email/password account creation
