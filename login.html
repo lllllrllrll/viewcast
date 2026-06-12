@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in - ViewCast</title>
+    <link rel="stylesheet" href="components/style.css" />
+  </head>
+  <body class="auth-page" data-public-page="login">
+    <main class="auth-layout">
+      <section class="auth-intro">
+        <a class="auth-brand" href="login.html" aria-label="ViewCast sign in">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19V5" />
+              <path d="M4 19h16" />
+              <path d="m8 15 3-4 3 2 4-7" />
+            </svg>
+          </span>
+          <span><strong>ViewCast</strong><small>Audience Studio</small></span>
+        </a>
+        <div class="auth-intro-copy">
+          <p class="auth-eyebrow">Creator intelligence</p>
+          <h1>Know what your audience will watch next.</h1>
+          <p>Analyze retention, predict video performance, compare competitors, and turn channel data into focused next steps.</p>
+        </div>
+        <div class="auth-proof">
+          <span><b>2.84M</b> views analyzed</span>
+          <span><b>68.4%</b> average retention</span>
+          <span><b>6</b> fresh AI insights</span>
+        </div>
+      </section>
+
+      <section class="auth-panel" aria-labelledby="authHeading">
+        <div class="auth-card">
+          <div class="auth-tabs" aria-label="Authentication mode">
+            <button class="active" type="button" data-auth-mode="signin">Sign in</button>
+            <button type="button" data-auth-mode="signup">Create account</button>
+          </div>
+
+          <div class="auth-card-heading">
+            <h2 id="authHeading">Welcome back</h2>
+            <p id="authSubheading">Sign in to continue to your creator dashboard.</p>
+          </div>
+
+          <div class="auth-message" id="authMessage" role="status" hidden></div>
+
+          <form class="auth-form" id="authForm">
+            <input type="hidden" id="authMode" name="mode" value="signin" />
+            <label for="email">Email address</label>
+            <input id="email" name="email" type="email" autocomplete="email" placeholder="creator@example.com" required />
+
+            <div class="auth-password-label">
+              <label for="password">Password</label>
+              <button id="resetPassword" type="button">Forgot password?</button>
+            </div>
+            <input id="password" name="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required />
+
+            <button class="primary-button auth-submit" id="authSubmit" type="submit" data-label="Sign in">Sign in</button>
+          </form>
+
+          <p class="auth-legal">Authentication is handled securely by Firebase. Your password is never stored by ViewCast.</p>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="service/auth.js"></script>
+  </body>
+</html>

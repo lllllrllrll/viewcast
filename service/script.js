@@ -145,3 +145,5 @@ function initCharts() {
 
 window.addEventListener("resize", initCharts);
 document.addEventListener("DOMContentLoaded", initCharts);
+
+import("./auth.js");
