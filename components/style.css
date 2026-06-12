@@ -934,6 +934,15 @@ tbody tr:hover {
   margin-top: 28px;
 }
 
+.auth-signup-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-signup-fields[hidden] {
+  display: none;
+}
+
 .auth-form label,
 .auth-password-label {
   font-size: 13px;

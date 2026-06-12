@@ -7,13 +7,15 @@ import {
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
-  signOut
+  signOut,
+  updateProfile
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const loginUrl = new URL("../login.html", import.meta.url);
 const dashboardUrl = new URL("../index.html", import.meta.url);
 const isLoginPage = document.body.dataset.publicPage === "login";
+let authActionInProgress = false;
 
 const errorMessages = {
   "auth/email-already-in-use": "An account already exists for this email.",
@@ -98,18 +100,30 @@ function setupAuthTabs() {
   const tabs = document.querySelectorAll("[data-auth-mode]");
   const submit = document.getElementById("authSubmit");
   const modeInput = document.getElementById("authMode");
+  const displayName = document.getElementById("displayName");
+  const confirmPassword = document.getElementById("confirmPassword");
+  const resetButton = document.getElementById("resetPassword");
 
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       const mode = tab.dataset.authMode;
+      const isSignup = mode === "signup";
       tabs.forEach((item) => item.classList.toggle("active", item === tab));
       modeInput.value = mode;
-      submit.dataset.label = mode === "signup" ? "Create account" : "Sign in";
+      submit.dataset.label = isSignup ? "Create account" : "Sign in";
       submit.textContent = submit.dataset.label;
+      document.querySelectorAll(".auth-signup-fields").forEach((field) => {
+        field.hidden = !isSignup;
+      });
+      displayName.required = isSignup;
+      confirmPassword.required = isSignup;
+      document.getElementById("password").autocomplete =
+        isSignup ? "new-password" : "current-password";
+      resetButton.hidden = isSignup;
       document.getElementById("authHeading").textContent =
-        mode === "signup" ? "Create your account" : "Welcome back";
+        isSignup ? "Create your account" : "Welcome back";
       document.getElementById("authSubheading").textContent =
-        mode === "signup"
+        isSignup
           ? "Start tracking your channel with ViewCast."
           : "Sign in to continue to your creator dashboard.";
       document.getElementById("authMessage").hidden = true;
@@ -130,18 +144,33 @@ function setupLoginForm() {
     const email = String(data.get("email")).trim();
     const password = String(data.get("password"));
     const mode = String(data.get("mode"));
+    const displayName = String(data.get("displayName") || "").trim();
+    const confirmPassword = String(data.get("confirmPassword") || "");
+
+    if (mode === "signup" && displayName.length < 2) {
+      showMessage("Enter a display name with at least two characters.");
+      return;
+    }
+
+    if (mode === "signup" && password !== confirmPassword) {
+      showMessage("Passwords do not match.");
+      return;
+    }
 
     setFormBusy(true);
     document.getElementById("authMessage").hidden = true;
+    authActionInProgress = true;
 
     try {
       if (mode === "signup") {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const credential = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(credential.user, { displayName });
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
       window.location.replace(dashboardUrl.href);
     } catch (error) {
+      authActionInProgress = false;
       showMessage(friendlyError(error));
       setFormBusy(false);
     }
@@ -185,7 +214,7 @@ if (!firebaseConfigured) {
 
     onAuthStateChanged(auth, (user) => {
       if (isLoginPage) {
-        if (user) window.location.replace(dashboardUrl.href);
+        if (user && !authActionInProgress) window.location.replace(dashboardUrl.href);
         return;
       }
 

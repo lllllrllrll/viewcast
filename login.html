@@ -47,6 +47,12 @@
 
           <form class="auth-form" id="authForm">
             <input type="hidden" id="authMode" name="mode" value="signin" />
+
+            <div class="auth-signup-fields" id="signupFields" hidden>
+              <label for="displayName">Display name</label>
+              <input id="displayName" name="displayName" type="text" autocomplete="name" placeholder="Your name" maxlength="60" />
+            </div>
+
             <label for="email">Email address</label>
             <input id="email" name="email" type="email" autocomplete="email" placeholder="creator@example.com" required />
 
@@ -55,6 +61,11 @@
               <button id="resetPassword" type="button">Forgot password?</button>
             </div>
             <input id="password" name="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required />
+
+            <div class="auth-signup-fields" id="confirmPasswordField" hidden>
+              <label for="confirmPassword">Confirm password</label>
+              <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" placeholder="Re-enter your password" minlength="6" />
+            </div>
 
             <button class="primary-button auth-submit" id="authSubmit" type="submit" data-label="Sign in">Sign in</button>
           </form>
