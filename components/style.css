@@ -271,6 +271,42 @@ select {
   font-weight: 700;
 }
 
+.welcome-summary {
+  display: grid;
+  justify-items: end;
+  gap: 12px;
+}
+
+.welcome-login {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.welcome-login:hover {
+  color: var(--teal);
+  border-color: var(--teal);
+}
+
+.welcome-login svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .welcome-stats {
   display: grid;
   grid-auto-flow: column;
@@ -998,6 +1034,10 @@ tbody tr:hover {
   .welcome-header {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .welcome-summary {
+    justify-items: start;
   }
 
   .welcome-stats {
