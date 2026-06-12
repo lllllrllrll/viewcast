@@ -200,6 +200,10 @@ select {
   font-size: 20px;
 }
 
+.welcome-stat b.percentage {
+  color: var(--green);
+}
+
 .welcome-stat span {
   display: block;
   margin-top: 3px;
