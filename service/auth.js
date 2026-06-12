@@ -103,8 +103,13 @@ function setupAuthTabs() {
   const displayName = document.getElementById("displayName");
   const confirmPassword = document.getElementById("confirmPassword");
   const resetButton = document.getElementById("resetPassword");
+  if (!tabs.length || !submit || !modeInput || !displayName || !confirmPassword || !resetButton) {
+    return;
+  }
 
   tabs.forEach((tab) => {
+    if (tab.dataset.modeReady === "true") return;
+    tab.dataset.modeReady = "true";
     tab.addEventListener("click", () => {
       const mode = tab.dataset.authMode;
       const isSignup = mode === "signup";
@@ -135,8 +140,6 @@ function setupLoginForm() {
   const form = document.getElementById("authForm");
   const resetButton = document.getElementById("resetPassword");
   if (!form) return;
-
-  setupAuthTabs();
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -191,6 +194,8 @@ function setupLoginForm() {
     }
   });
 }
+
+if (isLoginPage) setupAuthTabs();
 
 if (!firebaseConfigured) {
   if (isLoginPage) {
