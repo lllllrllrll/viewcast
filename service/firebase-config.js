@@ -17,3 +17,9 @@ export const firebaseConfigured = Boolean(
   firebaseConfig.projectId &&
   firebaseConfig.appId
 );
+
+export const firebaseAuthorizedDomains = [
+  "localhost",
+  "viewcast-a6f31.firebaseapp.com",
+  "viewcast-a6f31.web.app"
+];

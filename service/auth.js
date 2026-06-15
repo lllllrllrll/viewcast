@@ -16,11 +16,16 @@ import {
   serverTimestamp,
   setDoc
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
-import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
+import {
+  firebaseAuthorizedDomains,
+  firebaseConfig,
+  firebaseConfigured
+} from "./firebase-config.js";
 
 const loginUrl = new URL("../login.html", import.meta.url);
 const dashboardUrl = new URL("../index.html", import.meta.url);
 const isLoginPage = document.body.dataset.publicPage === "login";
+const pendingProfileKey = "viewcastPendingProfile";
 let authActionInProgress = false;
 
 const errorMessages = {
@@ -31,7 +36,7 @@ const errorMessages = {
   "auth/network-request-failed": "Could not reach Firebase. Check your connection and try again.",
   "auth/operation-not-allowed": "Email/password accounts are not enabled in Firebase Authentication.",
   "auth/too-many-requests": "Too many attempts. Please wait and try again.",
-  "auth/unauthorized-domain": `This site domain (${window.location.hostname}) is not authorized in Firebase.`,
+  "auth/unauthorized-domain": `This site domain (${window.location.hostname || "file preview"}) is not authorized in Firebase. Add it in Firebase Authentication > Settings > Authorized domains, or use localhost.`,
   "auth/user-disabled": "This account has been disabled.",
   "auth/weak-password": "Use a password with at least six characters."
 };
@@ -42,6 +47,29 @@ function showMessage(message, type = "error") {
   element.textContent = message;
   element.className = `auth-message ${type}`;
   element.hidden = false;
+}
+
+function showStep(message) {
+  showMessage(message, "status");
+}
+
+function currentHostname() {
+  return window.location.hostname;
+}
+
+function isKnownAuthorizedHost() {
+  const hostname = currentHostname();
+  return firebaseAuthorizedDomains.includes(hostname);
+}
+
+function warnIfUnauthorizedHost() {
+  if (!isLoginPage || !firebaseConfigured || isKnownAuthorizedHost()) return;
+
+  const hostname = currentHostname() || "this file preview";
+  showMessage(
+    `Heads up: ${hostname} is not listed as a Firebase authorized domain yet. If account creation fails, add this exact host in Firebase Authentication settings or test from localhost.`,
+    "setup"
+  );
 }
 
 function setFormBusy(isBusy) {
@@ -67,6 +95,35 @@ function friendlyError(error) {
     return "Create the Cloud Firestore database in the Firebase console, then try again.";
   }
   return errorMessages[error?.code] || "Authentication failed. Please try again.";
+}
+
+function rememberPendingProfile(user, displayName, options = {}) {
+  if (!user) return;
+
+  sessionStorage.setItem("viewcastDisplayName", displayName || displayNameFor(user));
+  sessionStorage.setItem(
+    pendingProfileKey,
+    JSON.stringify({
+      uid: user.uid,
+      email: user.email || "",
+      displayName: displayName || displayNameFor(user),
+      isNewAccount: Boolean(options.isNewAccount)
+    })
+  );
+}
+
+function clearPendingProfile() {
+  sessionStorage.removeItem(pendingProfileKey);
+}
+
+function readPendingProfile(user) {
+  try {
+    const pendingProfile = JSON.parse(sessionStorage.getItem(pendingProfileKey) || "null");
+    if (pendingProfile?.uid === user.uid) return pendingProfile;
+  } catch (error) {
+    console.warn("Could not read the pending Firebase profile.", error);
+  }
+  return null;
 }
 
 function displayNameFor(user) {
@@ -146,6 +203,12 @@ async function saveUserProfile(user, displayName, options = {}) {
   await setDoc(doc(db, "users", user.uid), profile, { merge: true });
 }
 
+async function syncUserProfile(user, displayName, options = {}) {
+  rememberPendingProfile(user, displayName, options);
+  await saveUserProfile(user, displayName, options);
+  clearPendingProfile();
+}
+
 function setupLoginForm() {
   const form = document.getElementById("authForm");
   const resetButton = document.getElementById("resetPassword");
@@ -153,6 +216,12 @@ function setupLoginForm() {
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+
+    if (!form.reportValidity()) {
+      showMessage("Complete the highlighted fields, then try again.");
+      return;
+    }
+
     const data = new FormData(form);
     const email = String(data.get("email")).trim();
     const password = String(data.get("password"));
@@ -171,27 +240,42 @@ function setupLoginForm() {
     }
 
     setFormBusy(true);
-    document.getElementById("authMessage").hidden = true;
+    showStep(mode === "signup" ? "Starting account creation..." : "Signing in...");
     authActionInProgress = true;
 
     try {
       if (mode === "signup") {
         setSubmitStatus("Creating account...");
+        showStep("Creating your Firebase account...");
         const credential = await createUserWithEmailAndPassword(auth, email, password);
-        sessionStorage.setItem("viewcastDisplayName", displayName);
+        rememberPendingProfile(credential.user, displayName, { isNewAccount: true });
         setSubmitStatus("Saving profile...");
+        showStep("Saving your display name...");
         try {
           await updateProfile(credential.user, { displayName });
         } catch (profileError) {
           console.warn("Profile save will be retried on the homepage.", profileError);
         }
         setSubmitStatus("Saving account...");
-        await saveUserProfile(credential.user, displayName, { isNewAccount: true });
+        showStep("Saving your profile to Firestore...");
+        try {
+          await syncUserProfile(credential.user, displayName, { isNewAccount: true });
+        } catch (profileError) {
+          console.warn("Firestore profile save will be retried on the homepage.", profileError);
+          showStep("Account created. Opening your dashboard while the profile save retries...");
+        }
       } else {
         setSubmitStatus("Signing in...");
+        showStep("Signing in with Firebase...");
         const credential = await signInWithEmailAndPassword(auth, email, password);
-        await saveUserProfile(credential.user, displayNameFor(credential.user));
+        try {
+          await syncUserProfile(credential.user, displayNameFor(credential.user));
+        } catch (profileError) {
+          console.warn("Firestore sign-in sync will be retried on the homepage.", profileError);
+        }
       }
+      setSubmitStatus("Opening dashboard...");
+      showStep("Opening your dashboard...");
       window.location.replace(dashboardUrl.href);
     } catch (error) {
       authActionInProgress = false;
@@ -217,6 +301,18 @@ function setupLoginForm() {
   });
 }
 
+function setupValidationFeedback() {
+  const form = document.getElementById("authForm");
+  const submit = document.getElementById("authSubmit");
+  if (!form || !submit) return;
+
+  submit.addEventListener("click", () => {
+    if (!form.checkValidity()) {
+      showMessage("Complete the highlighted fields, then try again.");
+    }
+  });
+}
+
 if (!firebaseConfigured) {
   if (isLoginPage) {
     showMessage(
@@ -236,7 +332,11 @@ if (!firebaseConfigured) {
     var db = getFirestore(app);
     await setPersistence(auth, browserLocalPersistence);
 
-    if (isLoginPage) setupLoginForm();
+    if (isLoginPage) {
+      setupValidationFeedback();
+      setupLoginForm();
+      warnIfUnauthorizedHost();
+    }
 
     onAuthStateChanged(auth, async (user) => {
       if (isLoginPage) {
@@ -257,10 +357,12 @@ if (!firebaseConfigured) {
 
       let currentUser = auth.currentUser || user;
       const pendingDisplayName = sessionStorage.getItem("viewcastDisplayName");
+      const pendingProfile = readPendingProfile(currentUser);
+      const profileDisplayName = pendingProfile?.displayName || pendingDisplayName;
 
-      if (pendingDisplayName && !currentUser.displayName) {
+      if (profileDisplayName && !currentUser.displayName) {
         try {
-          await updateProfile(currentUser, { displayName: pendingDisplayName });
+          await updateProfile(currentUser, { displayName: profileDisplayName });
           await currentUser.reload();
           currentUser = auth.currentUser || currentUser;
         } catch (error) {
@@ -269,7 +371,11 @@ if (!firebaseConfigured) {
       }
 
       try {
-        await saveUserProfile(currentUser, displayNameFor(currentUser));
+        await syncUserProfile(
+          currentUser,
+          profileDisplayName || displayNameFor(currentUser),
+          { isNewAccount: Boolean(pendingProfile?.isNewAccount) }
+        );
       } catch (error) {
         console.warn("Could not sync the Firebase user profile to Firestore.", error);
       }

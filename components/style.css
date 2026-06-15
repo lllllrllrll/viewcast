@@ -928,6 +928,12 @@ tbody tr:hover {
   background: #edf9f3;
 }
 
+.auth-message.status {
+  border-color: #a9ddc8;
+  color: #176448;
+  background: #edf9f3;
+}
+
 .auth-message.setup {
   border-color: #efd19b;
   color: #79500d;
