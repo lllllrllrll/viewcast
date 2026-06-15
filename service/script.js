@@ -47,21 +47,37 @@ function drawLineChart(canvasId, actual, forecast, labels) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const { ctx, width, height } = scaleCanvas(canvas);
+  const pad = { top: 18, right: 18, bottom: 34, left: 44 };
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = colors.line;
+  ctx.lineWidth = 1;
+
   if (!actual.length || !forecast.length || !labels.length) {
-    ctx.clearRect(0, 0, width, height);
+    for (let i = 0; i < 5; i += 1) {
+      const y = pad.top + (i / 4) * (height - pad.top - pad.bottom);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y);
+      ctx.lineTo(width - pad.right, y);
+      ctx.stroke();
+    }
+
+    for (let i = 0; i < 6; i += 1) {
+      const x = pad.left + (i / 5) * (width - pad.left - pad.right);
+      ctx.beginPath();
+      ctx.moveTo(x, pad.top);
+      ctx.lineTo(x, height - pad.bottom);
+      ctx.stroke();
+    }
     return;
   }
 
-  const pad = { top: 18, right: 18, bottom: 34, left: 44 };
   const all = actual.concat(forecast);
   const min = Math.min(...all) - 8;
   const max = Math.max(...all) + 10;
 
-  ctx.clearRect(0, 0, width, height);
   ctx.font = "12px Inter, system-ui, sans-serif";
   ctx.fillStyle = colors.muted;
-  ctx.strokeStyle = colors.line;
-  ctx.lineWidth = 1;
 
   for (let i = 0; i < 5; i += 1) {
     const y = pad.top + (i / 4) * (height - pad.top - pad.bottom);
