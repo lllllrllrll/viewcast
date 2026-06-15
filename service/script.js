@@ -20,12 +20,18 @@ function scaleCanvas(canvas) {
 }
 
 function drawSparkline(canvas) {
-  const values = canvas.dataset.values.split(",").map(Number);
   const { ctx, width, height } = scaleCanvas(canvas);
+  const values = (canvas.dataset.values || "")
+    .split(",")
+    .map(Number)
+    .filter(Number.isFinite);
+
+  ctx.clearRect(0, 0, width, height);
+  if (values.length < 2) return;
+
   const min = Math.min(...values);
   const max = Math.max(...values);
   const pad = 3;
-  ctx.clearRect(0, 0, width, height);
   ctx.beginPath();
   values.forEach((value, index) => {
     const x = pad + (index / (values.length - 1)) * (width - pad * 2);
@@ -41,6 +47,11 @@ function drawLineChart(canvasId, actual, forecast, labels) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const { ctx, width, height } = scaleCanvas(canvas);
+  if (!actual.length || !forecast.length || !labels.length) {
+    ctx.clearRect(0, 0, width, height);
+    return;
+  }
+
   const pad = { top: 18, right: 18, bottom: 34, left: 44 };
   const all = actual.concat(forecast);
   const min = Math.min(...all) - 8;
@@ -89,6 +100,11 @@ function drawBarChart(canvasId, data, maxVal = 80) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const { ctx, width, height } = scaleCanvas(canvas);
+  if (!data.length) {
+    ctx.clearRect(0, 0, width, height);
+    return;
+  }
+
   const pad = { top: 18, right: 12, bottom: 36, left: 34 };
   const plotHeight = height - pad.top - pad.bottom;
   const gap = 14;
@@ -123,23 +139,12 @@ function drawBarChart(canvasId, data, maxVal = 80) {
 function initCharts() {
   document.querySelectorAll(".sparkline").forEach(drawSparkline);
 
-  // Default charts for overview, but functions can be called with different data
   if (document.getElementById("viewsChart")) {
-    const actual = [72, 84, 80, 96, 111, 106, 124, 138, 132, 151, 164, 183];
-    const forecast = [70, 76, 86, 92, 102, 115, 121, 130, 143, 154, 169, 188];
-    const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
-    drawLineChart("viewsChart", actual, forecast, labels);
+    drawLineChart("viewsChart", [], [], []);
   }
 
   if (document.getElementById("mixChart")) {
-    const data = [
-      ["New", 38, colors.blue],
-      ["Return", 58, colors.teal],
-      ["Subs", 46, colors.amber],
-      ["Search", 72, colors.green],
-      ["Shorts", 31, colors.rose]
-    ];
-    drawBarChart("mixChart", data);
+    drawBarChart("mixChart", []);
   }
 }
 
