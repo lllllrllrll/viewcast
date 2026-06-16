@@ -47,7 +47,6 @@
           <a href="insights.html">
             <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /><path d="M9 21h6" /><path d="M10 17h4" /></svg>
             AI Insights
-            <span class="badge">6</span>
           </a>
           <a href="audience.html" class="active">
             <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
@@ -109,49 +108,49 @@
           <article class="metric-card">
             <div class="metric-head">
               <div class="metric-icon teal"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg></div>
-              <span class="trend good">+12%</span>
+              <span class="trend good">&nbsp;</span>
             </div>
             <div>
               <h3>New Viewers</h3>
-              <div class="metric-value">28.4K</div>
+              <div class="metric-value">&nbsp;</div>
             </div>
-            <canvas class="sparkline" data-values="20,22,25,24,26,28,27,29,28,30"></canvas>
+            <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
           <article class="metric-card">
             <div class="metric-head">
               <div class="metric-icon blue"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
-              <span class="trend good">+18%</span>
+              <span class="trend good">&nbsp;</span>
             </div>
             <div>
               <h3>Returning</h3>
-              <div class="metric-value">42%</div>
+              <div class="metric-value">&nbsp;</div>
             </div>
-            <canvas class="sparkline" data-values="30,32,35,34,36,38,40,41,42,43"></canvas>
+            <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
           <article class="metric-card">
             <div class="metric-head">
               <div class="metric-icon amber"><svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
-              <span class="trend good">+4.2%</span>
+              <span class="trend good">&nbsp;</span>
             </div>
             <div>
               <h3>Sub Growth</h3>
-              <div class="metric-value">0.8%</div>
+              <div class="metric-value">&nbsp;</div>
             </div>
-            <canvas class="sparkline" data-values="0.5,0.6,0.5,0.7,0.8,0.7,0.8,0.9,0.8,1.0"></canvas>
+            <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
           <article class="metric-card">
             <div class="metric-head">
               <div class="metric-icon rose"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>
-              <span class="trend good">Wide</span>
+              <span class="trend good">&nbsp;</span>
             </div>
             <div>
               <h3>Global Reach</h3>
-              <div class="metric-value">140 Countries</div>
+              <div class="metric-value">&nbsp;</div>
             </div>
-            <canvas class="sparkline" data-values="120,122,125,128,130,132,135,138,140,142"></canvas>
+            <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
           <article class="panel large">
@@ -174,9 +173,9 @@
               </div>
             </div>
             <div class="region-list">
-              <div class="region-row"><span>18-24</span><div class="bar"><i style="--value: 45%"></i></div><b>45%</b></div>
-              <div class="region-row"><span>25-34</span><div class="bar"><i style="--value: 35%"></i></div><b>35%</b></div>
-              <div class="region-row"><span>35-44</span><div class="bar"><i style="--value: 12%"></i></div><b>12%</b></div>
+              <div class="region-row"><span>&nbsp;</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
+              <div class="region-row"><span>&nbsp;</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
+              <div class="region-row"><span>&nbsp;</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
             </div>
           </article>
         </section>
@@ -185,7 +184,7 @@
     <script src="../service/script.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        drawLineChart("audienceChart", [40, 45, 42, 50, 55, 60, 58], [42, 44, 46, 48, 50, 52, 54], ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+        drawLineChart("audienceChart", [], [], []);
       });
     </script>
   </body>
