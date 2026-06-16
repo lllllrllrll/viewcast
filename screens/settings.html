@@ -47,7 +47,6 @@
           <a href="insights.html">
             <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /><path d="M9 21h6" /><path d="M10 17h4" /></svg>
             AI Insights
-            <span class="badge">6</span>
           </a>
           <a href="audience.html">
             <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
@@ -76,7 +75,7 @@
             <p>Manage dashboard preferences, data sources, alerts, and workspace configuration.</p>
           </div>
           <div class="actions">
-            <button class="primary-button" type="button">
+            <button class="primary-button" id="saveSettings" type="button">
               Save Changes
             </button>
           </div>
@@ -113,19 +112,29 @@
                 <p>Customize your workspace experience.</p>
               </div>
             </div>
-            <div style="display: grid; gap: 20px; padding: 10px;">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="settings-stack">
+              <div class="settings-row">
                  <span>Dark Mode</span>
-                 <button class="segmented" style="padding: 2px;"><button class="active">Off</button><button>On</button></button>
+                 <div class="segmented settings-toggle" role="group" aria-label="Dark mode" data-setting="darkMode">
+                  <button class="active" type="button" data-value="off" aria-pressed="true">Off</button>
+                  <button type="button" data-value="on" aria-pressed="false">On</button>
+                 </div>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="settings-row">
                  <span>Email Notifications</span>
-                 <button class="segmented" style="padding: 2px;"><button class="active">Enabled</button><button>Disabled</button></button>
+                 <div class="segmented settings-toggle" role="group" aria-label="Email notifications" data-setting="emailNotifications">
+                  <button class="active" type="button" data-value="enabled" aria-pressed="true">Enabled</button>
+                  <button type="button" data-value="disabled" aria-pressed="false">Disabled</button>
+                 </div>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="settings-row">
                  <span>Data Refresh Rate</span>
-                 <select class="icon-button" style="width: auto; padding: 0 10px;"><option>Every hour</option><option>Every 6 hours</option></select>
+                 <select class="settings-select" id="refreshRate">
+                  <option value="hourly">Every hour</option>
+                  <option value="six-hours">Every 6 hours</option>
+                 </select>
               </div>
+              <p class="settings-status" id="settingsStatus" role="status" aria-live="polite" hidden></p>
             </div>
           </article>
 
@@ -146,7 +155,7 @@
                 <div class="bar"><i style="--value: 24%"></i></div>
               </div>
               <div style="margin-top: 10px;">
-                <button class="primary-button" style="width: 100%; background: var(--blue);">Upgrade Plan</button>
+                <button class="primary-button" id="upgradePlan" type="button" style="width: 100%; background: var(--blue);">Upgrade Plan</button>
               </div>
             </div>
           </article>
@@ -154,5 +163,6 @@
       </main>
     </div>
     <script src="../service/script.js"></script>
+    <script src="../service/settings.js"></script>
   </body>
 </html>

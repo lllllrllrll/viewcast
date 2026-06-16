@@ -9,6 +9,11 @@ const colors = {
   green: "#2f9b6c"
 };
 
+document.body.classList.toggle(
+  "settings-dark",
+  localStorage.getItem("viewcastDarkMode") === "on"
+);
+
 function scaleCanvas(canvas) {
   const rect = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
