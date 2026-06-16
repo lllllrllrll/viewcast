@@ -27,7 +27,20 @@ function drawSparkline(canvas) {
     .filter(Number.isFinite);
 
   ctx.clearRect(0, 0, width, height);
-  if (values.length < 2) return;
+  if (values.length < 2) {
+    if (canvas.dataset.emptyGraph === "true") {
+      ctx.strokeStyle = colors.line;
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 4; i += 1) {
+        const y = (i / 4) * height;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+    }
+    return;
+  }
 
   const min = Math.min(...values);
   const max = Math.max(...values);
