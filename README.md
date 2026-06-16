@@ -44,4 +44,4 @@ Each Firestore user profile stores the Firebase UID, email address, display name
 - Edit chart data in the `<script>` block near the bottom of `index.html`.
 - Adjust colors in the `:root` CSS variables.
 - Replace video rows in the table body.
-- Edit the `pageDetails` object to customize sidebar pages such as Trends, Video Analyzer, Success Predictor, Competitor Compare, My Channel, and AI Insights.
+- Edit the `pageDetails` object to customize sidebar pages such as Trends, Video Analyzer, Success Predictor, My Channel, and AI Insights.
