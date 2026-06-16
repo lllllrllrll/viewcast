@@ -6,7 +6,6 @@
   };
 
   const status = document.getElementById("settingsStatus");
-  const saveButton = document.getElementById("saveSettings");
   const upgradeButton = document.getElementById("upgradePlan");
   const refreshRate = document.getElementById("refreshRate");
   const toggles = document.querySelectorAll("[data-setting]");
@@ -46,7 +45,7 @@
       if (!button) return;
       writeSetting(setting, button.dataset.value);
       updateToggle(group, button.dataset.value);
-      showStatus("Preference updated. Save changes when you're done.");
+      showStatus("Preference updated.");
     });
   });
 
@@ -54,13 +53,10 @@
     refreshRate.value = readSetting("refreshRate");
     refreshRate.addEventListener("change", () => {
       writeSetting("refreshRate", refreshRate.value);
-      showStatus("Refresh rate updated. Save changes when you're done.");
+      showStatus("Refresh rate updated.");
     });
   }
 
-  saveButton?.addEventListener("click", () => {
-    showStatus("Settings saved.");
-  });
 
   upgradeButton?.addEventListener("click", () => {
     showStatus("Upgrade flow is ready for billing integration.");

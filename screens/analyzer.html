@@ -75,11 +75,16 @@
             <p>Break down individual uploads by retention, engagement, pacing, and audience fit.</p>
           </div>
           <div class="actions">
-            <label class="search">
-              <select style="appearance: none; -webkit-appearance: none; border: 0; background: transparent; width: 100%; outline: 0;">
-                 <option>Select Video</option>
-              </select>
-            </label>
+            <form class="channel-link-form" id="videoAnalysisForm">
+              <label class="search" style="width: min(320px, 42vw);">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.9 5.03" />
+                  <path d="M14 11a5 5 0 0 0-7.07 0L4.8 13.12a5 5 0 0 0 7.07 7.07l1.22-1.22" />
+                </svg>
+                <input id="videoUrl" type="text" inputmode="url" placeholder="Paste video URL" aria-label="Video URL" style="border: 0; background: transparent; width: 100%; outline: 0;" />
+              </label>
+              <button class="primary-button" type="submit">Analyze</button>
+            </form>
           </div>
         </header>
 
@@ -225,9 +230,12 @@
       </main>
     </div>
     <script src="../service/script.js"></script>
+    <script src="../service/analyzer.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        drawLineChart("retentionChart", [], [], []);
+        if (typeof drawLineChart === "function") {
+          drawLineChart("retentionChart", [], [], []);
+        }
       });
     </script>
   </body>

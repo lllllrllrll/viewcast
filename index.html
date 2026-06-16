@@ -103,9 +103,16 @@
         <header class="topbar">
           <div class="title-block">
             <h2>Creator Analytics</h2>
-            <p>Track views, engagement quality, viewer retention, and top-performing video content.</p>
           </div>
           <div class="actions">
+            <form class="channel-link-form" id="channelLinkForm">
+              <label class="search channel-link-input">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.9 5.03" /><path d="M14 11a5 5 0 0 0-7.07 0L4.8 13.12a5 5 0 0 0 7.07 7.07l1.22-1.22" /></svg>
+                <input id="channelUrl" type="text" inputmode="url" placeholder="Link channel URL" aria-label="Channel URL" />
+              </label>
+              <button class="primary-button" type="submit">Save Channel</button>
+              <a class="primary-button channel-open" id="openChannelLink" href="#" target="_blank" rel="noopener" hidden>Open Channel</a>
+            </form>
             <label class="search">
               <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3-3" /></svg>
               <input type="search" placeholder="Search dashboard" />
@@ -342,5 +349,6 @@
       </main>
     </div>
     <script src="service/script.js"></script>
+    <script src="service/channel-link.js"></script>
   </body>
 </html>
