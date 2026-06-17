@@ -113,6 +113,10 @@
               <button class="primary-button" type="submit">Save Channel</button>
               <a class="primary-button channel-open" id="openChannelLink" href="#" target="_blank" rel="noopener" hidden>Open Channel</a>
             </form>
+            <button class="primary-button youtube-connect-button" id="connectYouTube" type="button">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-2C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 2C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" /><path d="m10 15 5-3-5-3z" /></svg>
+              Connect YouTube
+            </button>
             <label class="search">
               <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3-3" /></svg>
               <input type="search" placeholder="Search dashboard" />
@@ -348,7 +352,9 @@
         </section>
       </main>
     </div>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="service/script.js"></script>
     <script src="service/channel-link.js"></script>
+    <script type="module" src="service/youtube-connect.js"></script>
   </body>
 </html>
