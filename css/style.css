@@ -401,11 +401,11 @@ select {
   width: min(320px, 42vw);
 }
 
-.channel-open[hidden] {
-  display: none;
-}
-
 .channel-connect-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: flex-start;
   padding: 10px;
 }
@@ -454,6 +454,17 @@ select {
   border-color: #167b7d;
   color: white;
   background: var(--teal);
+}
+
+.danger-button {
+  border-color: rgba(208, 77, 103, 0.32);
+  color: var(--rose);
+  background: rgba(208, 77, 103, 0.08);
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .dashboard-grid {

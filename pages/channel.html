@@ -50,31 +50,19 @@
           <article class="panel large">
             <div class="panel-head">
               <div>
-                <h3>Manual Channel Link</h3>
-                <p>Paste a channel URL for quick reference.</p>
-              </div>
-            </div>
-            <form class="channel-link-form channel-connect-form" id="channelLinkForm">
-              <label class="search channel-link-input">
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.9 5.03" /><path d="M14 11a5 5 0 0 0-7.07 0L4.8 13.12a5 5 0 0 0 7.07 7.07l1.22-1.22" /></svg>
-                <input id="channelUrl" type="text" inputmode="url" placeholder="Link channel URL" aria-label="Channel URL" />
-              </label>
-              <button class="primary-button" type="submit">Save Channel</button>
-              <a class="primary-button channel-open" id="openChannelLink" href="#" target="_blank" rel="noopener" hidden>Open Channel</a>
-            </form>
-          </article>
-
-          <article class="panel side">
-            <div class="panel-head">
-              <div>
                 <h3>YouTube Connection</h3>
-                <p>Use Google OAuth to grant analytics access.</p>
+                <p>Connect YouTube with OAuth, or unlink the saved channel from this workspace.</p>
               </div>
             </div>
-            <button class="primary-button youtube-connect-button" id="connectYouTube" type="button">
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-2C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 2C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" /><path d="m10 15 5-3-5-3z" /></svg>
-              Connect YouTube
-            </button>
+            <div class="channel-connect-form">
+              <button class="primary-button youtube-connect-button" id="connectYouTube" type="button">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-2C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 2C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" /><path d="m10 15 5-3-5-3z" /></svg>
+                Connect YouTube
+              </button>
+              <button class="primary-button danger-button" id="unlinkYouTube" type="button" disabled>
+                Unlink Channel
+              </button>
+            </div>
           </article>
 
           <article class="metric-card">
@@ -155,7 +143,6 @@
     </div>
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js"></script>
-    <script src="../js/channel-link.js"></script>
     <script type="module" src="../js/youtube-connect.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {

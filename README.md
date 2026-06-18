@@ -52,7 +52,7 @@ Setup completed for this Firebase project:
 - YouTube Data API v3 is enabled.
 - YouTube Analytics API is enabled.
 
-The dashboard requests these scopes: `youtube.readonly` and `yt-analytics.readonly`. Use the **My Channel** page to save a manual channel URL or start the `Connect YouTube` OAuth flow.
+The dashboard requests these scopes: `youtube.readonly` and `yt-analytics.readonly`. Use the **My Channel** page to connect or unlink a YouTube channel.
 
 ## Customize
 

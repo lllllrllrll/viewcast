@@ -7,10 +7,12 @@ import {
   reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {
+  deleteField,
   doc,
   getFirestore,
   serverTimestamp,
-  setDoc
+  setDoc,
+  updateDoc
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
@@ -19,18 +21,24 @@ const scopes = [
   "https://www.googleapis.com/auth/yt-analytics.readonly"
 ];
 
-const button = document.getElementById("connectYouTube");
+const connectButton = document.getElementById("connectYouTube");
+const unlinkButton = document.getElementById("unlinkYouTube");
 let currentUser = null;
 let auth = null;
 let db = null;
 
 function setButton(label, disabled = false) {
-  if (!button) return;
-  const icon = button.querySelector("svg");
-  button.textContent = "";
-  if (icon) button.append(icon);
-  button.append(document.createTextNode(label));
-  button.disabled = disabled;
+  if (!connectButton) return;
+  const icon = connectButton.querySelector("svg");
+  connectButton.textContent = "";
+  if (icon) connectButton.append(icon);
+  connectButton.append(document.createTextNode(label));
+  connectButton.disabled = disabled;
+}
+
+function setUnlinkButton(disabled = false) {
+  if (!unlinkButton) return;
+  unlinkButton.disabled = disabled;
 }
 
 function createProvider() {
@@ -141,6 +149,7 @@ async function connectYouTube() {
 
   try {
     setButton("Connecting...", true);
+    setUnlinkButton(true);
     const result = await connectGoogleProvider(currentUser);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
@@ -152,14 +161,43 @@ async function connectYouTube() {
     await saveYouTubeConnection({channel, analyticsSummary});
     localStorage.setItem("viewcastYouTubeChannel", JSON.stringify(channel));
     setButton(channel.title || "YouTube connected");
+    setUnlinkButton(false);
   } catch (error) {
     console.error("Could not connect YouTube.", error);
     setButton("Connect YouTube");
-    button.title = error.message || "Could not connect YouTube.";
+    setUnlinkButton(false);
+    connectButton.title = error.message || "Could not connect YouTube.";
   }
 }
 
-if (button && firebaseConfigured) {
+async function unlinkYouTube() {
+  if (!currentUser) return;
+
+  try {
+    setUnlinkButton(true);
+    setButton("Unlinking...", true);
+    try {
+      await updateDoc(doc(db, "users", currentUser.uid), {
+        youtubeConnection: deleteField(),
+        youtubeChannelUrl: deleteField(),
+        youtubeChannelTitle: deleteField(),
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      if (error.code !== "not-found") throw error;
+    }
+    localStorage.removeItem("viewcastYouTubeChannel");
+    localStorage.removeItem("viewcastChannelUrl");
+    setButton("Connect YouTube");
+  } catch (error) {
+    console.error("Could not unlink YouTube.", error);
+    setButton("Connect YouTube");
+    setUnlinkButton(false);
+    unlinkButton.title = error.message || "Could not unlink YouTube.";
+  }
+}
+
+if (connectButton && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
@@ -168,12 +206,15 @@ if (button && firebaseConfigured) {
     currentUser = user;
     if (!user) {
       setButton("Sign in to connect", true);
+      setUnlinkButton(true);
       return;
     }
 
     const savedChannel = JSON.parse(localStorage.getItem("viewcastYouTubeChannel") || "null");
     setButton(savedChannel?.title || "Connect YouTube");
+    setUnlinkButton(false);
   });
 
-  button.addEventListener("click", connectYouTube);
+  connectButton.addEventListener("click", connectYouTube);
+  unlinkButton?.addEventListener("click", unlinkYouTube);
 }
