@@ -405,7 +405,7 @@ select {
   display: none;
 }
 
-.link-channel-form {
+.channel-connect-form {
   justify-content: flex-start;
   padding: 10px;
 }

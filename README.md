@@ -42,7 +42,7 @@ Each Firestore user profile stores the Firebase UID, email address, display name
 
 ViewCast includes a YouTube connection flow that uses Firebase Google sign-in with YouTube scopes:
 
-- `js/youtube-connect.js` opens Google consent from the Link Channel page.
+- `js/youtube-connect.js` opens Google consent from the My Channel page.
 - Firebase Auth requests YouTube Data API and YouTube Analytics API read scopes.
 - The connected channel and first analytics summary are saved on `users/{uid}` in Firestore.
 
@@ -52,7 +52,7 @@ Setup completed for this Firebase project:
 - YouTube Data API v3 is enabled.
 - YouTube Analytics API is enabled.
 
-The dashboard requests these scopes: `youtube.readonly` and `yt-analytics.readonly`. Use the **Link Channel** page to save a manual channel URL or start the `Connect YouTube` OAuth flow.
+The dashboard requests these scopes: `youtube.readonly` and `yt-analytics.readonly`. Use the **My Channel** page to save a manual channel URL or start the `Connect YouTube` OAuth flow.
 
 ## Customize
 
