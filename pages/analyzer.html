@@ -14,7 +14,7 @@
         <header class="topbar">
           <div class="title-block">
             <h2>Video Analyzer</h2>
-            <p>Break down individual uploads by retention, engagement, pacing, and audience fit.</p>
+            <p data-youtube-summary>Break down individual uploads by retention, engagement, pacing, and audience fit.</p>
           </div>
           <div class="actions">
             <form class="channel-link-form" id="videoAnalysisForm">
@@ -60,8 +60,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Hook Score</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>28-day Views</h3>
+              <div class="metric-value" data-youtube-field="period-views">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -72,8 +72,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Avg. Duration</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Avg. View Duration</h3>
+              <div class="metric-value" data-youtube-field="average-view-duration">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -84,8 +84,8 @@
               <span class="trend warn">&nbsp;</span>
             </div>
             <div>
-              <h3>Replay Rate</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Watch Hours</h3>
+              <div class="metric-value" data-youtube-field="watch-hours">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -96,8 +96,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Engagement</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Subscribers Gained</h3>
+              <div class="metric-value" data-youtube-field="subscribers-gained">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -173,6 +173,7 @@
     </div>
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js"></script>
+    <script type="module" src="../js/dashboard-data.js"></script>
     <script src="../js/analyzer.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {

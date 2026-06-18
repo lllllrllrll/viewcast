@@ -14,7 +14,7 @@
         <header class="topbar">
           <div class="title-block">
             <h2>Audience</h2>
-            <p>Understand who watches, who returns, and what different viewer groups respond to.</p>
+            <p data-youtube-summary>Understand who watches, who returns, and what different viewer groups respond to.</p>
           </div>
           <div class="actions">
             <button class="primary-button" type="button">
@@ -53,8 +53,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>New Viewers</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>28-day Views</h3>
+              <div class="metric-value" data-youtube-field="period-views">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -65,8 +65,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Returning</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Total Subscribers</h3>
+              <div class="metric-value" data-youtube-field="subscriber-count">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -78,7 +78,7 @@
             </div>
             <div>
               <h3>Sub Growth</h3>
-              <div class="metric-value">&nbsp;</div>
+              <div class="metric-value" data-youtube-field="subscribers-gained">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -89,8 +89,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Global Reach</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Total Views</h3>
+              <div class="metric-value" data-youtube-field="total-views">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -125,6 +125,7 @@
     </div>
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js"></script>
+    <script type="module" src="../js/dashboard-data.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
         drawLineChart("audienceChart", [], [], []);

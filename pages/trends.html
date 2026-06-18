@@ -14,7 +14,7 @@
         <header class="topbar">
           <div class="title-block">
             <h2>Trends</h2>
-            <p>Find rising topics, search patterns, and viewer demand before they peak.</p>
+            <p data-youtube-summary>Find rising topics, search patterns, and viewer demand before they peak.</p>
           </div>
 
         </header>
@@ -49,8 +49,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Topic Velocity</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>28-day Views</h3>
+              <div class="metric-value" data-youtube-field="period-views">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -61,8 +61,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Search Volume</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Total Views</h3>
+              <div class="metric-value" data-youtube-field="total-views">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -73,8 +73,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Format Lift</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Videos</h3>
+              <div class="metric-value" data-youtube-field="video-count">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -85,8 +85,8 @@
               <span class="trend warn">&nbsp;</span>
             </div>
             <div>
-              <h3>Audience Overlap</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Subscribers</h3>
+              <div class="metric-value" data-youtube-field="subscriber-count">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -168,6 +168,7 @@
     </div>
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js"></script>
+    <script type="module" src="../js/dashboard-data.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
         drawLineChart("trendsChart", [], [], []);

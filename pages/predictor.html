@@ -14,7 +14,7 @@
         <header class="topbar">
           <div class="title-block">
             <h2>Success Predictor</h2>
-            <p>Estimate performance before publishing with title, thumbnail, and topic signals.</p>
+            <p data-youtube-summary>Estimate performance before publishing with title, thumbnail, and topic signals.</p>
           </div>
           <div class="actions">
             <form class="channel-link-form" id="predictorForm">
@@ -60,8 +60,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Expected Views</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Recent Views</h3>
+              <div class="metric-value" data-youtube-field="period-views">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -72,8 +72,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>CTR Estimate</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Avg. View Duration</h3>
+              <div class="metric-value" data-youtube-field="average-view-duration">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -84,8 +84,8 @@
               <span class="trend warn">&nbsp;</span>
             </div>
             <div>
-              <h3>Comp. Score</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Total Videos</h3>
+              <div class="metric-value" data-youtube-field="video-count">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -96,8 +96,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Sentiment</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Subscribers Gained</h3>
+              <div class="metric-value" data-youtube-field="subscribers-gained">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
@@ -129,6 +129,7 @@
     </div>
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js"></script>
+    <script type="module" src="../js/dashboard-data.js"></script>
     <script src="../js/predictor.js"></script>
   </body>
 </html>

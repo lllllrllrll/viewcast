@@ -45,7 +45,7 @@ ViewCast includes a YouTube connection flow that uses Firebase Google sign-in wi
 - `js/youtube-connect.js` opens Google consent from the My Channel page.
 - Firebase Auth requests YouTube Data API and YouTube Analytics API read scopes.
 - The connected channel and first analytics summary are saved on `users/{uid}` in Firestore.
-- `js/dashboard-data.js` reads the saved connection and fills real YouTube values into the Overview and My Channel pages.
+- `js/dashboard-data.js` reads the saved connection and fills real YouTube values into the Overview, My Channel, and analytics detail pages.
 
 Setup completed for this Firebase project:
 
