@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ViewCast - Link Channel</title>
+    <link rel="stylesheet" href="../css/style.css">
+  </head>
+  <body>
+    <div class="app">
+      <div data-component="sidebar" data-active="link-channel" data-root=".." data-footer-title="Data connections" data-footer-text="Connect your channel manually or authorize YouTube to prepare dashboard data."></div>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="title-block">
+            <h2>Link Channel</h2>
+            <p>Connect a channel source before populating dashboard metrics.</p>
+          </div>
+        </header>
+
+        <section class="dashboard-grid">
+          <article class="panel full showcase-panel">
+            <div class="panel-head">
+              <div>
+                <h3>Connect Your Channel</h3>
+                <p>Save a public channel URL as a fallback, or connect YouTube with OAuth for real analytics data.</p>
+              </div>
+            </div>
+            <div class="showcase-grid">
+              <div class="showcase-item">
+                <b>Manual channel link</b>
+                <span>Store the channel URL you want this workspace to reference.</span>
+              </div>
+              <div class="showcase-item">
+                <b>YouTube OAuth</b>
+                <span>Authorize YouTube read access to fetch channel metadata and analytics.</span>
+              </div>
+              <div class="showcase-item">
+                <b>Dashboard readiness</b>
+                <span>Connected sources can be used to populate the blank analytics cards later.</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel large">
+            <div class="panel-head">
+              <div>
+                <h3>Manual Channel Link</h3>
+                <p>Paste a channel URL for quick reference.</p>
+              </div>
+            </div>
+            <form class="channel-link-form link-channel-form" id="channelLinkForm">
+              <label class="search channel-link-input">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.9 5.03" /><path d="M14 11a5 5 0 0 0-7.07 0L4.8 13.12a5 5 0 0 0 7.07 7.07l1.22-1.22" /></svg>
+                <input id="channelUrl" type="text" inputmode="url" placeholder="Link channel URL" aria-label="Channel URL" />
+              </label>
+              <button class="primary-button" type="submit">Save Channel</button>
+              <a class="primary-button channel-open" id="openChannelLink" href="#" target="_blank" rel="noopener" hidden>Open Channel</a>
+            </form>
+          </article>
+
+          <article class="panel side">
+            <div class="panel-head">
+              <div>
+                <h3>YouTube Connection</h3>
+                <p>Use Google OAuth to grant analytics access.</p>
+              </div>
+            </div>
+            <button class="primary-button youtube-connect-button" id="connectYouTube" type="button">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-2C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 2C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" /><path d="m10 15 5-3-5-3z" /></svg>
+              Connect YouTube
+            </button>
+          </article>
+        </section>
+      </main>
+    </div>
+    <script src="../components/sidebar.js"></script>
+    <script src="../js/script.js"></script>
+    <script src="../js/channel-link.js"></script>
+    <script type="module" src="../js/youtube-connect.js"></script>
+  </body>
+</html>

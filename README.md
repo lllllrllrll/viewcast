@@ -19,7 +19,7 @@ Then open `http://localhost:4173/login.html`.
 1. Create or open a project in the [Firebase console](https://console.firebase.google.com/).
 2. Add a Web app from **Project settings > Your apps**.
 3. In **Authentication > Sign-in method**, enable **Email/Password**.
-4. Copy the Firebase web configuration into `service/firebase-config.js`.
+4. Copy the Firebase web configuration into `js/firebase-config.js`.
 5. In **Authentication > Settings > Authorized domains**, add the domain where ViewCast will be hosted.
 6. Open **Firestore Database**, create the default database, and choose a production location.
 7. In **Firestore Database > Rules**, publish the contents of `firestore.rules`.
@@ -42,7 +42,7 @@ Each Firestore user profile stores the Firebase UID, email address, display name
 
 ViewCast includes a YouTube connection flow that uses Firebase Google sign-in with YouTube scopes:
 
-- `service/youtube-connect.js` opens Google consent from the dashboard.
+- `js/youtube-connect.js` opens Google consent from the Link Channel page.
 - Firebase Auth requests YouTube Data API and YouTube Analytics API read scopes.
 - The connected channel and first analytics summary are saved on `users/{uid}` in Firestore.
 
@@ -56,8 +56,8 @@ The dashboard requests these scopes: `youtube.readonly` and `yt-analytics.readon
 
 ## Customize
 
-- Update metric values in the KPI card markup.
-- Edit chart data in the `<script>` block near the bottom of `index.html`.
-- Adjust colors in the `:root` CSS variables.
-- Replace video rows in the table body.
-- Edit the `pageDetails` object to customize sidebar pages such as Trends, Video Analyzer, Success Predictor, My Channel, and AI Insights.
+- Add dashboard views in `pages/`.
+- Keep shared behavior in `js/`.
+- Adjust colors and layout in `css/style.css`.
+- Update shared navigation in `components/sidebar.js`.
+- Replace blank metric, chart, and table states only after real YouTube or Firebase data is connected.

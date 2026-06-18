@@ -319,7 +319,7 @@ function setupValidationFeedback() {
 if (!firebaseConfigured) {
   if (isLoginPage) {
     showMessage(
-      "Firebase is not configured yet. Add your web app values in service/firebase-config.js.",
+      "Firebase is not configured yet. Add your web app values in js/firebase-config.js.",
       "setup"
     );
     document.getElementById("authForm")?.querySelectorAll("button, input").forEach((control) => {

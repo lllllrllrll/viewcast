@@ -4,73 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ViewCast - Video Analyzer</title>
-    <link rel="stylesheet" href="../components/style.css">
+    <link rel="stylesheet" href="../css/style.css">
   </head>
   <body>
     <div class="app">
-      <aside class="sidebar" aria-label="Dashboard navigation">
-        <div class="brand">
-          <div class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 19V5" />
-              <path d="M4 19h16" />
-              <path d="m8 15 3-4 3 2 4-7" />
-            </svg>
-          </div>
-          <div>
-            <h1>ViewCast</h1>
-            <span>Audience Studio</span>
-          </div>
-        </div>
-
-        <nav class="nav">
-          <a href="../index.html">
-            <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3z" /><path d="M13 21h8V11h-8z" /><path d="M13 3h8v6h-8z" /><path d="M3 21h8v-6H3z" /></svg>
-            Overview
-          </a>
-          <a href="trends.html">
-            <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" /></svg>
-            Trends
-          </a>
-          <a href="analyzer.html" class="active">
-            <svg viewBox="0 0 24 24"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9" /><path d="M7 20h10" /><path d="M12 16v4" /></svg>
-            Video Analyzer
-          </a>
-          <a href="predictor.html">
-            <svg viewBox="0 0 24 24"><path d="M12 3v4" /><path d="M12 17v4" /><path d="M3 12h4" /><path d="M17 12h4" /><path d="m5.6 5.6 2.8 2.8" /><path d="m15.6 15.6 2.8 2.8" /><path d="m18.4 5.6-2.8 2.8" /><path d="m8.4 15.6-2.8 2.8" /></svg>
-            Success Predictor
-          </a>
-          <a href="channel.html">
-            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3z" /></svg>
-            My Channel
-          </a>
-          <a href="link-channel.html">
-            <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.9 5.03" /><path d="M14 11a5 5 0 0 0-7.07 0L4.8 13.12a5 5 0 0 0 7.07 7.07l1.22-1.22" /></svg>
-            Link Channel
-          </a>
-          <a href="insights.html">
-            <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /><path d="M9 21h6" /><path d="M10 17h4" /></svg>
-            AI Insights
-          </a>
-          <a href="audience.html">
-            <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-            Audience
-          </a>
-          <a href="retention.html">
-            <svg viewBox="0 0 24 24"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg>
-            Retention
-          </a>
-          <a href="settings.html">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.23.36.6.6 1 .6h.6a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z" /></svg>
-            Settings
-          </a>
-        </nav>
-
-        <div class="sidebar-footer">
-          <strong>Video Health</strong>
-          <span>Analyze individual video performance and pacing to identify exact points of friction.</span>
-        </div>
-      </aside>
+      <div data-component="sidebar" data-active="analyzer" data-root=".." data-footer-title="Video Health" data-footer-text="Analyze individual video performance and pacing to identify exact points of friction."></div>
 
       <main class="main">
         <header class="topbar">
@@ -233,8 +171,9 @@
         </section>
       </main>
     </div>
-    <script src="../service/script.js"></script>
-    <script src="../service/analyzer.js"></script>
+    <script src="../components/sidebar.js"></script>
+    <script src="../js/script.js"></script>
+    <script src="../js/analyzer.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
         if (typeof drawLineChart === "function") {
