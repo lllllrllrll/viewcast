@@ -14,7 +14,7 @@
         <header class="welcome-header">
           <div>
             <h2>Welcome back, <span data-user-name>User</span></h2>
-            <p>Connect your channel data to populate this dashboard with verified views, retention, and AI insights.</p>
+            <p data-youtube-summary>Connect your channel data to populate this dashboard with verified views, watch time, and channel stats.</p>
           </div>
           <div class="welcome-summary">
             <a class="welcome-login" href="login.html">
@@ -27,16 +27,16 @@
             </a>
             <div class="welcome-stats" aria-label="Weekly channel summary">
               <div class="welcome-stat">
-                <b class="percentage">&nbsp;</b>
-                <span>Weekly views</span>
+                <b class="percentage" data-youtube-field="period-views">&nbsp;</b>
+                <span>28-day views</span>
               </div>
               <div class="welcome-stat">
-                <b class="percentage">&nbsp;</b>
-                <span>Avg. retention</span>
+                <b class="percentage" data-youtube-field="average-view-duration">&nbsp;</b>
+                <span>Avg. view duration</span>
               </div>
               <div class="welcome-stat">
-                <b>&nbsp;</b>
-                <span>New AI insights</span>
+                <b data-youtube-field="subscribers-gained">&nbsp;</b>
+                <span>Subscribers gained</span>
               </div>
             </div>
           </div>
@@ -92,7 +92,7 @@
             </div>
             <div>
               <h3>Total Views</h3>
-              <div class="metric-value">&nbsp;</div>
+              <div class="metric-value" data-youtube-field="total-views">&nbsp;</div>
             </div>
             <canvas class="sparkline"></canvas>
           </article>
@@ -103,8 +103,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Unique Viewers</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Total Subscribers</h3>
+              <div class="metric-value" data-youtube-field="subscriber-count">&nbsp;</div>
             </div>
             <canvas class="sparkline"></canvas>
           </article>
@@ -115,8 +115,8 @@
               <span class="trend warn">&nbsp;</span>
             </div>
             <div>
-              <h3>Like / Dislike</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Videos</h3>
+              <div class="metric-value" data-youtube-field="video-count">&nbsp;</div>
             </div>
             <canvas class="sparkline"></canvas>
           </article>
@@ -127,8 +127,8 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Avg. Retention</h3>
-              <div class="metric-value">&nbsp;</div>
+              <h3>Avg. View Duration</h3>
+              <div class="metric-value" data-youtube-field="average-view-duration">&nbsp;</div>
             </div>
             <canvas class="sparkline"></canvas>
           </article>
@@ -284,5 +284,6 @@
     </div>
     <script src="components/sidebar.js"></script>
     <script src="js/script.js"></script>
+    <script type="module" src="js/dashboard-data.js"></script>
   </body>
 </html>

@@ -184,6 +184,9 @@ async function connectYouTube() {
     hasLinkedChannel = true;
     setButton(channel.title || "YouTube connected");
     setUnlinkButton({visible: true, disabled: false});
+    window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", {
+      detail: {channel, analyticsSummary}
+    }));
   } catch (error) {
     console.error("Could not connect YouTube.", error);
     setButton("Connect YouTube");
@@ -213,6 +216,7 @@ async function unlinkYouTube() {
     hasLinkedChannel = false;
     setButton("Connect YouTube");
     setUnlinkButton({visible: false, disabled: true});
+    window.dispatchEvent(new CustomEvent("viewcast:youtube-unlinked"));
   } catch (error) {
     console.error("Could not unlink YouTube.", error);
     setButton("Connect YouTube");
