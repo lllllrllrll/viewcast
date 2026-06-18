@@ -1,90 +1,340 @@
-(function () {
-  const form = document.getElementById("videoAnalysisForm");
-  const videoUrlInput = document.getElementById("videoUrl");
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  linkWithPopup,
+  onAuthStateChanged,
+  reauthenticateWithPopup
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
+import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
-  if (!form) return;
+const scopes = [
+  "https://www.googleapis.com/auth/youtube.readonly",
+  "https://www.googleapis.com/auth/yt-analytics.readonly"
+];
 
-  form.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const url = videoUrlInput.value.trim();
-    if (!url) return;
+const form = document.getElementById("videoAnalysisForm");
+const videoUrlInput = document.getElementById("videoUrl");
+const submitButton = form?.querySelector('button[type="submit"]');
+let currentUser = null;
+let auth = null;
 
-    // Simulate analysis loading state
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const originalText = submitBtn.textContent;
-    submitBtn.textContent = "Analyzing...";
-    submitBtn.disabled = true;
-
-    setTimeout(() => {
-      populateMockData();
-      submitBtn.textContent = originalText;
-      submitBtn.disabled = false;
-    }, 1200);
-  });
-
-  function populateMockData() {
-    // Update metric cards
-    const cards = document.querySelectorAll(".metric-card");
-    const mockValues = ["84/100", "14:22", "8.4%", "92%"];
-    const mockTrends = ["+12%", "+4%", "-2%", "+5%"];
-
-    cards.forEach((card, i) => {
-      const valueEl = card.querySelector(".metric-value");
-      const trendEl = card.querySelector(".trend");
-      if (valueEl) valueEl.textContent = mockValues[i];
-      if (trendEl) trendEl.textContent = mockTrends[i];
-
-      const sparkline = card.querySelector(".sparkline");
-      if (sparkline) {
-        sparkline.dataset.values = Array.from({ length: 12 }, () =>
-          Math.floor(Math.random() * 50 + 50)
-        ).join(",");
-        if (typeof drawSparkline === "function") drawSparkline(sparkline);
-      }
-    });
-
-    // Update retention chart
-    const actual = [100, 92, 85, 82, 78, 75, 72, 70, 68, 65, 62, 60];
-    const forecast = [100, 95, 90, 88, 85, 82, 80, 78, 76, 74, 72, 70];
-    const labels = ["0:00", "1:00", "2:00", "3:00", "4:00", "5:00", "6:00", "7:00", "8:00", "9:00", "10:00", "End"];
-
-    if (typeof drawLineChart === "function") {
-      drawLineChart("retentionChart", actual, forecast, labels);
-    }
-
-    // Update key moments
-    const activityItems = document.querySelectorAll(".activity-item");
-    const moments = [
-      { title: "Hook Success", desc: "92% retention at 0:30", time: "0:30" },
-      { title: "Segment Drop", desc: "Tutorial section pacing too slow", time: "4:15" },
-      { title: "Peak Interest", desc: "Viewers replaying the climax", time: "8:45" }
-    ];
-
-    activityItems.forEach((item, i) => {
-      if (moments[i]) {
-        item.querySelector("b").textContent = moments[i].title;
-        item.querySelector("span").textContent = moments[i].desc;
-        item.querySelector("time").textContent = moments[i].time;
-      }
-    });
-
-    // Update recommended edits table
-    const tbody = document.querySelector("table tbody");
-    if (tbody) {
-      const rows = [
-        ["0:00 - 0:45", "Hook Pacing", "Shorten intro by 5 seconds", "High"],
-        ["4:15 - 5:30", "Mid-roll Drop", "Add chapters for better navigation", "Medium"],
-        ["End Screen", "Low Conversion", "Move CTA 10 seconds earlier", "High"]
-      ];
-
-      tbody.innerHTML = rows.map(row => `
-        <tr>
-          <td>${row[0]}</td>
-          <td>${row[1]}</td>
-          <td>${row[2]}</td>
-          <td><span class="trend ${row[3] === 'High' ? 'good' : 'warn'}">${row[3]}</span></td>
-        </tr>
-      `).join("");
-    }
+function setStatus(message) {
+  let status = document.getElementById("videoAnalysisStatus");
+  if (!status && form) {
+    status = document.createElement("span");
+    status.id = "videoAnalysisStatus";
+    status.className = "analysis-status";
+    form.append(status);
   }
-})();
+  if (status) status.textContent = message || "";
+}
+
+function setBusy(isBusy, label = "Analyze") {
+  if (!submitButton) return;
+  submitButton.disabled = isBusy;
+  submitButton.textContent = isBusy ? "Analyzing..." : label;
+}
+
+function numberValue(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function compactNumber(value) {
+  const number = numberValue(value);
+  if (number === null) return "";
+  return new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: number >= 1000 ? 1 : 0
+  }).format(number);
+}
+
+function wholeNumber(value) {
+  const number = numberValue(value);
+  if (number === null) return "";
+  return new Intl.NumberFormat("en").format(Math.round(number));
+}
+
+function percent(value) {
+  const number = numberValue(value);
+  if (number === null) return "";
+  return `
+${Math.round(number * 10) / 10}%`.trim();
+}
+
+function durationFromSeconds(value) {
+  const number = numberValue(value);
+  if (number === null) return "";
+  const totalSeconds = Math.max(0, Math.round(number));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return hours ? `
+${hours}:${String(minutes).padStart(2, "0")}:${seconds}`.trim() : `
+${minutes}:${seconds}`.trim();
+}
+
+function durationFromIso(value = "") {
+  const match = value.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return "";
+  const [, hours = 0, minutes = 0, seconds = 0] = match.map((part) => Number(part || 0));
+  return durationFromSeconds(hours * 3600 + minutes * 60 + seconds);
+}
+
+function parseVideoId(value) {
+  const trimmed = value.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname.includes("youtu.be")) {
+      const id = url.pathname.split("/").filter(Boolean)[0];
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
+    }
+    if (url.searchParams.get("v")) return url.searchParams.get("v");
+    const shorts = url.pathname.match(/\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})/);
+    if (shorts) return shorts[2];
+  } catch (error) {
+    return "";
+  }
+
+  return "";
+}
+
+function createProvider() {
+  const provider = new GoogleAuthProvider();
+  scopes.forEach((scope) => provider.addScope(scope));
+  provider.setCustomParameters({prompt: "consent"});
+  return provider;
+}
+
+function userHasGoogleProvider(user) {
+  return user.providerData.some((provider) => provider.providerId === "google.com");
+}
+
+async function getCredential() {
+  if (!currentUser) throw new Error("Sign in before analyzing a video.");
+  const provider = createProvider();
+  const result = userHasGoogleProvider(currentUser)
+    ? await reauthenticateWithPopup(currentUser, provider)
+    : await linkWithPopup(currentUser, provider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  if (!credential?.accessToken) throw new Error("Google did not return a YouTube access token.");
+  return credential;
+}
+
+async function fetchJson(url, accessToken) {
+  const response = await fetch(url, {
+    headers: {Authorization: `Bearer ${accessToken}`}
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error?.message || "YouTube API request failed.");
+  }
+  return payload;
+}
+
+async function fetchVideo(videoId, accessToken) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+  url.searchParams.set("part", "snippet,statistics,contentDetails");
+  url.searchParams.set("id", videoId);
+  const payload = await fetchJson(url, accessToken);
+  const video = payload.items?.[0];
+  if (!video) throw new Error("No video was found for that URL.");
+  return video;
+}
+
+async function fetchVideoAnalytics(videoId, accessToken) {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(endDate.getDate() - 28);
+  const formatDate = (date) => date.toISOString().slice(0, 10);
+  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+  url.searchParams.set("ids", "channel==MINE");
+  url.searchParams.set("startDate", formatDate(startDate));
+  url.searchParams.set("endDate", formatDate(endDate));
+  url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained");
+  url.searchParams.set("filters", `video==${videoId}`);
+
+  try {
+    const payload = await fetchJson(url, accessToken);
+    const row = payload.rows?.[0] || [];
+    return {
+      views: row[0],
+      estimatedMinutesWatched: row[1],
+      averageViewDuration: row[2],
+      averageViewPercentage: row[3],
+      likes: row[4],
+      comments: row[5],
+      shares: row[6],
+      subscribersGained: row[7]
+    };
+  } catch (error) {
+    console.warn("Video analytics were not available for this video.", error);
+    return null;
+  }
+}
+
+async function fetchRetentionCurve(videoId, accessToken) {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(endDate.getDate() - 28);
+  const formatDate = (date) => date.toISOString().slice(0, 10);
+  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+  url.searchParams.set("ids", "channel==MINE");
+  url.searchParams.set("startDate", formatDate(startDate));
+  url.searchParams.set("endDate", formatDate(endDate));
+  url.searchParams.set("metrics", "audienceWatchRatio");
+  url.searchParams.set("dimensions", "elapsedVideoTimeRatio");
+  url.searchParams.set("filters", `video==${videoId}`);
+  url.searchParams.set("sort", "elapsedVideoTimeRatio");
+
+  try {
+    const payload = await fetchJson(url, accessToken);
+    return (payload.rows || []).map(([position, ratio]) => ({
+      position: Number(position),
+      ratio: Number(ratio)
+    })).filter((point) => Number.isFinite(point.position) && Number.isFinite(point.ratio));
+  } catch (error) {
+    console.warn("Retention curve was not available for this video.", error);
+    return [];
+  }
+}
+
+function setMetric(index, value, trend = "") {
+  const card = document.querySelectorAll(".metric-card")[index];
+  if (!card) return;
+  const valueEl = card.querySelector(".metric-value");
+  const trendEl = card.querySelector(".trend");
+  if (valueEl) valueEl.textContent = value || " ";
+  if (trendEl) trendEl.textContent = trend || " ";
+}
+
+function drawActualRetention(points) {
+  if (!points.length || typeof drawLineChart !== "function") {
+    if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+    return;
+  }
+
+  const sampled = points.filter((_, index) => index % Math.max(1, Math.floor(points.length / 12)) === 0).slice(0, 12);
+  const actual = sampled.map((point) => Math.round(point.ratio * 100));
+  const labels = sampled.map((point) => `
+${Math.round(point.position * 100)}%`.trim());
+  drawLineChart("retentionChart", actual, actual, labels);
+}
+
+function updateKeyMoments(video, analytics, retentionPoints) {
+  const items = document.querySelectorAll(".activity-item");
+  const title = video.snippet?.title || "Selected video";
+  const moments = [
+    {
+      title: "Video loaded",
+      desc: title,
+      time: durationFromIso(video.contentDetails?.duration) || "Video"
+    },
+    analytics ? {
+      title: "Average view duration",
+      desc: durationFromSeconds(analytics.averageViewDuration),
+      time: "28D"
+    } : {
+      title: "Analytics unavailable",
+      desc: "Private analytics require access to the video's channel.",
+      time: "API"
+    },
+    retentionPoints.length ? {
+      title: "Retention samples",
+      desc: `
+${retentionPoints.length} points returned by YouTube Analytics`.trim(),
+      time: "Curve"
+    } : {
+      title: "Retention curve unavailable",
+      desc: "YouTube did not return audience retention points for this video.",
+      time: "API"
+    }
+  ];
+
+  items.forEach((item, index) => {
+    const moment = moments[index];
+    if (!moment) return;
+    item.querySelector("b").textContent = moment.title;
+    item.querySelector("span").textContent = moment.desc || " ";
+    item.querySelector("time").textContent = moment.time || " ";
+  });
+}
+
+function updateTable(video, analytics, retentionPoints) {
+  const tbody = document.querySelector("table tbody");
+  if (!tbody) return;
+  const stats = video.statistics || {};
+  const rows = [
+    ["Public stats", "Views", wholeNumber(stats.viewCount) || "Unavailable", "Data API"],
+    ["Public stats", "Likes", wholeNumber(stats.likeCount) || "Unavailable", "Data API"],
+    ["Public stats", "Comments", wholeNumber(stats.commentCount) || "Unavailable", "Data API"],
+    ["Private analytics", "Avg. view %", analytics ? percent(analytics.averageViewPercentage) : "Unavailable", analytics ? "Analytics API" : "Needs owner access"],
+    ["Private analytics", "Retention curve", retentionPoints.length ? `
+${retentionPoints.length} samples`.trim() : "Unavailable", retentionPoints.length ? "Analytics API" : "Needs owner access"]
+  ];
+
+  tbody.innerHTML = rows.map(([segment, issue, recommendation, impact]) => `
+    <tr>
+      <td>${segment}</td>
+      <td>${issue}</td>
+      <td>${recommendation}</td>
+      <td><span class="trend ${impact.includes("Unavailable") || impact.includes("Needs") ? "warn" : "good"}">${impact}</span></td>
+    </tr>
+  `).join("");
+}
+
+function updateMetrics(video, analytics) {
+  const stats = video.statistics || {};
+  setMetric(0, compactNumber(analytics?.views ?? stats.viewCount), analytics ? "28D" : "Total");
+  setMetric(1, durationFromSeconds(analytics?.averageViewDuration) || durationFromIso(video.contentDetails?.duration), analytics ? "28D avg" : "Length");
+  setMetric(2, analytics?.estimatedMinutesWatched !== undefined ? compactNumber(analytics.estimatedMinutesWatched / 60) : compactNumber(stats.likeCount), analytics ? "Watch hrs" : "Likes");
+  setMetric(3, analytics?.subscribersGained !== undefined ? wholeNumber(analytics.subscribersGained) : wholeNumber(stats.commentCount), analytics ? "Subs gained" : "Comments");
+}
+
+async function analyzeVideo(event) {
+  event.preventDefault();
+  const videoId = parseVideoId(videoUrlInput?.value || "");
+  if (!videoId) {
+    setStatus("Paste a valid YouTube video URL or video ID.");
+    return;
+  }
+
+  try {
+    setBusy(true);
+    setStatus("Requesting YouTube access...");
+    const credential = await getCredential();
+    setStatus("Loading video data from YouTube...");
+    const [video, analytics, retentionPoints] = await Promise.all([
+      fetchVideo(videoId, credential.accessToken),
+      fetchVideoAnalytics(videoId, credential.accessToken),
+      fetchRetentionCurve(videoId, credential.accessToken)
+    ]);
+
+    updateMetrics(video, analytics);
+    drawActualRetention(retentionPoints);
+    updateKeyMoments(video, analytics, retentionPoints);
+    updateTable(video, analytics, retentionPoints);
+    setStatus("Video data loaded from YouTube.");
+  } catch (error) {
+    console.error("Could not analyze video.", error);
+    setStatus(error.message || "Could not analyze this video.");
+  } finally {
+    setBusy(false);
+  }
+}
+
+if (form && firebaseConfigured) {
+  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    if (!user) setStatus("Sign in before analyzing a video.");
+  });
+  form.addEventListener("submit", analyzeVideo);
+} else if (form) {
+  setStatus("Firebase is not configured yet.");
+}
