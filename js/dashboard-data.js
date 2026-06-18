@@ -11,6 +11,8 @@ import {
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const emptyValue = "\u00a0";
+const connectionStorageKey = "viewcastYouTubeConnection";
+const channelStorageKey = "viewcastYouTubeChannel";
 
 function numberValue(value) {
   if (value === "" || value === null || value === undefined) return null;
@@ -65,6 +67,51 @@ function savedConnectionFromProfile(profile = {}) {
   };
 }
 
+function normalizeConnection(value) {
+  if (!value) return null;
+  if (value.channel) {
+    return {
+      channel: value.channel || {},
+      analyticsSummary: value.analyticsSummary || {}
+    };
+  }
+  if (value.id || value.title || value.url) {
+    return {
+      channel: value,
+      analyticsSummary: {}
+    };
+  }
+  return null;
+}
+
+function readCachedConnection() {
+  try {
+    const savedConnection = normalizeConnection(
+      JSON.parse(localStorage.getItem(connectionStorageKey) || "null")
+    );
+    if (savedConnection) return savedConnection;
+
+    return normalizeConnection(
+      JSON.parse(localStorage.getItem(channelStorageKey) || "null")
+    );
+  } catch (error) {
+    localStorage.removeItem(connectionStorageKey);
+    localStorage.removeItem(channelStorageKey);
+    return null;
+  }
+}
+
+function saveCachedConnection(connection) {
+  if (!connection) {
+    localStorage.removeItem(connectionStorageKey);
+    localStorage.removeItem(channelStorageKey);
+    return;
+  }
+
+  localStorage.setItem(connectionStorageKey, JSON.stringify(connection));
+  localStorage.setItem(channelStorageKey, JSON.stringify(connection.channel || {}));
+}
+
 function fieldValues(connection) {
   if (!connection) return {};
 
@@ -101,7 +148,8 @@ function applyYouTubeData(connection) {
     return;
   }
 
-  const {channel, analyticsSummary} = connection;
+  const channel = connection.channel || {};
+  const analyticsSummary = connection.analyticsSummary || {};
   const title = channel.title || "your linked channel";
   const summaryParts = [
     analyticsSummary.views !== undefined ? `${wholeNumber(analyticsSummary.views)} views` : "",
@@ -118,12 +166,17 @@ function applyYouTubeData(connection) {
 }
 
 async function loadYouTubeData(user, db) {
+  applyYouTubeData(readCachedConnection());
+
   const snapshot = await getDoc(doc(db, "users", user.uid));
   const profile = snapshot.exists() ? snapshot.data() : {};
-  applyYouTubeData(savedConnectionFromProfile(profile));
+  const connection = savedConnectionFromProfile(profile);
+  if (connection) saveCachedConnection(connection);
+  applyYouTubeData(connection || readCachedConnection());
 }
 
 if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-youtube-summary]")) {
+  applyYouTubeData(readCachedConnection());
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
@@ -136,10 +189,12 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
   });
 
   window.addEventListener("viewcast:youtube-connected", (event) => {
+    saveCachedConnection(event.detail);
     applyYouTubeData(event.detail);
   });
 
   window.addEventListener("viewcast:youtube-unlinked", () => {
+    saveCachedConnection(null);
     applyYouTubeData(null);
   });
 }

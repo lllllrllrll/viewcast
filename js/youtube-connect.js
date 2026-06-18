@@ -24,6 +24,8 @@ const scopes = [
 
 const connectButton = document.getElementById("connectYouTube");
 const unlinkButton = document.getElementById("unlinkYouTube");
+const connectionStorageKey = "viewcastYouTubeConnection";
+const channelStorageKey = "viewcastYouTubeChannel";
 let currentUser = null;
 let auth = null;
 let db = null;
@@ -44,22 +46,45 @@ function setUnlinkButton({visible = hasLinkedChannel, disabled = false} = {}) {
   unlinkButton.disabled = disabled;
 }
 
-function readSavedChannel() {
+function readSavedConnection() {
   try {
-    return JSON.parse(localStorage.getItem("viewcastYouTubeChannel") || "null");
+    const savedConnection = JSON.parse(localStorage.getItem(connectionStorageKey) || "null");
+    if (savedConnection?.channel) return savedConnection;
+
+    const savedChannel = JSON.parse(localStorage.getItem(channelStorageKey) || "null");
+    return savedChannel ? {channel: savedChannel, analyticsSummary: {}} : null;
   } catch (error) {
-    localStorage.removeItem("viewcastYouTubeChannel");
+    localStorage.removeItem(connectionStorageKey);
+    localStorage.removeItem(channelStorageKey);
     return null;
   }
 }
 
+function saveCachedConnection(connection) {
+  localStorage.setItem(connectionStorageKey, JSON.stringify(connection));
+  localStorage.setItem(channelStorageKey, JSON.stringify(connection.channel || {}));
+}
+
 async function getSavedConnection(user) {
-  const savedChannel = readSavedChannel();
-  if (savedChannel?.id || savedChannel?.url || savedChannel?.title) return savedChannel;
+  const cachedConnection = readSavedConnection();
+  if (cachedConnection?.channel?.id || cachedConnection?.channel?.url || cachedConnection?.channel?.title) {
+    return cachedConnection;
+  }
 
   const snapshot = await getDoc(doc(db, "users", user.uid));
   const profile = snapshot.exists() ? snapshot.data() : {};
-  return profile.youtubeConnection?.channel || profile.youtubeChannelUrl || null;
+  const connection = profile.youtubeConnection || null;
+  if (connection?.channel) return connection;
+  if (profile.youtubeChannelUrl || profile.youtubeChannelTitle) {
+    return {
+      channel: {
+        url: profile.youtubeChannelUrl || "",
+        title: profile.youtubeChannelTitle || ""
+      },
+      analyticsSummary: {}
+    };
+  }
+  return null;
 }
 
 function createProvider() {
@@ -179,13 +204,14 @@ async function connectYouTube() {
 
     const channel = await fetchChannel(credential.accessToken);
     const analyticsSummary = await fetchAnalyticsSummary(credential.accessToken);
-    await saveYouTubeConnection({channel, analyticsSummary});
-    localStorage.setItem("viewcastYouTubeChannel", JSON.stringify(channel));
+    const connection = {channel, analyticsSummary};
+    await saveYouTubeConnection(connection);
+    saveCachedConnection(connection);
     hasLinkedChannel = true;
     setButton(channel.title || "YouTube connected");
     setUnlinkButton({visible: true, disabled: false});
     window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", {
-      detail: {channel, analyticsSummary}
+      detail: connection
     }));
   } catch (error) {
     console.error("Could not connect YouTube.", error);
@@ -211,7 +237,8 @@ async function unlinkYouTube() {
     } catch (error) {
       if (error.code !== "not-found") throw error;
     }
-    localStorage.removeItem("viewcastYouTubeChannel");
+    localStorage.removeItem(connectionStorageKey);
+    localStorage.removeItem(channelStorageKey);
     localStorage.removeItem("viewcastChannelUrl");
     hasLinkedChannel = false;
     setButton("Connect YouTube");
@@ -245,11 +272,11 @@ if (connectButton && firebaseConfigured) {
     try {
       const savedConnection = await getSavedConnection(user);
       hasLinkedChannel = Boolean(savedConnection);
-      setButton(savedConnection?.title || "Connect YouTube");
+      setButton(savedConnection?.channel?.title || "Connect YouTube");
       setUnlinkButton({visible: hasLinkedChannel, disabled: false});
     } catch (error) {
       console.error("Could not load YouTube connection.", error);
-      hasLinkedChannel = Boolean(readSavedChannel());
+      hasLinkedChannel = Boolean(readSavedConnection());
       setButton("Connect YouTube");
       setUnlinkButton({visible: hasLinkedChannel, disabled: false});
     }
