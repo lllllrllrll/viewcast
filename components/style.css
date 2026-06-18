@@ -405,6 +405,11 @@ select {
   display: none;
 }
 
+.link-dashboard-form {
+  justify-content: flex-start;
+  padding: 10px;
+}
+
 .search {
   display: flex;
   align-items: center;
@@ -1241,4 +1246,3 @@ tbody tr:hover {
     grid-template-columns: 74px 1fr 44px;
   }
 }
-
