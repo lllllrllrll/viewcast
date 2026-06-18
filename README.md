@@ -40,46 +40,19 @@ Each Firestore user profile stores the Firebase UID, email address, display name
 
 ## YouTube OAuth
 
-ViewCast includes a YouTube connection scaffold that uses Google OAuth and Firebase Functions:
+ViewCast includes a YouTube connection flow that uses Firebase Google sign-in with YouTube scopes:
 
-- `service/youtube-config.js` stores the public Google OAuth client ID and deployed Function URL.
 - `service/youtube-connect.js` opens Google consent from the dashboard.
-- `functions/index.js` exchanges the OAuth code, verifies the Firebase user, stores the YouTube connection in Firestore, and saves the connected channel title/URL on `users/{uid}`.
+- Firebase Auth requests YouTube Data API and YouTube Analytics API read scopes.
+- The connected channel and first analytics summary are saved on `users/{uid}` in Firestore.
 
-To finish setup:
+Setup completed for this Firebase project:
 
-1. In Google Cloud Console, enable **YouTube Data API v3** and **YouTube Analytics API** for the same project.
-2. Configure the OAuth consent screen.
-3. Create an OAuth client ID with application type **Web application**.
-4. Add authorized JavaScript origins:
+- Firebase Auth Google sign-in is enabled.
+- YouTube Data API v3 is enabled.
+- YouTube Analytics API is enabled.
 
-```text
-http://localhost:4173
-https://viewcast-a6f31.web.app
-https://viewcast-a6f31.firebaseapp.com
-```
-
-5. Copy the OAuth client ID into `service/youtube-config.js`.
-6. Copy `functions/.env.example` to `functions/.env` and replace the placeholder client ID.
-7. Store the OAuth client secret as a Firebase Functions secret:
-
-```bash
-firebase functions:secrets:set YOUTUBE_CLIENT_SECRET
-```
-
-8. Install Functions dependencies if needed:
-
-```bash
-npm --prefix functions install
-```
-
-9. Deploy Functions:
-
-```bash
-firebase deploy --only functions
-```
-
-The dashboard requests these scopes: `youtube.readonly` and `yt-analytics.readonly`. The channel URL field is still useful as a manual fallback, but real dashboard metrics require this OAuth connection.
+The dashboard requests these scopes: `youtube.readonly` and `yt-analytics.readonly`. The channel URL field is still useful as a manual fallback, but real dashboard metrics require the `Connect YouTube` OAuth flow.
 
 ## Customize
 

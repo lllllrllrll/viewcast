@@ -1,20 +1,28 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 import {
-  googleOAuthClientId,
-  youtubeOAuthConfigured,
-  youtubeOAuthExchangeUrl
-} from "./youtube-config.js";
+  getAuth,
+  GoogleAuthProvider,
+  linkWithPopup,
+  onAuthStateChanged,
+  reauthenticateWithPopup
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
+import {
+  doc,
+  getFirestore,
+  serverTimestamp,
+  setDoc
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
+import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
   "https://www.googleapis.com/auth/yt-analytics.readonly"
-].join(" ");
+];
 
 const button = document.getElementById("connectYouTube");
 let currentUser = null;
-let codeClient = null;
+let auth = null;
+let db = null;
 
 function setButton(label, disabled = false) {
   if (!button) return;
@@ -25,95 +33,136 @@ function setButton(label, disabled = false) {
   button.disabled = disabled;
 }
 
-function waitForGoogleIdentity() {
-  return new Promise((resolve, reject) => {
-    const startedAt = Date.now();
-    const timer = window.setInterval(() => {
-      if (window.google?.accounts?.oauth2) {
-        window.clearInterval(timer);
-        resolve();
-        return;
-      }
-
-      if (Date.now() - startedAt > 8000) {
-        window.clearInterval(timer);
-        reject(new Error("Google Identity Services did not load."));
-      }
-    }, 100);
-  });
+function createProvider() {
+  const provider = new GoogleAuthProvider();
+  scopes.forEach((scope) => provider.addScope(scope));
+  provider.setCustomParameters({prompt: "consent"});
+  return provider;
 }
 
-async function exchangeCode(code) {
-  const token = await currentUser.getIdToken();
-  const response = await fetch(youtubeOAuthExchangeUrl, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "X-Requested-With": "XmlHttpRequest"
-    },
-    body: JSON.stringify({
-      code,
-      redirectUri: window.location.origin
-    })
-  });
+function userHasGoogleProvider(user) {
+  return user.providerData.some((provider) => provider.providerId === "google.com");
+}
 
+async function connectGoogleProvider(user) {
+  const provider = createProvider();
+  try {
+    return userHasGoogleProvider(user)
+      ? reauthenticateWithPopup(user, provider)
+      : linkWithPopup(user, provider);
+  } catch (error) {
+    if (error.code === "auth/provider-already-linked") {
+      return reauthenticateWithPopup(user, provider);
+    }
+    throw error;
+  }
+}
+
+async function fetchJson(url, accessToken) {
+  const response = await fetch(url, {
+    headers: {Authorization: `Bearer ${accessToken}`}
+  });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || "Could not connect YouTube.");
+    throw new Error(payload.error?.message || "YouTube API request failed.");
   }
-
   return payload;
 }
 
-async function setupYouTubeConnect() {
-  if (!button) return;
+async function fetchChannel(accessToken) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+  url.searchParams.set("part", "snippet,statistics");
+  url.searchParams.set("mine", "true");
 
-  if (!youtubeOAuthConfigured) {
-    setButton("Add Google Client ID", true);
-    button.title = "Add your OAuth client ID in service/youtube-config.js.";
-    return;
-  }
+  const payload = await fetchJson(url, accessToken);
+  const channel = payload.items?.[0];
+  if (!channel) throw new Error("No YouTube channel was found for this Google account.");
+
+  return {
+    id: channel.id,
+    title: channel.snippet?.title || "",
+    url: `https://www.youtube.com/channel/${channel.id}`,
+    thumbnail: channel.snippet?.thumbnails?.default?.url || "",
+    subscriberCount: channel.statistics?.subscriberCount || "",
+    viewCount: channel.statistics?.viewCount || "",
+    videoCount: channel.statistics?.videoCount || ""
+  };
+}
+
+async function fetchAnalyticsSummary(accessToken) {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(endDate.getDate() - 28);
+
+  const formatDate = (date) => date.toISOString().slice(0, 10);
+  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+  url.searchParams.set("ids", "channel==MINE");
+  url.searchParams.set("startDate", formatDate(startDate));
+  url.searchParams.set("endDate", formatDate(endDate));
+  url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,subscribersGained");
 
   try {
-    await waitForGoogleIdentity();
+    const payload = await fetchJson(url, accessToken);
+    const [views, estimatedMinutesWatched, averageViewDuration, subscribersGained] =
+      payload.rows?.[0] || [];
+    return {
+      views: views || 0,
+      estimatedMinutesWatched: estimatedMinutesWatched || 0,
+      averageViewDuration: averageViewDuration || 0,
+      subscribersGained: subscribersGained || 0
+    };
   } catch (error) {
-    console.error(error);
-    setButton("Google OAuth unavailable", true);
-    return;
+    console.warn("YouTube Analytics summary was not available yet.", error);
+    return null;
   }
+}
 
-  codeClient = window.google.accounts.oauth2.initCodeClient({
-    client_id: googleOAuthClientId,
-    scope: scopes,
-    ux_mode: "popup",
-    callback: async (response) => {
-      if (response.error) {
-        setButton("Connect YouTube");
-        console.error("Google OAuth failed.", response);
-        return;
-      }
+async function saveYouTubeConnection({channel, analyticsSummary}) {
+  await setDoc(
+    doc(db, "users", currentUser.uid),
+    {
+      youtubeConnection: {
+        channel,
+        analyticsSummary,
+        scopes,
+        connectedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      },
+      youtubeChannelUrl: channel.url,
+      youtubeChannelTitle: channel.title,
+      updatedAt: serverTimestamp()
+    },
+    {merge: true}
+  );
+}
 
-      try {
-        setButton("Connecting...", true);
-        const result = await exchangeCode(response.code);
-        const channelTitle = result.channel?.title || "YouTube connected";
-        localStorage.setItem("viewcastYouTubeChannel", JSON.stringify(result.channel || {}));
-        setButton(channelTitle, false);
-      } catch (error) {
-        console.error(error);
-        setButton("Connect YouTube");
-        button.title = error.message;
-      }
+async function connectYouTube() {
+  if (!currentUser) return;
+
+  try {
+    setButton("Connecting...", true);
+    const result = await connectGoogleProvider(currentUser);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (!credential?.accessToken) {
+      throw new Error("Google did not return a YouTube access token.");
     }
-  });
 
-  setButton("Connect YouTube");
+    const channel = await fetchChannel(credential.accessToken);
+    const analyticsSummary = await fetchAnalyticsSummary(credential.accessToken);
+    await saveYouTubeConnection({channel, analyticsSummary});
+    localStorage.setItem("viewcastYouTubeChannel", JSON.stringify(channel));
+    setButton(channel.title || "YouTube connected");
+  } catch (error) {
+    console.error("Could not connect YouTube.", error);
+    setButton("Connect YouTube");
+    button.title = error.message || "Could not connect YouTube.";
+  }
 }
 
 if (button && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-  const auth = getAuth(app);
+  auth = getAuth(app);
+  db = getFirestore(app);
 
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
@@ -121,11 +170,10 @@ if (button && firebaseConfigured) {
       setButton("Sign in to connect", true);
       return;
     }
-    setupYouTubeConnect();
+
+    const savedChannel = JSON.parse(localStorage.getItem("viewcastYouTubeChannel") || "null");
+    setButton(savedChannel?.title || "Connect YouTube");
   });
 
-  button.addEventListener("click", () => {
-    if (!currentUser || !codeClient) return;
-    codeClient.requestCode();
-  });
+  button.addEventListener("click", connectYouTube);
 }
