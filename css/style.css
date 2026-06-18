@@ -467,6 +467,10 @@ select {
   opacity: 0.56;
 }
 
+.primary-button[hidden] {
+  display: none;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
