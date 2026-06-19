@@ -16,6 +16,12 @@ const scopes = [
 const form = document.getElementById("videoAnalysisForm");
 const videoUrlInput = document.getElementById("videoUrl");
 const submitButton = form?.querySelector('button[type="submit"]');
+const previewThumbnail = document.getElementById("videoPreviewThumbnail");
+const previewEmpty = document.getElementById("videoPreviewEmpty");
+const previewTitle = document.getElementById("videoPreviewTitle");
+const previewMeta = document.getElementById("videoPreviewMeta");
+const previewDescription = document.getElementById("videoPreviewDescription");
+const previewLink = document.getElementById("videoPreviewLink");
 let currentUser = null;
 let auth = null;
 
@@ -81,6 +87,66 @@ function durationFromIso(value = "") {
   if (!match) return "";
   const [, hours = 0, minutes = 0, seconds = 0] = match.map((part) => Number(part || 0));
   return durationFromSeconds(hours * 3600 + minutes * 60 + seconds);
+}
+
+function truncate(value = "", maxLength = 180) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return normalized.slice(0, maxLength - 1).trim() + "...";
+}
+
+function dateLabel(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(date);
+}
+
+function bestThumbnail(thumbnails = {}) {
+  return thumbnails.maxres?.url
+    || thumbnails.standard?.url
+    || thumbnails.high?.url
+    || thumbnails.medium?.url
+    || thumbnails.default?.url
+    || "";
+}
+
+function updateVideoPreview(video) {
+  const snippet = video.snippet || {};
+  const title = snippet.title || "Selected video";
+  const channel = snippet.channelTitle || "YouTube channel";
+  const published = dateLabel(snippet.publishedAt);
+  const duration = durationFromIso(video.contentDetails?.duration);
+  const meta = [channel, published, duration].filter(Boolean).join(" - ");
+  const thumbnail = bestThumbnail(snippet.thumbnails);
+
+  if (previewTitle) previewTitle.textContent = title;
+  if (previewMeta) previewMeta.textContent = meta || "Video details loaded from YouTube.";
+  if (previewDescription) {
+    previewDescription.textContent = truncate(snippet.description, 220) || "No public description is available for this video.";
+  }
+
+  if (previewThumbnail) {
+    if (thumbnail) {
+      previewThumbnail.src = thumbnail;
+      previewThumbnail.alt = title + " thumbnail";
+      previewThumbnail.hidden = false;
+    } else {
+      previewThumbnail.removeAttribute("src");
+      previewThumbnail.alt = "";
+      previewThumbnail.hidden = true;
+    }
+  }
+
+  if (previewEmpty) previewEmpty.hidden = Boolean(thumbnail);
+  if (previewLink) {
+    previewLink.href = "https://www.youtube.com/watch?v=" + video.id;
+    previewLink.hidden = false;
+  }
 }
 
 function parseVideoId(value) {
@@ -314,6 +380,7 @@ async function analyzeVideo(event) {
       fetchRetentionCurve(videoId, credential.accessToken)
     ]);
 
+    updateVideoPreview(video);
     updateMetrics(video, analytics);
     drawActualRetention(retentionPoints);
     updateKeyMoments(video, analytics, retentionPoints);
