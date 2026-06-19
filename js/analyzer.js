@@ -16,15 +16,15 @@ const scopes = [
 const form = document.getElementById("videoAnalysisForm");
 const videoUrlInput = document.getElementById("videoUrl");
 const submitButton = form?.querySelector('button[type="submit"]');
-const previewThumbnail = document.getElementById("videoPreviewThumbnail");
-const previewEmpty = document.getElementById("videoPreviewEmpty");
-const previewTitle = document.getElementById("videoPreviewTitle");
-const previewMeta = document.getElementById("videoPreviewMeta");
-const previewDescription = document.getElementById("videoPreviewDescription");
-const previewLink = document.getElementById("videoPreviewLink");
+const videoLibrary = document.getElementById("videoLibrary");
+const videoLibraryStatus = document.getElementById("videoLibraryStatus");
+const refreshVideosButton = document.getElementById("refreshVideos");
 const tokenStorageKey = "viewcastYouTubeAccessToken";
+const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 let currentUser = null;
 let auth = null;
+let channelVideos = [];
+let selectedVideoId = "";
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
@@ -116,38 +116,86 @@ function bestThumbnail(thumbnails = {}) {
     || "";
 }
 
-function updateVideoPreview(video) {
-  const snippet = video.snippet || {};
-  const title = snippet.title || "Selected video";
-  const channel = snippet.channelTitle || "YouTube channel";
-  const published = dateLabel(snippet.publishedAt);
-  const duration = durationFromIso(video.contentDetails?.duration);
-  const meta = [channel, published, duration].filter(Boolean).join(" - ");
-  const thumbnail = bestThumbnail(snippet.thumbnails);
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-  if (previewTitle) previewTitle.textContent = title;
-  if (previewMeta) previewMeta.textContent = meta || "Video details loaded from YouTube.";
-  if (previewDescription) {
-    previewDescription.textContent = truncate(snippet.description, 220) || "No public description is available for this video.";
+function videosStorageKey() {
+  return currentUser ? videosStorageKeyPrefix + currentUser.uid : "";
+}
+
+function readCachedVideos() {
+  const key = videosStorageKey();
+  if (!key) return [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    return Array.isArray(saved?.videos) ? saved.videos : [];
+  } catch (error) {
+    localStorage.removeItem(key);
+    return [];
+  }
+}
+
+function saveCachedVideos(videos) {
+  const key = videosStorageKey();
+  if (!key) return;
+  localStorage.setItem(key, JSON.stringify({
+    videos,
+    savedAt: Date.now()
+  }));
+}
+
+function setLibraryStatus(message) {
+  if (videoLibraryStatus) videoLibraryStatus.textContent = message || "";
+}
+
+function setLibraryBusy(isBusy) {
+  if (!refreshVideosButton) return;
+  refreshVideosButton.disabled = isBusy;
+  refreshVideosButton.textContent = isBusy ? "Loading..." : "Refresh Videos";
+}
+
+function updateLibrarySelection(videoId) {
+  selectedVideoId = videoId || "";
+  videoLibrary?.querySelectorAll(".video-library-card").forEach((card) => {
+    const isActive = card.dataset.videoId === selectedVideoId;
+    card.classList.toggle("active", isActive);
+    card.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function renderVideoLibrary(videos = channelVideos) {
+  channelVideos = Array.isArray(videos) ? videos : [];
+  if (!videoLibrary) return;
+
+  if (!channelVideos.length) {
+    videoLibrary.innerHTML = '<div class="video-library-empty">No uploads are loaded yet. Refresh videos to pull from your linked channel.</div>';
+    return;
   }
 
-  if (previewThumbnail) {
-    if (thumbnail) {
-      previewThumbnail.src = thumbnail;
-      previewThumbnail.alt = title + " thumbnail";
-      previewThumbnail.hidden = false;
-    } else {
-      previewThumbnail.removeAttribute("src");
-      previewThumbnail.alt = "";
-      previewThumbnail.hidden = true;
-    }
-  }
+  videoLibrary.innerHTML = channelVideos.map((video) => {
+    const snippet = video.snippet || {};
+    const stats = video.statistics || {};
+    const title = snippet.title || "Untitled video";
+    const thumbnail = bestThumbnail(snippet.thumbnails);
+    const published = dateLabel(snippet.publishedAt);
+    const duration = durationFromIso(video.contentDetails?.duration);
+    const views = wholeNumber(stats.viewCount);
+    const meta = [published, views ? views + " views" : ""].filter(Boolean).join(" - ");
+    return '<button class="video-library-card" type="button" data-video-id="' + escapeHtml(video.id) + '" aria-pressed="false">'
+      + '<div class="video-library-thumb">'
+      + (thumbnail ? '<img src="' + escapeHtml(thumbnail) + '" alt="' + escapeHtml(title) + ' thumbnail">' : '')
+      + (duration ? '<span class="video-library-duration">' + escapeHtml(duration) + '</span>' : '')
+      + '</div>'
+      + '<div class="video-library-body"><b>' + escapeHtml(title) + '</b><span>' + escapeHtml(meta || "Upload") + '</span></div>'
+      + '</button>';
+  }).join("");
 
-  if (previewEmpty) previewEmpty.hidden = Boolean(thumbnail);
-  if (previewLink) {
-    previewLink.href = "https://www.youtube.com/watch?v=" + video.id;
-    previewLink.hidden = false;
-  }
+  updateLibrarySelection(selectedVideoId);
 }
 
 function parseVideoId(value) {
@@ -234,6 +282,57 @@ async function fetchJson(url, accessToken) {
     throw error;
   }
   return payload;
+}
+
+async function fetchUploadsPlaylistId(accessToken) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+  url.searchParams.set("part", "contentDetails");
+  url.searchParams.set("mine", "true");
+  const payload = await fetchJson(url, accessToken);
+  const playlistId = payload.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  if (!playlistId) throw new Error("No uploads playlist was found for your linked channel.");
+  return playlistId;
+}
+
+async function fetchUploadVideoIds(accessToken) {
+  const playlistId = await fetchUploadsPlaylistId(accessToken);
+  const ids = [];
+  let pageToken = "";
+
+  do {
+    const url = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+    url.searchParams.set("part", "contentDetails");
+    url.searchParams.set("playlistId", playlistId);
+    url.searchParams.set("maxResults", "50");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const payload = await fetchJson(url, accessToken);
+    payload.items?.forEach((item) => {
+      const id = item.contentDetails?.videoId;
+      if (id) ids.push(id);
+    });
+    pageToken = payload.nextPageToken || "";
+  } while (pageToken);
+
+  return ids;
+}
+
+async function fetchVideosByIds(videoIds, accessToken) {
+  const videos = [];
+  for (let index = 0; index < videoIds.length; index += 50) {
+    const chunk = videoIds.slice(index, index + 50);
+    const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+    url.searchParams.set("part", "snippet,statistics,contentDetails");
+    url.searchParams.set("id", chunk.join(","));
+    const payload = await fetchJson(url, accessToken);
+    videos.push(...(payload.items || []));
+  }
+  return videos;
+}
+
+async function fetchChannelVideos(accessToken) {
+  const videoIds = await fetchUploadVideoIds(accessToken);
+  if (!videoIds.length) return [];
+  return fetchVideosByIds(videoIds, accessToken);
 }
 
 async function fetchVideo(videoId, accessToken) {
@@ -403,38 +502,36 @@ async function loadVideoAnalysis(videoId, accessToken) {
   ]);
 }
 
-async function analyzeVideo(event) {
-  event.preventDefault();
-  const videoId = parseVideoId(videoUrlInput?.value || "");
-  if (!videoId) {
-    setStatus("Paste a valid YouTube video URL or video ID.");
-    return;
+async function loadVideoAnalysisWithRetry(videoId) {
+  let accessToken = await getAccessToken();
+
+  try {
+    return await loadVideoAnalysis(videoId, accessToken);
+  } catch (error) {
+    if (error.status !== 401) throw error;
+    clearCachedAccessToken();
+    setStatus("YouTube access expired. Please approve once to continue.");
+    accessToken = await requestAccessToken();
+    return loadVideoAnalysis(videoId, accessToken);
   }
+}
+
+async function analyzeVideoById(videoId) {
+  if (!videoId) return;
 
   try {
     setBusy(true);
     setStatus(readCachedAccessToken() ? "Loading video data from YouTube..." : "Requesting YouTube access...");
-    let accessToken = await getAccessToken();
-    let video;
-    let analytics;
-    let retentionPoints;
+    if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
+    const [video, analytics, retentionPoints] = await loadVideoAnalysisWithRetry(videoId);
 
-    try {
-      [video, analytics, retentionPoints] = await loadVideoAnalysis(videoId, accessToken);
-    } catch (error) {
-      if (error.status !== 401) throw error;
-      clearCachedAccessToken();
-      setStatus("YouTube access expired. Please approve once to continue.");
-      accessToken = await requestAccessToken();
-      [video, analytics, retentionPoints] = await loadVideoAnalysis(videoId, accessToken);
-    }
-
-    updateVideoPreview(video);
+    updateLibrarySelection(video.id);
     updateMetrics(video, analytics);
     drawActualRetention(retentionPoints);
     updateKeyMoments(video, analytics, retentionPoints);
     updateTable(video, analytics, retentionPoints);
     setStatus("Video data loaded from YouTube.");
+    setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
   } catch (error) {
     console.error("Could not analyze video.", error);
     setStatus(error.message || "Could not analyze this video.");
@@ -443,14 +540,87 @@ async function analyzeVideo(event) {
   }
 }
 
+async function analyzeVideo(event) {
+  event.preventDefault();
+  const videoId = parseVideoId(videoUrlInput?.value || "");
+  if (!videoId) {
+    setStatus("Choose one of your videos or paste a valid YouTube video URL.");
+    return;
+  }
+  await analyzeVideoById(videoId);
+}
+
+async function loadVideoLibrary({allowPrompt = false} = {}) {
+  if (!currentUser) return;
+
+  const cachedVideos = readCachedVideos();
+  if (cachedVideos.length) renderVideoLibrary(cachedVideos);
+
+  const cachedToken = readCachedAccessToken();
+  if (!cachedToken && !allowPrompt) {
+    setLibraryStatus(cachedVideos.length ? "Showing saved uploads. Refresh videos to check for new uploads." : "Refresh videos to load uploads from your linked channel.");
+    return;
+  }
+
+  try {
+    setLibraryBusy(true);
+    setLibraryStatus("Loading uploads from YouTube...");
+    let accessToken = cachedToken || await getAccessToken();
+    let videos;
+
+    try {
+      videos = await fetchChannelVideos(accessToken);
+    } catch (error) {
+      if (error.status !== 401) throw error;
+      clearCachedAccessToken();
+      if (!allowPrompt) throw error;
+      setLibraryStatus("YouTube access expired. Please approve once to refresh videos.");
+      accessToken = await requestAccessToken();
+      videos = await fetchChannelVideos(accessToken);
+    }
+
+    saveCachedVideos(videos);
+    renderVideoLibrary(videos);
+    setLibraryStatus(videos.length ? "Select one of your uploads to load its analytics." : "No uploads were found on your linked channel.");
+  } catch (error) {
+    console.error("Could not load channel videos.", error);
+    setLibraryStatus(error.message || "Could not load videos from YouTube.");
+  } finally {
+    setLibraryBusy(false);
+  }
+}
+
 if (form && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   auth = getAuth(app);
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
-    if (!user) setStatus("Sign in before analyzing a video.");
+    selectedVideoId = "";
+    if (!user) {
+      channelVideos = [];
+      renderVideoLibrary([]);
+      setStatus("Sign in before analyzing a video.");
+      setLibraryStatus("Sign in and link a channel to load your videos.");
+      return;
+    }
+
+    const cachedVideos = readCachedVideos();
+    if (cachedVideos.length) {
+      renderVideoLibrary(cachedVideos);
+      setLibraryStatus("Showing saved uploads. Refresh videos to check for new uploads.");
+    } else {
+      setLibraryStatus("Loading your linked channel uploads...");
+    }
+    loadVideoLibrary({allowPrompt: false});
   });
   form.addEventListener("submit", analyzeVideo);
+  videoLibrary?.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+    const card = target?.closest("[data-video-id]");
+    if (!card) return;
+    analyzeVideoById(card.dataset.videoId);
+  });
+  refreshVideosButton?.addEventListener("click", () => loadVideoLibrary({allowPrompt: true}));
 } else if (form) {
   setStatus("Firebase is not configured yet.");
 }

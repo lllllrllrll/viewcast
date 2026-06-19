@@ -31,24 +31,16 @@
         </header>
 
         <section class="dashboard-grid">
-          <article class="panel full video-preview-panel" id="videoPreviewPanel">
-            <div class="video-preview-media">
-              <img id="videoPreviewThumbnail" alt="" hidden>
-              <div class="video-preview-empty" id="videoPreviewEmpty">
-                <span>Paste a YouTube video URL to preview it here.</span>
+          <article class="panel full video-library-panel" id="videoLibraryPanel">
+            <div class="panel-head">
+              <div>
+                <h3>Your Videos</h3>
+                <p id="videoLibraryStatus">Choose an upload from your linked channel to analyze it.</p>
               </div>
+              <button class="primary-button" id="refreshVideos" type="button">Refresh Videos</button>
             </div>
-            <div class="video-preview-content">
-              <div class="panel-head">
-                <div>
-                  <h3 id="videoPreviewTitle">Video Preview</h3>
-                  <p id="videoPreviewMeta">Waiting for a video URL.</p>
-                </div>
-              </div>
-              <p id="videoPreviewDescription">The selected video thumbnail, title, channel, publish date, and duration will appear here after analysis.</p>
-              <div class="video-preview-actions">
-                <a class="primary-button" id="videoPreviewLink" href="#" target="_blank" rel="noopener" hidden>Open Video</a>
-              </div>
+            <div class="video-library-grid" id="videoLibrary">
+              <div class="video-library-empty">Linked channel uploads will appear here.</div>
             </div>
           </article>
 
