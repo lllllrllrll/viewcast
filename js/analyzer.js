@@ -107,6 +107,16 @@ function dateLabel(value) {
   }).format(date);
 }
 
+function apiDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function daysAgo(days) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return apiDate(date);
+}
+
 function bestThumbnail(thumbnails = {}) {
   return thumbnails.maxres?.url
     || thumbnails.standard?.url
@@ -345,58 +355,83 @@ async function fetchVideo(videoId, accessToken) {
   return video;
 }
 
-async function fetchVideoAnalytics(videoId, accessToken) {
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(endDate.getDate() - 28);
-  const formatDate = (date) => date.toISOString().slice(0, 10);
+async function fetchVideoAnalyticsRange(videoId, accessToken, {startDate, endDate, label}) {
   const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
   url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", formatDate(startDate));
-  url.searchParams.set("endDate", formatDate(endDate));
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
   url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained");
   url.searchParams.set("filters", `video==${videoId}`);
 
+  const payload = await fetchJson(url, accessToken);
+  const row = payload.rows?.[0];
+  if (!row) return null;
+
+  return {
+    periodLabel: label,
+    views: row[0],
+    estimatedMinutesWatched: row[1],
+    averageViewDuration: row[2],
+    averageViewPercentage: row[3],
+    likes: row[4],
+    comments: row[5],
+    shares: row[6],
+    subscribersGained: row[7]
+  };
+}
+
+async function fetchVideoAnalytics(videoId, accessToken) {
+  const endDate = apiDate(new Date());
+  const ranges = [
+    {startDate: daysAgo(28), endDate, label: "28D"},
+    {startDate: "2005-02-14", endDate, label: "Lifetime"}
+  ];
+
   try {
-    const payload = await fetchJson(url, accessToken);
-    const row = payload.rows?.[0] || [];
-    return {
-      views: row[0],
-      estimatedMinutesWatched: row[1],
-      averageViewDuration: row[2],
-      averageViewPercentage: row[3],
-      likes: row[4],
-      comments: row[5],
-      shares: row[6],
-      subscribersGained: row[7]
-    };
+    for (const range of ranges) {
+      const analytics = await fetchVideoAnalyticsRange(videoId, accessToken, range);
+      if (analytics) return analytics;
+    }
+    return null;
   } catch (error) {
+    if (error.status === 401 || error.status === 403) throw error;
     console.warn("Video analytics were not available for this video.", error);
     return null;
   }
 }
 
-async function fetchRetentionCurve(videoId, accessToken) {
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(endDate.getDate() - 28);
-  const formatDate = (date) => date.toISOString().slice(0, 10);
+async function fetchRetentionCurveRange(videoId, accessToken, {startDate, endDate}) {
   const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
   url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", formatDate(startDate));
-  url.searchParams.set("endDate", formatDate(endDate));
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
   url.searchParams.set("metrics", "audienceWatchRatio");
   url.searchParams.set("dimensions", "elapsedVideoTimeRatio");
   url.searchParams.set("filters", `video==${videoId}`);
   url.searchParams.set("sort", "elapsedVideoTimeRatio");
 
+  const payload = await fetchJson(url, accessToken);
+  return (payload.rows || []).map(([position, ratio]) => ({
+    position: Number(position),
+    ratio: Number(ratio)
+  })).filter((point) => Number.isFinite(point.position) && Number.isFinite(point.ratio));
+}
+
+async function fetchRetentionCurve(videoId, accessToken) {
+  const endDate = apiDate(new Date());
+  const ranges = [
+    {startDate: daysAgo(28), endDate},
+    {startDate: "2005-02-14", endDate}
+  ];
+
   try {
-    const payload = await fetchJson(url, accessToken);
-    return (payload.rows || []).map(([position, ratio]) => ({
-      position: Number(position),
-      ratio: Number(ratio)
-    })).filter((point) => Number.isFinite(point.position) && Number.isFinite(point.ratio));
+    for (const range of ranges) {
+      const points = await fetchRetentionCurveRange(videoId, accessToken, range);
+      if (points.length) return points;
+    }
+    return [];
   } catch (error) {
+    if (error.status === 401 || error.status === 403) throw error;
     console.warn("Retention curve was not available for this video.", error);
     return [];
   }
@@ -436,7 +471,7 @@ function updateKeyMoments(video, analytics, retentionPoints) {
     analytics ? {
       title: "Average view duration",
       desc: durationFromSeconds(analytics.averageViewDuration),
-      time: "28D"
+      time: analytics.periodLabel || "Analytics"
     } : {
       title: "Analytics unavailable",
       desc: "Private analytics require access to the video's channel.",
@@ -471,7 +506,7 @@ function updateTable(video, analytics, retentionPoints) {
     ["Public stats", "Views", wholeNumber(stats.viewCount) || "Unavailable", "Data API"],
     ["Public stats", "Likes", wholeNumber(stats.likeCount) || "Unavailable", "Data API"],
     ["Public stats", "Comments", wholeNumber(stats.commentCount) || "Unavailable", "Data API"],
-    ["Private analytics", "Avg. view %", analytics ? percent(analytics.averageViewPercentage) : "Unavailable", analytics ? "Analytics API" : "Needs owner access"],
+    ["Private analytics", "Avg. view %", analytics ? percent(analytics.averageViewPercentage) : "Unavailable", analytics ? (analytics.periodLabel || "Analytics API") : "Needs owner access"],
     ["Private analytics", "Retention curve", retentionPoints.length ? `
 ${retentionPoints.length} samples`.trim() : "Unavailable", retentionPoints.length ? "Analytics API" : "Needs owner access"]
   ];
@@ -488,32 +523,59 @@ ${retentionPoints.length} samples`.trim() : "Unavailable", retentionPoints.lengt
 
 function updateMetrics(video, analytics) {
   const stats = video.statistics || {};
-  setMetric(0, compactNumber(analytics?.views ?? stats.viewCount), analytics ? "28D" : "Total");
-  setMetric(1, durationFromSeconds(analytics?.averageViewDuration) || durationFromIso(video.contentDetails?.duration), analytics ? "28D avg" : "Length");
+  const period = analytics?.periodLabel || "Analytics";
+  setMetric(0, compactNumber(analytics?.views ?? stats.viewCount), analytics ? period : "Total");
+  setMetric(1, durationFromSeconds(analytics?.averageViewDuration) || durationFromIso(video.contentDetails?.duration), analytics ? period + " avg" : "Length");
   setMetric(2, analytics?.estimatedMinutesWatched !== undefined ? compactNumber(analytics.estimatedMinutesWatched / 60) : compactNumber(stats.likeCount), analytics ? "Watch hrs" : "Likes");
   setMetric(3, analytics?.subscribersGained !== undefined ? wholeNumber(analytics.subscribersGained) : wholeNumber(stats.commentCount), analytics ? "Subs gained" : "Comments");
 }
 
-async function loadVideoAnalysis(videoId, accessToken) {
-  return Promise.all([
-    fetchVideo(videoId, accessToken),
+async function loadVideoDetailsWithRetry(videoId, accessToken) {
+  try {
+    return await fetchVideo(videoId, accessToken);
+  } catch (error) {
+    if (error.status !== 401 && error.status !== 403) throw error;
+    clearCachedAccessToken();
+    setStatus("YouTube access needs to be refreshed. Please approve once to continue.");
+    const refreshedToken = await requestAccessToken();
+    return fetchVideo(videoId, refreshedToken);
+  }
+}
+
+async function loadPrivateAnalytics(videoId, accessToken) {
+  const [analyticsResult, retentionResult] = await Promise.allSettled([
     fetchVideoAnalytics(videoId, accessToken),
     fetchRetentionCurve(videoId, accessToken)
   ]);
+  const errors = [analyticsResult, retentionResult]
+    .filter((result) => result.status === "rejected")
+    .map((result) => result.reason);
+
+  return {
+    analytics: analyticsResult.status === "fulfilled" ? analyticsResult.value : null,
+    retentionPoints: retentionResult.status === "fulfilled" ? retentionResult.value : [],
+    needsRefresh: errors.some((error) => error?.status === 401 || error?.status === 403),
+    errors
+  };
 }
 
 async function loadVideoAnalysisWithRetry(videoId) {
   let accessToken = await getAccessToken();
+  const video = await loadVideoDetailsWithRetry(videoId, accessToken);
+  let privateData = await loadPrivateAnalytics(videoId, accessToken);
 
-  try {
-    return await loadVideoAnalysis(videoId, accessToken);
-  } catch (error) {
-    if (error.status !== 401) throw error;
+  if (privateData.needsRefresh && !privateData.analytics && !privateData.retentionPoints.length) {
     clearCachedAccessToken();
-    setStatus("YouTube access expired. Please approve once to continue.");
+    setStatus("YouTube Analytics access needs to be refreshed. Please approve once to continue.");
     accessToken = await requestAccessToken();
-    return loadVideoAnalysis(videoId, accessToken);
+    privateData = await loadPrivateAnalytics(videoId, accessToken);
   }
+
+  privateData.errors.forEach((error) => {
+    console.warn("Some private video analytics were not available.", error);
+  });
+
+  return [video, privateData.analytics, privateData.retentionPoints];
 }
 
 async function analyzeVideoById(videoId) {
@@ -530,7 +592,8 @@ async function analyzeVideoById(videoId) {
     drawActualRetention(retentionPoints);
     updateKeyMoments(video, analytics, retentionPoints);
     updateTable(video, analytics, retentionPoints);
-    setStatus("Video data loaded from YouTube.");
+    const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
+    setStatus(analytics ? "Video analytics loaded from YouTube" + period + "." : "Video loaded, but private analytics were unavailable for this upload.");
     setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
   } catch (error) {
     console.error("Could not analyze video.", error);
