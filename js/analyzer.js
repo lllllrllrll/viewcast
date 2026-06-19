@@ -22,6 +22,7 @@ const previewTitle = document.getElementById("videoPreviewTitle");
 const previewMeta = document.getElementById("videoPreviewMeta");
 const previewDescription = document.getElementById("videoPreviewDescription");
 const previewLink = document.getElementById("videoPreviewLink");
+const tokenStorageKey = "viewcastYouTubeAccessToken";
 let currentUser = null;
 let auth = null;
 
@@ -172,15 +173,41 @@ function parseVideoId(value) {
 function createProvider() {
   const provider = new GoogleAuthProvider();
   scopes.forEach((scope) => provider.addScope(scope));
-  provider.setCustomParameters({prompt: "consent"});
+  provider.setCustomParameters({include_granted_scopes: "true"});
   return provider;
+}
+
+function readCachedAccessToken() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(tokenStorageKey) || "null");
+    if (saved?.accessToken && saved.uid === currentUser?.uid && saved.expiresAt > Date.now() + 60 * 1000) {
+      return saved.accessToken;
+    }
+  } catch (error) {
+    // Fall through and clear bad token cache below.
+  }
+  localStorage.removeItem(tokenStorageKey);
+  return "";
+}
+
+function saveCachedAccessToken(accessToken) {
+  if (!accessToken || !currentUser) return;
+  localStorage.setItem(tokenStorageKey, JSON.stringify({
+    accessToken,
+    uid: currentUser.uid,
+    expiresAt: Date.now() + 50 * 60 * 1000
+  }));
+}
+
+function clearCachedAccessToken() {
+  localStorage.removeItem(tokenStorageKey);
 }
 
 function userHasGoogleProvider(user) {
   return user.providerData.some((provider) => provider.providerId === "google.com");
 }
 
-async function getCredential() {
+async function requestAccessToken() {
   if (!currentUser) throw new Error("Sign in before analyzing a video.");
   const provider = createProvider();
   const result = userHasGoogleProvider(currentUser)
@@ -188,7 +215,12 @@ async function getCredential() {
     : await linkWithPopup(currentUser, provider);
   const credential = GoogleAuthProvider.credentialFromResult(result);
   if (!credential?.accessToken) throw new Error("Google did not return a YouTube access token.");
-  return credential;
+  saveCachedAccessToken(credential.accessToken);
+  return credential.accessToken;
+}
+
+async function getAccessToken() {
+  return readCachedAccessToken() || requestAccessToken();
 }
 
 async function fetchJson(url, accessToken) {
@@ -197,7 +229,9 @@ async function fetchJson(url, accessToken) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error?.message || "YouTube API request failed.");
+    const error = new Error(payload.error?.message || "YouTube API request failed.");
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -361,6 +395,14 @@ function updateMetrics(video, analytics) {
   setMetric(3, analytics?.subscribersGained !== undefined ? wholeNumber(analytics.subscribersGained) : wholeNumber(stats.commentCount), analytics ? "Subs gained" : "Comments");
 }
 
+async function loadVideoAnalysis(videoId, accessToken) {
+  return Promise.all([
+    fetchVideo(videoId, accessToken),
+    fetchVideoAnalytics(videoId, accessToken),
+    fetchRetentionCurve(videoId, accessToken)
+  ]);
+}
+
 async function analyzeVideo(event) {
   event.preventDefault();
   const videoId = parseVideoId(videoUrlInput?.value || "");
@@ -371,14 +413,21 @@ async function analyzeVideo(event) {
 
   try {
     setBusy(true);
-    setStatus("Requesting YouTube access...");
-    const credential = await getCredential();
-    setStatus("Loading video data from YouTube...");
-    const [video, analytics, retentionPoints] = await Promise.all([
-      fetchVideo(videoId, credential.accessToken),
-      fetchVideoAnalytics(videoId, credential.accessToken),
-      fetchRetentionCurve(videoId, credential.accessToken)
-    ]);
+    setStatus(readCachedAccessToken() ? "Loading video data from YouTube..." : "Requesting YouTube access...");
+    let accessToken = await getAccessToken();
+    let video;
+    let analytics;
+    let retentionPoints;
+
+    try {
+      [video, analytics, retentionPoints] = await loadVideoAnalysis(videoId, accessToken);
+    } catch (error) {
+      if (error.status !== 401) throw error;
+      clearCachedAccessToken();
+      setStatus("YouTube access expired. Please approve once to continue.");
+      accessToken = await requestAccessToken();
+      [video, analytics, retentionPoints] = await loadVideoAnalysis(videoId, accessToken);
+    }
 
     updateVideoPreview(video);
     updateMetrics(video, analytics);

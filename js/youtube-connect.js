@@ -26,6 +26,7 @@ const connectButton = document.getElementById("connectYouTube");
 const unlinkButton = document.getElementById("unlinkYouTube");
 const connectionStorageKey = "viewcastYouTubeConnection";
 const channelStorageKey = "viewcastYouTubeChannel";
+const tokenStorageKey = "viewcastYouTubeAccessToken";
 let currentUser = null;
 let auth = null;
 let db = null;
@@ -65,6 +66,15 @@ function saveCachedConnection(connection) {
   localStorage.setItem(channelStorageKey, JSON.stringify(connection.channel || {}));
 }
 
+function saveCachedAccessToken(accessToken) {
+  if (!accessToken || !currentUser) return;
+  localStorage.setItem(tokenStorageKey, JSON.stringify({
+    accessToken,
+    uid: currentUser.uid,
+    expiresAt: Date.now() + 50 * 60 * 1000
+  }));
+}
+
 async function getSavedConnection(user) {
   const cachedConnection = readSavedConnection();
   if (cachedConnection?.channel?.id || cachedConnection?.channel?.url || cachedConnection?.channel?.title) {
@@ -90,7 +100,7 @@ async function getSavedConnection(user) {
 function createProvider() {
   const provider = new GoogleAuthProvider();
   scopes.forEach((scope) => provider.addScope(scope));
-  provider.setCustomParameters({prompt: "consent"});
+  provider.setCustomParameters({include_granted_scopes: "true"});
   return provider;
 }
 
@@ -202,6 +212,7 @@ async function connectYouTube() {
       throw new Error("Google did not return a YouTube access token.");
     }
 
+    saveCachedAccessToken(credential.accessToken);
     const channel = await fetchChannel(credential.accessToken);
     const analyticsSummary = await fetchAnalyticsSummary(credential.accessToken);
     const connection = {channel, analyticsSummary};
@@ -240,6 +251,7 @@ async function unlinkYouTube() {
     localStorage.removeItem(connectionStorageKey);
     localStorage.removeItem(channelStorageKey);
     localStorage.removeItem("viewcastChannelUrl");
+    localStorage.removeItem(tokenStorageKey);
     hasLinkedChannel = false;
     setButton("Connect YouTube");
     setUnlinkButton({visible: false, disabled: true});
