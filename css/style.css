@@ -605,14 +605,20 @@ select {
 }
 
 .video-library-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  display: flex;
   gap: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
 }
 
 .video-library-card {
-  width: 100%;
+  flex: 0 0 clamp(220px, 24vw, 300px);
+  width: clamp(220px, 24vw, 300px);
   min-width: 0;
+  scroll-snap-align: start;
   padding: 0;
   overflow: hidden;
   text-align: left;
@@ -676,7 +682,7 @@ select {
 }
 
 .video-library-empty {
-  grid-column: 1 / -1;
+  flex: 1 0 100%;
   display: grid;
   place-items: center;
   min-height: 150px;
