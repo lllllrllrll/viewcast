@@ -457,7 +457,7 @@ function drawActualRetention(points) {
   const actual = sampled.map((point) => Math.round(point.ratio * 100));
   const labels = sampled.map((point) => `
 ${Math.round(point.position * 100)}%`.trim());
-  drawLineChart("retentionChart", actual, actual, labels);
+  drawLineChart("retentionChart", actual, actual, labels, {ySuffix: "%"});
 }
 
 function updateKeyMoments(video, analytics, retentionPoints) {

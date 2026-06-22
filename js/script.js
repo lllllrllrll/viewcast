@@ -61,7 +61,7 @@ function drawSparkline(canvas) {
   ctx.stroke();
 }
 
-function drawLineChart(canvasId, actual, forecast, labels) {
+function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const { ctx, width, height } = scaleCanvas(canvas);
@@ -104,7 +104,7 @@ function drawLineChart(canvasId, actual, forecast, labels) {
     ctx.lineTo(width - pad.right, y);
     ctx.stroke();
     const tick = Math.round(max - (i / 4) * (max - min));
-    ctx.fillText(`${tick}K`, 4, y + 4);
+    ctx.fillText(`${tick}${options.ySuffix ?? "K"}`, 4, y + 4);
   }
 
   labels.forEach((label, index) => {
