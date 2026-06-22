@@ -25,6 +25,7 @@ let currentUser = null;
 let auth = null;
 let channelVideos = [];
 let selectedVideoId = "";
+let analysisRequestId = 0;
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
@@ -442,7 +443,7 @@ function setMetric(index, value, trend = "") {
   if (!card) return;
   const valueEl = card.querySelector(".metric-value");
   const trendEl = card.querySelector(".trend");
-  if (valueEl) valueEl.textContent = value || " ";
+  if (valueEl) valueEl.textContent = value === "" || value === null || value === undefined ? " " : value;
   if (trendEl) trendEl.textContent = trend || " ";
 }
 
@@ -524,10 +525,10 @@ ${retentionPoints.length} samples`.trim() : "Unavailable", retentionPoints.lengt
 function updateMetrics(video, analytics) {
   const stats = video.statistics || {};
   const period = analytics?.periodLabel || "Analytics";
-  setMetric(0, compactNumber(analytics?.views ?? stats.viewCount), analytics ? period : "Total");
-  setMetric(1, durationFromSeconds(analytics?.averageViewDuration) || durationFromIso(video.contentDetails?.duration), analytics ? period + " avg" : "Length");
-  setMetric(2, analytics?.estimatedMinutesWatched !== undefined ? compactNumber(analytics.estimatedMinutesWatched / 60) : compactNumber(stats.likeCount), analytics ? "Watch hrs" : "Likes");
-  setMetric(3, analytics?.subscribersGained !== undefined ? wholeNumber(analytics.subscribersGained) : wholeNumber(stats.commentCount), analytics ? "Subs gained" : "Comments");
+  setMetric(0, compactNumber(stats.viewCount), "Public");
+  setMetric(1, analytics ? durationFromSeconds(analytics.averageViewDuration) : "", analytics ? period + " avg" : "Unavailable");
+  setMetric(2, analytics ? compactNumber(analytics.estimatedMinutesWatched / 60) : "", analytics ? "Watch hrs" : "Unavailable");
+  setMetric(3, analytics ? percent(analytics.averageViewPercentage) : "", analytics ? period : "Unavailable");
 }
 
 async function loadVideoDetailsWithRetry(videoId, accessToken) {
@@ -580,12 +581,15 @@ async function loadVideoAnalysisWithRetry(videoId) {
 
 async function analyzeVideoById(videoId) {
   if (!videoId) return;
+  const requestId = ++analysisRequestId;
 
   try {
     setBusy(true);
     setStatus(readCachedAccessToken() ? "Loading video data from YouTube..." : "Requesting YouTube access...");
     if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
+    updateLibrarySelection(videoId);
     const [video, analytics, retentionPoints] = await loadVideoAnalysisWithRetry(videoId);
+    if (requestId !== analysisRequestId) return;
 
     updateLibrarySelection(video.id);
     updateMetrics(video, analytics);
@@ -596,10 +600,11 @@ async function analyzeVideoById(videoId) {
     setStatus(analytics ? "Video analytics loaded from YouTube" + period + "." : "Video loaded, but private analytics were unavailable for this upload.");
     setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
   } catch (error) {
+    if (requestId !== analysisRequestId) return;
     console.error("Could not analyze video.", error);
     setStatus(error.message || "Could not analyze this video.");
   } finally {
-    setBusy(false);
+    if (requestId === analysisRequestId) setBusy(false);
   }
 }
 
