@@ -84,11 +84,16 @@ ${hours}:${String(minutes).padStart(2, "0")}:${seconds}`.trim() : `
 ${minutes}:${seconds}`.trim();
 }
 
-function durationFromIso(value = "") {
+function secondsFromIso(value = "") {
   const match = value.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-  if (!match) return "";
+  if (!match) return null;
   const [, hours = 0, minutes = 0, seconds = 0] = match.map((part) => Number(part || 0));
-  return durationFromSeconds(hours * 3600 + minutes * 60 + seconds);
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function durationFromIso(value = "") {
+  const seconds = secondsFromIso(value);
+  return seconds === null ? "" : durationFromSeconds(seconds);
 }
 
 function truncate(value = "", maxLength = 180) {
@@ -447,15 +452,18 @@ function setMetric(index, value, trend = "") {
   if (trendEl) trendEl.textContent = trend || " ";
 }
 
-function drawActualRetention(points) {
+function drawActualRetention(points, video) {
   if (!points.length || typeof drawLineChart !== "function") {
     if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
     return;
   }
 
+  const totalSeconds = secondsFromIso(video?.contentDetails?.duration) || 0;
   const sampled = points.filter((_, index) => index % Math.max(1, Math.floor(points.length / 12)) === 0).slice(0, 12);
   const actual = sampled.map((point) => Math.round(point.ratio * 100));
-  const labels = sampled.map((point) => `
+  const labels = sampled.map((point) => totalSeconds
+    ? durationFromSeconds(point.position * totalSeconds)
+    : `
 ${Math.round(point.position * 100)}%`.trim());
   drawLineChart("retentionChart", actual, actual, labels, {ySuffix: "%"});
 }
@@ -592,7 +600,7 @@ async function analyzeVideoById(videoId) {
 
     updateLibrarySelection(video.id);
     updateMetrics(video, analytics);
-    drawActualRetention(retentionPoints);
+    drawActualRetention(retentionPoints, video);
     updateKeyMoments(video, analytics, retentionPoints);
     updateTable(video, analytics, retentionPoints);
     const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
