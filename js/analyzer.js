@@ -524,11 +524,10 @@ ${retentionPoints.length} samples`.trim() : "Unavailable", retentionPoints.lengt
 
 function updateMetrics(video, analytics) {
   const stats = video.statistics || {};
-  const period = analytics?.periodLabel || "Analytics";
   setMetric(0, compactNumber(stats.viewCount), "Public");
-  setMetric(1, analytics ? durationFromSeconds(analytics.averageViewDuration) : "", analytics ? period + " avg" : "Unavailable");
-  setMetric(2, analytics ? compactNumber(analytics.estimatedMinutesWatched / 60) : "", analytics ? "Watch hrs" : "Unavailable");
-  setMetric(3, analytics ? percent(analytics.averageViewPercentage) : "", analytics ? period : "Unavailable");
+  setMetric(1, compactNumber(stats.likeCount), "Public");
+  setMetric(2, compactNumber(stats.commentCount), "Public");
+  setMetric(3, durationFromIso(video.contentDetails?.duration), "Length");
 }
 
 async function loadVideoDetailsWithRetry(videoId, accessToken) {
@@ -597,7 +596,7 @@ async function analyzeVideoById(videoId) {
     updateKeyMoments(video, analytics, retentionPoints);
     updateTable(video, analytics, retentionPoints);
     const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
-    setStatus(analytics ? "Video analytics loaded from YouTube" + period + "." : "Video loaded, but private analytics were unavailable for this upload.");
+    setStatus(analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now.");
     setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
   } catch (error) {
     if (requestId !== analysisRequestId) return;
