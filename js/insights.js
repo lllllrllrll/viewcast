@@ -524,6 +524,7 @@ function ratioLabel(value, average) {
 
 function generateVideoInsights(video, analytics, retentionPoints, searchTerms) {
   const stats = video.statistics || {};
+  const title = video.snippet?.title || "this video";
   const views = numberValue(stats.viewCount);
   const likes = numberValue(stats.likeCount);
   const comments = numberValue(stats.commentCount);
@@ -535,62 +536,62 @@ function generateVideoInsights(video, analytics, retentionPoints, searchTerms) {
   if (avgViews && views !== null) {
     const lowViews = views < avgViews * 0.85;
     insights.push({
-      title: lowViews ? "Packaging may be holding this video back" : "Topic and packaging are competitive",
+      title: lowViews ? "Make a clearer follow-up to this topic" : "Turn this into a repeatable series",
       body: lowViews
-        ? "This upload is " + ratioLabel(views, avgViews) + " on views compared with your other videos. Rework the title and thumbnail around the clearest viewer promise."
-        : "This upload is " + ratioLabel(views, avgViews) + " on views. Use its title, thumbnail, and topic angle as a reference for future uploads.",
-      label: "Views"
+        ? "Create a second video that answers the same viewer problem with a sharper title, simpler thumbnail promise, and faster payoff than " + title + "."
+        : "This video is " + ratioLabel(views, avgViews) + " on views. Make a part two, sequel, or updated version that uses the same topic angle.",
+      label: "Next video"
     });
   }
 
   if (avgLikes && likes !== null) {
     const weakLikeRate = views && likes / Math.max(views, 1) < avgLikes / Math.max(avgViews || views, 1);
     insights.push({
-      title: weakLikeRate ? "Payoff may not match the promise" : "Viewer satisfaction is holding up",
+      title: weakLikeRate ? "Make a payoff-first version" : "Make a deeper version for engaged viewers",
       body: weakLikeRate
-        ? "Likes are weaker than your channel baseline after accounting for views. Tighten the intro and deliver the main payoff sooner."
-        : "Likes are healthy compared with your baseline. Keep the structure and repeat the parts that clearly satisfied viewers.",
-      label: "Likes"
+        ? "Plan a follow-up that delivers the main result in the first minute, then expands with examples. This can test whether the idea is good but the pacing was weak."
+        : "Likes are holding up. Make a deeper tutorial, breakdown, or behind-the-scenes follow-up for viewers who wanted more detail.",
+      label: "Format"
     });
   }
 
   if (analytics?.averageViewDuration) {
     insights.push({
-      title: "Use average view duration to find the weak section",
-      body: "Average view duration is " + durationFromSeconds(analytics.averageViewDuration) + ". Compare that timestamp against the video: if the main payoff starts after this point, move it earlier.",
+      title: "Build the next video around the watched section",
+      body: "Average view duration is " + durationFromSeconds(analytics.averageViewDuration) + ". For the next upload, put the strongest payoff before that timestamp and cut any setup that delays it.",
       label: analytics.periodLabel || "AVD"
     });
   } else if (retentionPoints.length) {
     const lowest = retentionPoints.reduce((min, point) => point.ratio < min.ratio ? point : min, retentionPoints[0]);
     const totalSeconds = secondsFromIso(video.contentDetails?.duration) || 0;
     insights.push({
-      title: "Retention shows a likely drop-off area",
-      body: "The weakest sampled retention point is around " + (totalSeconds ? durationFromSeconds(lowest.position * totalSeconds) : Math.round(lowest.position * 100) + "%") + ". Review that section for slow pacing, topic drift, or a missed payoff.",
+      title: "Make a shorter, tighter follow-up",
+      body: "Retention gets weakest around " + (totalSeconds ? durationFromSeconds(lowest.position * totalSeconds) : Math.round(lowest.position * 100) + "%") + ". Try a shorter follow-up that removes the slow section and gets to the answer faster.",
       label: "Retention"
     });
   }
 
   if (searchTerms.length) {
     insights.push({
-      title: "Search intent is clear",
-      body: "Top search phrase: " + searchTerms[0].term + ". Make sure the title, first 30 seconds, and pinned comment directly answer that intent.",
+      title: "Make a search-focused answer video",
+      body: "Build a video directly around the search phrase " + searchTerms[0].term + ". Use that phrase in the title and answer it clearly in the first 30 seconds.",
       label: "Search"
     });
   }
 
   if (avgComments && comments !== null && comments < avgComments * 0.75) {
     insights.push({
-      title: "Comments are below your norm",
-      body: "This video is getting fewer comments than similar uploads. Add a specific question near the end and pin a comment that invites a concrete response.",
-      label: "Comments"
+      title: "Make a question-driven follow-up",
+      body: "Comments are below your norm. Make the next video around one specific debate, mistake, or viewer choice and ask for responses in the pinned comment.",
+      label: "Community"
     });
   }
 
   if (!insights.length) {
     insights.push({
-      title: "Not enough comparison data yet",
-      body: "Load more uploads or reconnect YouTube Analytics so ViewCast can compare this video against your channel baseline.",
-      label: "Data"
+      title: "Make a direct sequel",
+      body: "Load more uploads or reconnect YouTube Analytics for stronger comparisons. For now, create a follow-up that continues the same topic with a clearer promise and faster intro.",
+      label: "Idea"
     });
   }
 
