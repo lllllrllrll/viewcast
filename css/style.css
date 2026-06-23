@@ -605,6 +605,10 @@ select {
   color: var(--amber);
 }
 
+.trend.bad {
+  color: var(--rose);
+}
+
 .metric-card h3 {
   margin: 0;
   color: var(--muted);
@@ -988,6 +992,18 @@ canvas {
 .search-terms-panel .activity-item time {
   grid-column: 2;
   font-weight: 700;
+}
+
+.comparison-badge.good {
+  color: var(--green);
+}
+
+.comparison-badge.warn {
+  color: var(--amber);
+}
+
+.comparison-badge.bad {
+  color: var(--rose);
 }
 
 .table-wrap {

@@ -480,13 +480,16 @@ async function fetchSearchTerms(videoId, accessToken) {
   }
 }
 
-function setMetric(index, value, trend = "") {
+function setMetric(index, value, trend = "", trendClass = "") {
   const card = document.querySelectorAll(".metric-card")[index];
   if (!card) return;
   const valueEl = card.querySelector(".metric-value");
   const trendEl = card.querySelector(".trend");
   if (valueEl) valueEl.textContent = value === "" || value === null || value === undefined ? " " : value;
-  if (trendEl) trendEl.textContent = trend || " ";
+  if (trendEl) {
+    trendEl.textContent = trend || " ";
+    trendEl.className = ["trend", trendClass].filter(Boolean).join(" ");
+  }
 }
 
 function drawActualRetention(points, video) {
@@ -514,12 +517,16 @@ function channelAverage(fieldName, selectedVideoId = "") {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function ratioLabel(value, average) {
-  if (!average || value === null) return "No baseline";
+function ratioComparison(value, average) {
+  if (!average || value === null) return {label: "No baseline", className: "warn"};
   const ratio = value / average;
-  if (ratio >= 1.15) return Math.round((ratio - 1) * 100) + "% above avg";
-  if (ratio <= 0.85) return Math.round((1 - ratio) * 100) + "% below avg";
-  return "Near avg";
+  if (ratio > 1) return {label: Math.round(ratio * 100) + "% of avg", className: "good"};
+  if (ratio >= 0.85) return {label: Math.round(ratio * 100) + "% of avg", className: "warn"};
+  return {label: Math.round(ratio * 100) + "% of avg", className: "bad"};
+}
+
+function ratioLabel(value, average) {
+  return ratioComparison(value, average).label;
 }
 
 function generateVideoInsights(video, analytics, retentionPoints, searchTerms) {
@@ -531,6 +538,11 @@ function generateVideoInsights(video, analytics, retentionPoints, searchTerms) {
   const avgViews = channelAverage("viewCount", video.id);
   const avgLikes = channelAverage("likeCount", video.id);
   const avgComments = channelAverage("commentCount", video.id);
+  const viewsComparison = ratioComparison(views, avgViews);
+  const likeRate = views ? likes / Math.max(views, 1) : null;
+  const avgLikeRate = avgViews ? avgLikes / Math.max(avgViews, 1) : null;
+  const likesComparison = ratioComparison(likeRate, avgLikeRate);
+  const commentsComparison = ratioComparison(comments, avgComments);
   const insights = [];
 
   if (avgViews && views !== null) {
@@ -539,8 +551,9 @@ function generateVideoInsights(video, analytics, retentionPoints, searchTerms) {
       title: lowViews ? "Make a clearer follow-up to this topic" : "Turn this into a repeatable series",
       body: lowViews
         ? "Create a second video that answers the same viewer problem with a sharper title, simpler thumbnail promise, and faster payoff than " + title + "."
-        : "This video is " + ratioLabel(views, avgViews) + " on views. Make a part two, sequel, or updated version that uses the same topic angle.",
-      label: "Next video"
+        : "This video is " + viewsComparison.label + " on views. Make a part two, sequel, or updated version that uses the same topic angle.",
+      label: viewsComparison.label,
+      tone: viewsComparison.className
     });
   }
 
@@ -551,7 +564,8 @@ function generateVideoInsights(video, analytics, retentionPoints, searchTerms) {
       body: weakLikeRate
         ? "Plan a follow-up that delivers the main result in the first minute, then expands with examples. This can test whether the idea is good but the pacing was weak."
         : "Likes are holding up. Make a deeper tutorial, breakdown, or behind-the-scenes follow-up for viewers who wanted more detail.",
-      label: "Format"
+      label: likesComparison.label,
+      tone: likesComparison.className
     });
   }
 
@@ -583,7 +597,8 @@ function generateVideoInsights(video, analytics, retentionPoints, searchTerms) {
     insights.push({
       title: "Make a question-driven follow-up",
       body: "Comments are below your norm. Make the next video around one specific debate, mistake, or viewer choice and ask for responses in the pinned comment.",
-      label: "Community"
+      label: commentsComparison.label,
+      tone: commentsComparison.className
     });
   }
 
@@ -601,10 +616,12 @@ function generateVideoInsights(video, analytics, retentionPoints, searchTerms) {
 function updateVideoInsights(insights) {
   const items = document.querySelectorAll(".activity-item");
   items.forEach((item, index) => {
-    const insight = insights[index] || {title: " ", body: " ", label: " "};
+    const insight = insights[index] || {title: " ", body: " ", label: " ", tone: ""};
+    const timeEl = item.querySelector("time");
     item.querySelector("b").textContent = insight.title;
     item.querySelector("span").textContent = insight.body;
-    item.querySelector("time").textContent = insight.label;
+    timeEl.textContent = insight.label;
+    timeEl.className = ["comparison-badge", insight.tone].filter(Boolean).join(" ");
   });
 }
 
@@ -628,7 +645,9 @@ function clearAnalyzerResults() {
   document.querySelectorAll(".activity-item").forEach((item) => {
     item.querySelector("b").textContent = " ";
     item.querySelector("span").textContent = " ";
-    item.querySelector("time").textContent = " ";
+    const timeEl = item.querySelector("time");
+    timeEl.textContent = " ";
+    timeEl.className = "comparison-badge";
   });
   const tbody = document.querySelector("table tbody");
   if (tbody) {
@@ -644,19 +663,22 @@ function updateTable(video, analytics, retentionPoints, insights = []) {
   const views = numberValue(stats.viewCount);
   const likes = numberValue(stats.likeCount);
   const comments = numberValue(stats.commentCount);
+  const comparisonRows = [
+    ["Comparison", "Views", ratioComparison(views, channelAverage("viewCount", video.id)), "Channel avg"],
+    ["Comparison", "Likes", ratioComparison(likes, channelAverage("likeCount", video.id)), "Channel avg"],
+    ["Comparison", "Comments", ratioComparison(comments, channelAverage("commentCount", video.id)), "Channel avg"]
+  ];
   const rows = [
-    ["Comparison", "Views", ratioLabel(views, channelAverage("viewCount", video.id)), "Channel avg"],
-    ["Comparison", "Likes", ratioLabel(likes, channelAverage("likeCount", video.id)), "Channel avg"],
-    ["Comparison", "Comments", ratioLabel(comments, channelAverage("commentCount", video.id)), "Channel avg"],
-    ["Private analytics", "Avg. view duration", analytics ? durationFromSeconds(analytics.averageViewDuration) : "Unavailable", analytics ? (analytics.periodLabel || "Analytics API") : "Needs owner access"],
-    ["Action", "Top recommendation", insights[0]?.title || "Load more data", insights[0]?.label || "Insight"]
+    ...comparisonRows.map(([segment, issue, comparison, impact]) => [segment, issue, comparison.label, impact, comparison.className]),
+    ["Private analytics", "Avg. view duration", analytics ? durationFromSeconds(analytics.averageViewDuration) : "Unavailable", analytics ? (analytics.periodLabel || "Analytics API") : "Needs owner access", analytics ? "good" : "warn"],
+    ["Action", "Top recommendation", insights[0]?.title || "Load more data", insights[0]?.label || "Insight", insights[0]?.tone || "good"]
   ];
 
-  tbody.innerHTML = rows.map(([segment, issue, recommendation, impact]) => `
+  tbody.innerHTML = rows.map(([segment, issue, recommendation, impact, tone]) => `
     <tr>
       <td>${segment}</td>
       <td>${issue}</td>
-      <td>${recommendation}</td>
+      <td><span class="trend ${tone}">${recommendation}</span></td>
       <td><span class="trend ${impact.includes("Unavailable") || impact.includes("Needs") ? "warn" : "good"}">${impact}</span></td>
     </tr>
   `).join("");
@@ -667,9 +689,12 @@ function updateMetrics(video, analytics) {
   const views = numberValue(stats.viewCount);
   const likes = numberValue(stats.likeCount);
   const comments = numberValue(stats.commentCount);
-  setMetric(0, compactNumber(views), ratioLabel(views, channelAverage("viewCount", video.id)));
-  setMetric(1, compactNumber(likes), ratioLabel(likes, channelAverage("likeCount", video.id)));
-  setMetric(2, compactNumber(comments), ratioLabel(comments, channelAverage("commentCount", video.id)));
+  const viewsComparison = ratioComparison(views, channelAverage("viewCount", video.id));
+  const likesComparison = ratioComparison(likes, channelAverage("likeCount", video.id));
+  const commentsComparison = ratioComparison(comments, channelAverage("commentCount", video.id));
+  setMetric(0, compactNumber(views), viewsComparison.label, viewsComparison.className);
+  setMetric(1, compactNumber(likes), likesComparison.label, likesComparison.className);
+  setMetric(2, compactNumber(comments), commentsComparison.label, commentsComparison.className);
   setMetric(3, analytics ? durationFromSeconds(analytics.averageViewDuration) : "", analytics ? (analytics.periodLabel || "Analytics") : "Unavailable");
 }
 
