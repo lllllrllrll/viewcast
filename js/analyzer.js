@@ -584,7 +584,7 @@ function updateMetrics(video, analytics) {
   setMetric(0, compactNumber(stats.viewCount), "Public");
   setMetric(1, compactNumber(stats.likeCount), "Public");
   setMetric(2, compactNumber(stats.commentCount), "Public");
-  setMetric(3, durationFromIso(video.contentDetails?.duration), "Length");
+  setMetric(3, analytics ? durationFromSeconds(analytics.averageViewDuration) : "", analytics ? (analytics.periodLabel || "Analytics") : "Unavailable");
 }
 
 async function loadVideoDetailsWithRetry(videoId, accessToken) {
