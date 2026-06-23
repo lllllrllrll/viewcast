@@ -935,6 +935,24 @@ canvas {
   white-space: nowrap;
 }
 
+.search-terms-panel .activity-item {
+  grid-template-columns: 10px 1fr;
+}
+
+.search-terms-panel .activity-item b {
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.search-terms-panel .activity-item span {
+  font-size: 13px;
+}
+
+.search-terms-panel .activity-item time {
+  grid-column: 2;
+  font-weight: 700;
+}
+
 .table-wrap {
   overflow-x: auto;
 }

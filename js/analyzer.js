@@ -525,6 +525,25 @@ function updateSearchTerms(searchTerms) {
   });
 }
 
+function clearAnalyzerResults() {
+  document.querySelectorAll(".metric-card").forEach((card) => {
+    const valueEl = card.querySelector(".metric-value");
+    const trendEl = card.querySelector(".trend");
+    if (valueEl) valueEl.textContent = " ";
+    if (trendEl) trendEl.textContent = " ";
+  });
+  document.querySelectorAll(".activity-item").forEach((item) => {
+    item.querySelector("b").textContent = " ";
+    item.querySelector("span").textContent = " ";
+    item.querySelector("time").textContent = " ";
+  });
+  const tbody = document.querySelector("table tbody");
+  if (tbody) {
+    tbody.innerHTML = Array.from({length: 3}, () => "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>").join("");
+  }
+  if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+}
+
 function updateTable(video, analytics, retentionPoints) {
   const tbody = document.querySelector("table tbody");
   if (!tbody) return;
@@ -685,12 +704,15 @@ async function loadVideoLibrary({allowPrompt = false} = {}) {
   }
 }
 
+clearAnalyzerResults();
+
 if (form && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   auth = getAuth(app);
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
     selectedVideoId = "";
+    clearAnalyzerResults();
     if (!user) {
       channelVideos = [];
       renderVideoLibrary([]);
