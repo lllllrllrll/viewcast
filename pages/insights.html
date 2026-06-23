@@ -8,104 +8,161 @@
   </head>
   <body>
     <div class="app">
-      <div data-component="sidebar" data-active="insights" data-root=".." data-footer-title="AI Recommendations" data-footer-text="Personalized actions generated from your data to grow your audience and engagement."></div>
+      <div data-component="sidebar" data-active="insights" data-root=".." data-footer-title="AI Recommendations" data-footer-text="Choose an upload and get practical recommendations from its real performance signals."></div>
 
       <main class="main">
         <header class="topbar">
           <div class="title-block">
             <h2>AI Insights</h2>
-            <p data-youtube-summary>Turn raw analytics into prioritized recommendations for your next creator move.</p>
+            <p>Select one of your uploads to compare it against your channel and generate focused improvement notes.</p>
           </div>
           <div class="actions">
-            <button class="primary-button" type="button">
-              Refresh Insights
-            </button>
+            <form class="channel-link-form" id="videoAnalysisForm">
+              <label class="search" style="width: min(320px, 42vw);">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.9 5.03" />
+                  <path d="M14 11a5 5 0 0 0-7.07 0L4.8 13.12a5 5 0 0 0 7.07 7.07l1.22-1.22" />
+                </svg>
+                <input id="videoUrl" type="text" inputmode="url" placeholder="Paste video URL" aria-label="Video URL" style="border: 0; background: transparent; width: 100%; outline: 0;" />
+              </label>
+              <button class="primary-button" type="submit">Analyze</button>
+            </form>
           </div>
         </header>
 
-        <section class="dashboard-grid">
-          <article class="panel full showcase-panel">
+        <section class="dashboard-grid analyzer-results-hidden" id="analyzerDashboard">
+          <article class="panel full video-library-panel" id="videoLibraryPanel">
             <div class="panel-head">
               <div>
-                <h3>AI Recommendation Feed</h3>
-                <p>Convert patterns in views, retention, and comments into clear next actions.</p>
+                <h3>Your Videos</h3>
+                <p id="videoLibraryStatus">Choose an upload to generate AI-style insights.</p>
               </div>
+              <button class="primary-button" id="refreshVideos" type="button">Refresh Videos</button>
             </div>
-            <div class="showcase-grid">
-              <div class="showcase-item">
-                <b>Content ideas</b>
-                <span>Generate topics and angles based on what your audience is already rewarding.</span>
-              </div>
-              <div class="showcase-item">
-                <b>Fix-it list</b>
-                <span>Prioritize thumbnails, intros, titles, and follow-up videos with the highest upside.</span>
-              </div>
-              <div class="showcase-item">
-                <b>Audience read</b>
-                <span>Summarize sentiment, recurring questions, and viewer intent from comment patterns.</span>
-              </div>
+            <div class="video-library-grid" id="videoLibrary">
+              <div class="video-library-empty">Linked channel uploads will appear here.</div>
             </div>
           </article>
 
-          <article class="metric-card">
+          <article class="panel full analyzer-loading-panel" id="analyzerLoading" hidden>
+            <div class="analyzer-loader" aria-live="polite">
+              <span class="loader-ring" aria-hidden="true"></span>
+              <b>Analyzing</b>
+            </div>
+          </article>
+
+          <article class="metric-card analyzer-result">
             <div class="metric-head">
-              <div class="metric-icon teal"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path><path d="M12 6a1 1 0 0 0-1 1v5a1 1 0 0 0 .29.71l3 3a1 1 0 0 0 1.42-1.42L13 11.41V7a1 1 0 0 0-1-1z"></path></svg></div>
+              <div class="metric-icon teal"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></div>
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>28-day Views</h3>
-              <div class="metric-value" data-youtube-field="period-views">&nbsp;</div>
+              <h3>Views vs Average</h3>
+              <div class="metric-value">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="metric-card">
+          <article class="metric-card analyzer-result">
             <div class="metric-head">
-              <div class="metric-icon rose"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
+              <div class="metric-icon blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+              <span class="trend good">&nbsp;</span>
+            </div>
+            <div>
+              <h3>Likes vs Average</h3>
+              <div class="metric-value">&nbsp;</div>
+            </div>
+            <canvas class="sparkline" data-empty-graph="true"></canvas>
+          </article>
+
+          <article class="metric-card analyzer-result">
+            <div class="metric-head">
+              <div class="metric-icon amber"><svg viewBox="0 0 24 24"><path d="M1 4h6v16H1zM17 4h6v16h-6zM9 9h6v11H9z"></path></svg></div>
               <span class="trend warn">&nbsp;</span>
             </div>
             <div>
+              <h3>Comments vs Average</h3>
+              <div class="metric-value">&nbsp;</div>
+            </div>
+            <canvas class="sparkline" data-empty-graph="true"></canvas>
+          </article>
+
+          <article class="metric-card analyzer-result">
+            <div class="metric-head">
+              <div class="metric-icon rose"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
+              <span class="trend good">&nbsp;</span>
+            </div>
+            <div>
               <h3>Avg. View Duration</h3>
-              <div class="metric-value" data-youtube-field="average-view-duration">&nbsp;</div>
+              <div class="metric-value">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="metric-card">
-            <div class="metric-head">
-              <div class="metric-icon blue"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg></div>
-              <span class="trend good">&nbsp;</span>
-            </div>
-            <div>
-              <h3>Subscribers Gained</h3>
-              <div class="metric-value" data-youtube-field="subscribers-gained">&nbsp;</div>
-            </div>
-            <canvas class="sparkline" data-empty-graph="true"></canvas>
-          </article>
-
-          <article class="metric-card">
-            <div class="metric-head">
-              <div class="metric-icon amber"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></div>
-              <span class="trend good">&nbsp;</span>
-            </div>
-            <div>
-              <h3>Total Subscribers</h3>
-              <div class="metric-value" data-youtube-field="subscriber-count">&nbsp;</div>
-            </div>
-            <canvas class="sparkline" data-empty-graph="true"></canvas>
-          </article>
-
-          <article class="panel full">
+          <article class="panel large analyzer-result">
             <div class="panel-head">
               <div>
-                <h3>Recommended Action Plan</h3>
-                <p>Prioritized tips generated from your linked YouTube channel data.</p>
+                <h3>Retention Curve</h3>
+                <p>Use drop-off shape to find where the video may be losing viewers.</p>
               </div>
             </div>
-            <div class="activity" data-ai-insights>
+            <div class="chart-wrap">
+              <canvas id="retentionChart"></canvas>
+            </div>
+          </article>
+
+          <article class="panel side search-terms-panel analyzer-result">
+            <div class="panel-head">
+              <div>
+                <h3>What To Improve</h3>
+                <p>Practical notes generated from the selected video and your channel averages.</p>
+              </div>
+            </div>
+            <div class="activity">
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
+            </div>
+          </article>
+
+          <article class="panel full analyzer-result">
+            <div class="panel-head">
+              <div>
+                <h3>Video Insight Report</h3>
+                <p>Specific fixes, comparisons, and next actions for this upload.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Segment</th>
+                    <th>Issue</th>
+                    <th>Recommendation</th>
+                    <th>Impact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                  </tr>
+                  <tr>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                  </tr>
+                  <tr>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </article>
         </section>
@@ -113,6 +170,6 @@
     </div>
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js"></script>
-    <script type="module" src="../js/dashboard-data.js"></script>
+    <script type="module" src="../js/insights.js"></script>
   </body>
 </html>
