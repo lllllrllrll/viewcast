@@ -443,6 +443,45 @@ async function fetchRetentionCurve(videoId, accessToken) {
   }
 }
 
+async function fetchSearchTermsRange(videoId, accessToken, {startDate, endDate, label}) {
+  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+  url.searchParams.set("ids", "channel==MINE");
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
+  url.searchParams.set("metrics", "views");
+  url.searchParams.set("dimensions", "insightTrafficSourceDetail");
+  url.searchParams.set("filters", `video==${videoId};insightTrafficSourceType==YT_SEARCH`);
+  url.searchParams.set("sort", "-views");
+  url.searchParams.set("maxResults", "3");
+
+  const payload = await fetchJson(url, accessToken);
+  return (payload.rows || []).map(([term, views]) => ({
+    term: term || "Unknown search term",
+    views: Number(views) || 0,
+    periodLabel: label
+  }));
+}
+
+async function fetchSearchTerms(videoId, accessToken) {
+  const endDate = apiDate(new Date());
+  const ranges = [
+    {startDate: daysAgo(28), endDate, label: "28D"},
+    {startDate: "2005-02-14", endDate, label: "Lifetime"}
+  ];
+
+  try {
+    for (const range of ranges) {
+      const terms = await fetchSearchTermsRange(videoId, accessToken, range);
+      if (terms.length) return terms;
+    }
+    return [];
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) throw error;
+    console.warn("YouTube search terms were not available for this video.", error);
+    return [];
+  }
+}
+
 function setMetric(index, value, trend = "") {
   const card = document.querySelectorAll(".metric-card")[index];
   if (!card) return;
@@ -468,42 +507,21 @@ ${Math.round(point.position * 100)}%`.trim());
   drawLineChart("retentionChart", actual, actual, labels, {ySuffix: "%"});
 }
 
-function updateKeyMoments(video, analytics, retentionPoints) {
+function updateSearchTerms(searchTerms) {
   const items = document.querySelectorAll(".activity-item");
-  const title = video.snippet?.title || "Selected video";
-  const moments = [
+  const rows = searchTerms.length ? searchTerms : [
     {
-      title: "Video loaded",
-      desc: title,
-      time: durationFromIso(video.contentDetails?.duration) || "Video"
-    },
-    analytics ? {
-      title: "Average view duration",
-      desc: durationFromSeconds(analytics.averageViewDuration),
-      time: analytics.periodLabel || "Analytics"
-    } : {
-      title: "Analytics unavailable",
-      desc: "Private analytics require access to the video's channel.",
-      time: "API"
-    },
-    retentionPoints.length ? {
-      title: "Retention samples",
-      desc: `
-${retentionPoints.length} points returned by YouTube Analytics`.trim(),
-      time: "Curve"
-    } : {
-      title: "Retention curve unavailable",
-      desc: "YouTube did not return audience retention points for this video.",
-      time: "API"
+      term: "Search terms unavailable",
+      views: null,
+      periodLabel: "API"
     }
   ];
 
   items.forEach((item, index) => {
-    const moment = moments[index];
-    if (!moment) return;
-    item.querySelector("b").textContent = moment.title;
-    item.querySelector("span").textContent = moment.desc || " ";
-    item.querySelector("time").textContent = moment.time || " ";
+    const row = rows[index] || {term: " ", views: null, periodLabel: " "};
+    item.querySelector("b").textContent = row.term;
+    item.querySelector("span").textContent = row.views === null ? "YouTube Analytics did not return search phrase data." : wholeNumber(row.views) + " views from search";
+    item.querySelector("time").textContent = row.periodLabel || " ";
   });
 }
 
@@ -551,17 +569,19 @@ async function loadVideoDetailsWithRetry(videoId, accessToken) {
 }
 
 async function loadPrivateAnalytics(videoId, accessToken) {
-  const [analyticsResult, retentionResult] = await Promise.allSettled([
+  const [analyticsResult, retentionResult, searchTermsResult] = await Promise.allSettled([
     fetchVideoAnalytics(videoId, accessToken),
-    fetchRetentionCurve(videoId, accessToken)
+    fetchRetentionCurve(videoId, accessToken),
+    fetchSearchTerms(videoId, accessToken)
   ]);
-  const errors = [analyticsResult, retentionResult]
+  const errors = [analyticsResult, retentionResult, searchTermsResult]
     .filter((result) => result.status === "rejected")
     .map((result) => result.reason);
 
   return {
     analytics: analyticsResult.status === "fulfilled" ? analyticsResult.value : null,
     retentionPoints: retentionResult.status === "fulfilled" ? retentionResult.value : [],
+    searchTerms: searchTermsResult.status === "fulfilled" ? searchTermsResult.value : [],
     needsRefresh: errors.some((error) => error?.status === 401 || error?.status === 403),
     errors
   };
@@ -583,7 +603,7 @@ async function loadVideoAnalysisWithRetry(videoId) {
     console.warn("Some private video analytics were not available.", error);
   });
 
-  return [video, privateData.analytics, privateData.retentionPoints];
+  return [video, privateData.analytics, privateData.retentionPoints, privateData.searchTerms];
 }
 
 async function analyzeVideoById(videoId) {
@@ -595,13 +615,13 @@ async function analyzeVideoById(videoId) {
     setStatus(readCachedAccessToken() ? "Loading video data from YouTube..." : "Requesting YouTube access...");
     if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
     updateLibrarySelection(videoId);
-    const [video, analytics, retentionPoints] = await loadVideoAnalysisWithRetry(videoId);
+    const [video, analytics, retentionPoints, searchTerms] = await loadVideoAnalysisWithRetry(videoId);
     if (requestId !== analysisRequestId) return;
 
     updateLibrarySelection(video.id);
     updateMetrics(video, analytics);
     drawActualRetention(retentionPoints, video);
-    updateKeyMoments(video, analytics, retentionPoints);
+    updateSearchTerms(searchTerms);
     updateTable(video, analytics, retentionPoints);
     const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
     setStatus(analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now.");
