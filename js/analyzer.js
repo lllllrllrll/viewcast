@@ -368,7 +368,7 @@ async function fetchVideoAnalyticsRange(videoId, accessToken, {startDate, endDat
   url.searchParams.set("ids", "channel==MINE");
   url.searchParams.set("startDate", startDate);
   url.searchParams.set("endDate", endDate);
-  url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained");
+  url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage");
   url.searchParams.set("filters", `video==${videoId}`);
 
   const payload = await fetchJson(url, accessToken);
@@ -380,11 +380,7 @@ async function fetchVideoAnalyticsRange(videoId, accessToken, {startDate, endDat
     views: row[0],
     estimatedMinutesWatched: row[1],
     averageViewDuration: row[2],
-    averageViewPercentage: row[3],
-    likes: row[4],
-    comments: row[5],
-    shares: row[6],
-    subscribersGained: row[7]
+    averageViewPercentage: row[3]
   };
 }
 
