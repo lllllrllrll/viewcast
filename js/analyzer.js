@@ -501,7 +501,7 @@ function drawActualRetention(points, video) {
 
   const totalSeconds = secondsFromIso(video?.contentDetails?.duration) || 0;
   const sampled = points.filter((_, index) => index % Math.max(1, Math.floor(points.length / 12)) === 0).slice(0, 12);
-  const actual = sampled.map((point) => Math.round(point.ratio * 100));
+  const actual = sampled.map((point) => Math.max(0, Math.min(200, Math.round(point.ratio * 100))));
   const labels = sampled.map((point) => totalSeconds
     ? durationFromSeconds(point.position * totalSeconds)
     : `
@@ -653,11 +653,11 @@ async function analyzeVideoById(videoId) {
 
     updateLibrarySelection(video.id);
     updateMetrics(video, analytics);
-    drawActualRetention(retentionPoints, video);
     updateSearchTerms(searchTerms);
     updateTable(video, analytics, retentionPoints);
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
+    requestAnimationFrame(() => drawActualRetention(retentionPoints, video));
     const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
     setStatus(analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now.");
     setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");

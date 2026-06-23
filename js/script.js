@@ -67,6 +67,7 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
   const { ctx, width, height } = scaleCanvas(canvas);
   const pad = { top: 18, right: 18, bottom: 34, left: 44 };
 
+  if (width < 2 || height < 2) return;
   ctx.clearRect(0, 0, width, height);
   ctx.strokeStyle = colors.line;
   ctx.lineWidth = 1;
@@ -90,7 +91,8 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
     return;
   }
 
-  const all = actual.concat(forecast);
+  const all = actual.concat(forecast).filter(Number.isFinite);
+  if (all.length < 2) return;
   const min = Math.min(...all) - 8;
   const max = Math.max(...all) + 10;
 
@@ -108,15 +110,18 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
   }
 
   labels.forEach((label, index) => {
-    const x = pad.left + (index / (labels.length - 1)) * (width - pad.left - pad.right);
+    const denominator = Math.max(1, labels.length - 1);
+    const x = pad.left + (index / denominator) * (width - pad.left - pad.right);
     ctx.fillText(label, x - 10, height - 10);
   });
 
   function plot(data, color, dashed) {
+    if (data.length < 2) return;
     ctx.beginPath();
     if (dashed) ctx.setLineDash([7, 6]);
+    const denominator = Math.max(1, data.length - 1);
     data.forEach((value, index) => {
-      const x = pad.left + (index / (data.length - 1)) * (width - pad.left - pad.right);
+      const x = pad.left + (index / denominator) * (width - pad.left - pad.right);
       const y = pad.top + (1 - (value - min) / (max - min)) * (height - pad.top - pad.bottom);
       index ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
