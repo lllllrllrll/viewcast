@@ -19,6 +19,8 @@ const submitButton = form?.querySelector('button[type="submit"]');
 const videoLibrary = document.getElementById("videoLibrary");
 const videoLibraryStatus = document.getElementById("videoLibraryStatus");
 const refreshVideosButton = document.getElementById("refreshVideos");
+const analyzerDashboard = document.getElementById("analyzerDashboard");
+const analyzerLoading = document.getElementById("analyzerLoading");
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 let currentUser = null;
@@ -525,7 +527,17 @@ function updateSearchTerms(searchTerms) {
   });
 }
 
+function setAnalyzerLoading(isLoading) {
+  if (analyzerLoading) analyzerLoading.hidden = !isLoading;
+}
+
+function setAnalyzerResultsVisible(isVisible) {
+  analyzerDashboard?.classList.toggle("analyzer-results-hidden", !isVisible);
+}
+
 function clearAnalyzerResults() {
+  setAnalyzerLoading(false);
+  setAnalyzerResultsVisible(false);
   document.querySelectorAll(".metric-card").forEach((card) => {
     const valueEl = card.querySelector(".metric-value");
     const trendEl = card.querySelector(".trend");
@@ -631,6 +643,8 @@ async function analyzeVideoById(videoId) {
 
   try {
     setBusy(true);
+    setAnalyzerResultsVisible(false);
+    setAnalyzerLoading(true);
     setStatus(readCachedAccessToken() ? "Loading video data from YouTube..." : "Requesting YouTube access...");
     if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
     updateLibrarySelection(videoId);
@@ -642,15 +656,22 @@ async function analyzeVideoById(videoId) {
     drawActualRetention(retentionPoints, video);
     updateSearchTerms(searchTerms);
     updateTable(video, analytics, retentionPoints);
+    setAnalyzerLoading(false);
+    setAnalyzerResultsVisible(true);
     const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
     setStatus(analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now.");
     setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
   } catch (error) {
     if (requestId !== analysisRequestId) return;
+    setAnalyzerLoading(false);
+    setAnalyzerResultsVisible(false);
     console.error("Could not analyze video.", error);
     setStatus(error.message || "Could not analyze this video.");
   } finally {
-    if (requestId === analysisRequestId) setBusy(false);
+    if (requestId === analysisRequestId) {
+      setAnalyzerLoading(false);
+      setBusy(false);
+    }
   }
 }
 

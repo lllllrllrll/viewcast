@@ -30,7 +30,7 @@
           </div>
         </header>
 
-        <section class="dashboard-grid">
+        <section class="dashboard-grid analyzer-results-hidden" id="analyzerDashboard">
           <article class="panel full video-library-panel" id="videoLibraryPanel">
             <div class="panel-head">
               <div>
@@ -44,7 +44,14 @@
             </div>
           </article>
 
-          <article class="metric-card">
+          <article class="panel full analyzer-loading-panel" id="analyzerLoading" hidden>
+            <div class="analyzer-loader" aria-live="polite">
+              <span class="loader-ring" aria-hidden="true"></span>
+              <b>Analyzing</b>
+            </div>
+          </article>
+
+          <article class="metric-card analyzer-result">
             <div class="metric-head">
               <div class="metric-icon teal"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></div>
               <span class="trend good">&nbsp;</span>
@@ -56,7 +63,7 @@
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="metric-card">
+          <article class="metric-card analyzer-result">
             <div class="metric-head">
               <div class="metric-icon blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
               <span class="trend good">&nbsp;</span>
@@ -68,7 +75,7 @@
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="metric-card">
+          <article class="metric-card analyzer-result">
             <div class="metric-head">
               <div class="metric-icon amber"><svg viewBox="0 0 24 24"><path d="M1 4h6v16H1zM17 4h6v16h-6zM9 9h6v11H9z"></path></svg></div>
               <span class="trend warn">&nbsp;</span>
@@ -80,7 +87,7 @@
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="metric-card">
+          <article class="metric-card analyzer-result">
             <div class="metric-head">
               <div class="metric-icon rose"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
               <span class="trend good">&nbsp;</span>
@@ -92,7 +99,7 @@
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="panel large">
+          <article class="panel large analyzer-result">
             <div class="panel-head">
               <div>
                 <h3>Retention Curve</h3>
@@ -104,7 +111,7 @@
             </div>
           </article>
 
-          <article class="panel side search-terms-panel">
+          <article class="panel side search-terms-panel analyzer-result">
             <div class="panel-head">
               <div>
                 <h3>YouTube Search Terms</h3>
@@ -118,7 +125,7 @@
             </div>
           </article>
 
-          <article class="panel full">
+          <article class="panel full analyzer-result">
             <div class="panel-head">
               <div>
                 <h3>Recommended Edits</h3>
