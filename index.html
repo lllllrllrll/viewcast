@@ -8,7 +8,7 @@
   </head>
   <body>
     <div class="app">
-      <div data-component="sidebar" data-active="overview" data-root="." data-footer-title="Template status" data-footer-text="Responsive video analytics template with editable view metrics, retention charts, and content performance states."></div>
+      <div data-component="sidebar" data-active="overview" data-root="." data-footer-title="Overview" data-footer-text="Your connected YouTube channel totals, recent performance, and next publishing signals."></div>
 
       <main class="main">
         <header class="welcome-header">
@@ -66,21 +66,21 @@
             <div class="panel-head">
               <div>
                 <h3>Overview Command Center</h3>
-                <p>A fast snapshot of channel momentum, engagement quality, and content performance.</p>
+                <p data-overview-status>A fast snapshot of channel momentum, engagement quality, and content performance.</p>
               </div>
             </div>
             <div class="showcase-grid">
               <div class="showcase-item">
                 <b>Views and reach</b>
-                <span>Track total views, unique viewers, and discovery source shifts from one control surface.</span>
+                <span data-overview-kpi="reach">Connect YouTube to show verified reach and discovery movement.</span>
               </div>
               <div class="showcase-item">
                 <b>Retention quality</b>
-                <span>Spot where viewers leave, which videos hold attention, and what needs editing.</span>
+                <span data-overview-kpi="retention">Average view duration and watch time appear after analytics sync.</span>
               </div>
               <div class="showcase-item">
                 <b>Next best move</b>
-                <span>Use table states and AI notes to decide what to publish, refresh, or pause next.</span>
+                <span data-overview-kpi="next">Recent uploads and next actions update from your channel data.</span>
               </div>
             </div>
           </article>
@@ -88,7 +88,7 @@
           <article class="metric-card">
             <div class="metric-head">
               <div class="metric-icon teal"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg></div>
-              <span class="trend good">&nbsp;</span>
+              <span class="trend good" data-overview-trend="total-views">&nbsp;</span>
             </div>
             <div>
               <h3>Total Views</h3>
@@ -100,7 +100,7 @@
           <article class="metric-card">
             <div class="metric-head">
               <div class="metric-icon blue"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /></svg></div>
-              <span class="trend good">&nbsp;</span>
+              <span class="trend good" data-overview-trend="subscriber-count">&nbsp;</span>
             </div>
             <div>
               <h3>Total Subscribers</h3>
@@ -112,7 +112,7 @@
           <article class="metric-card">
             <div class="metric-head">
               <div class="metric-icon amber"><svg viewBox="0 0 24 24"><path d="M7 10v11" /><path d="M15 5.9 14 10h5.8a2 2 0 0 1 2 2.3l-1.4 7a2 2 0 0 1-2 1.7H7" /><path d="M7 10H3v11h4" /><path d="M17 14h4" /></svg></div>
-              <span class="trend warn">&nbsp;</span>
+              <span class="trend warn" data-overview-trend="video-count">&nbsp;</span>
             </div>
             <div>
               <h3>Videos</h3>
@@ -124,7 +124,7 @@
           <article class="metric-card">
             <div class="metric-head">
               <div class="metric-icon rose"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg></div>
-              <span class="trend good">&nbsp;</span>
+              <span class="trend good" data-overview-trend="average-view-duration">&nbsp;</span>
             </div>
             <div>
               <h3>Avg. View Duration</h3>
@@ -157,7 +157,7 @@
                 <p>Share of views by discovery channel.</p>
               </div>
             </div>
-            <div class="region-list">
+            <div class="region-list" data-overview-traffic>
               <div class="region-row"><span>Browse</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
               <div class="region-row"><span>Search</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
               <div class="region-row"><span>Shorts</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
@@ -169,8 +169,8 @@
           <article class="panel half">
             <div class="panel-head">
               <div>
-                <h3>Audience Mix</h3>
-                <p>Watch share by viewer segment.</p>
+                <h3>Momentum Mix</h3>
+                <p>28-day views, watch time, and subscriber movement.</p>
               </div>
             </div>
             <div class="chart-wrap">
@@ -181,25 +181,25 @@
           <article class="panel half">
             <div class="panel-head">
               <div>
-                <h3>Content Health</h3>
-                <p>Publishing and engagement targets for this week.</p>
+                <h3>28-Day Health</h3>
+                <p>Verified summary from YouTube Analytics.</p>
               </div>
             </div>
             <div class="progress-stack">
-              <div class="progress-item">
-                <div class="progress-meta"><b>Target watch hours</b><span>&nbsp;</span></div>
+              <div class="progress-item" data-overview-health="watch-hours">
+                <div class="progress-meta"><b>Watch hours</b><span>&nbsp;</span></div>
                 <div class="bar"><i style="--value: 0%"></i></div>
               </div>
-              <div class="progress-item">
-                <div class="progress-meta"><b>Retention above target</b><span>&nbsp;</span></div>
+              <div class="progress-item" data-overview-health="avg-duration">
+                <div class="progress-meta"><b>Average view duration</b><span>&nbsp;</span></div>
                 <div class="bar"><i style="--value: 0%"></i></div>
               </div>
-              <div class="progress-item">
-                <div class="progress-meta"><b>Community replies</b><span>&nbsp;</span></div>
+              <div class="progress-item" data-overview-health="subscribers">
+                <div class="progress-meta"><b>Subscribers gained</b><span>&nbsp;</span></div>
                 <div class="bar"><i style="--value: 0%"></i></div>
               </div>
-              <div class="progress-item">
-                <div class="progress-meta"><b>Scheduled uploads</b><span>&nbsp;</span></div>
+              <div class="progress-item" data-overview-health="uploads">
+                <div class="progress-meta"><b>Recent uploads loaded</b><span>&nbsp;</span></div>
                 <div class="bar"><i style="--value: 0%"></i></div>
               </div>
             </div>
@@ -212,7 +212,7 @@
                 <p>Latest audience and content signals.</p>
               </div>
             </div>
-            <div class="activity">
+            <div class="activity" data-overview-activity>
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
@@ -224,7 +224,7 @@
             <div class="panel-head">
               <div>
                 <h3>Video Performance</h3>
-                <p>Top uploads by reach, retention, engagement, and status.</p>
+                <p>Recent uploads by public reach and engagement.</p>
               </div>
               <button class="icon-button" type="button" aria-label="Download table" title="Download table">
                 <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
@@ -237,12 +237,12 @@
                     <th>Video</th>
                     <th>Format</th>
                     <th>Views</th>
-                    <th>Retention</th>
-                    <th>Like Ratio</th>
+                    <th>Likes</th>
+                    <th>Comments</th>
                     <th>Status</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody data-overview-videos>
                   <tr>
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
