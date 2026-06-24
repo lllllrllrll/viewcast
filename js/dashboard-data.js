@@ -532,7 +532,6 @@ function renderHealth(connection, overviewData) {
     setProgress("watch-hours", 0, emptyValue);
     setProgress("avg-duration", 0, emptyValue);
     setProgress("subscribers", 0, emptyValue);
-    setProgress("uploads", 0, emptyValue);
     return;
   }
 
@@ -544,12 +543,10 @@ function renderHealth(connection, overviewData) {
     ? dailySummary.durationTotal / dailySummary.durationCount
     : numberValue(analyticsSummary.averageViewDuration) || 0;
   const subscribers = dailySummary.subscribers || numberValue(analyticsSummary.subscribersGained) || 0;
-  const videos = overviewData?.videos?.length || 0;
 
   setProgress("watch-hours", Math.min(100, (watchMinutes / 60) / 10 * 100), `${watchHours(watchMinutes)} hrs`);
   setProgress("avg-duration", Math.min(100, avgDuration / 180 * 100), duration(avgDuration));
   setProgress("subscribers", Math.min(100, Math.max(0, subscribers) / Math.max(1, views) * 10000), wholeNumber(subscribers));
-  setProgress("uploads", Math.min(100, videos / 4 * 100), videos ? `${videos} loaded` : emptyValue);
 }
 
 function renderActivity(connection, overviewData) {
