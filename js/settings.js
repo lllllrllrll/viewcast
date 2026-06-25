@@ -7,6 +7,8 @@
 
   const status = document.getElementById("settingsStatus");
   const upgradeButton = document.getElementById("upgradePlan");
+  const planModal = document.getElementById("planModal");
+  const closeModal = document.getElementById("closeModal");
   const refreshRate = document.getElementById("refreshRate");
   const toggles = document.querySelectorAll("[data-setting]");
 
@@ -59,6 +61,14 @@
 
 
   upgradeButton?.addEventListener("click", () => {
-    showStatus("Upgrade flow is ready for billing integration.");
+    planModal.hidden = false;
+  });
+
+  closeModal?.addEventListener("click", () => {
+    planModal.hidden = true;
+  });
+
+  planModal?.addEventListener("click", (e) => {
+    if (e.target === planModal) planModal.hidden = true;
   });
 })();

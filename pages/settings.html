@@ -100,6 +100,39 @@
         </section>
       </main>
     </div>
+    <div class="modal-overlay" id="planModal" hidden>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Upgrade Your Plan</h3>
+          <button class="close-button" id="closeModal" aria-label="Close modal">&times;</button>
+        </div>
+        <div class="plans-grid">
+          <div class="plan-card">
+            <div class="plan-badge">Popular</div>
+            <h4>Pro Studio</h4>
+            <div class="plan-price">$29<span>/mo</span></div>
+            <ul>
+              <li>Unlimited video analysis</li>
+              <li>Advanced retention heatmaps</li>
+              <li>AI prediction (50/mo)</li>
+              <li>Custom alert rules</li>
+            </ul>
+            <button class="primary-button" style="width: 100%;">Choose Pro</button>
+          </div>
+          <div class="plan-card">
+            <h4>Agency</h4>
+            <div class="plan-price">$99<span>/mo</span></div>
+            <ul>
+              <li>Manage up to 10 channels</li>
+              <li>Team collaboration tools</li>
+              <li>API access for reporting</li>
+              <li>Priority AI support</li>
+            </ul>
+            <button class="primary-button" style="width: 100%; background: var(--ink);">Choose Agency</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js"></script>
     <script src="../js/settings.js"></script>
