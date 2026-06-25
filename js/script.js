@@ -97,9 +97,25 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
   const all = actual.concat(forecast).filter(Number.isFinite);
   if (all.length < 2) return;
   const min = 0;
-  let max = Math.max(...all);
-  if (max === 0) max = 1; // Prevent division by zero
-  max = max * 1.2; // 20% headroom
+  const trueMax = Math.max(...all);
+
+  // Calculate a "nice" step that results in whole numbers on the 5 grid lines
+  let niceStep = Math.ceil((trueMax * 1.1) / 4);
+  if (niceStep < 1) niceStep = 1;
+
+  // For larger numbers, round the step to a "clean" number (multiple of 1, 2, 5, or 10)
+  if (niceStep > 5) {
+    const magnitude = Math.pow(10, Math.floor(Math.log10(niceStep)));
+    const normalized = niceStep / magnitude;
+    let rounded;
+    if (normalized <= 1.5) rounded = 1;
+    else if (normalized <= 3) rounded = 2;
+    else if (normalized <= 7) rounded = 5;
+    else rounded = 10;
+    niceStep = rounded * magnitude;
+  }
+
+  const max = niceStep * 4;
 
   ctx.strokeStyle = colors.line;
   ctx.lineWidth = 1;
@@ -113,9 +129,7 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
     ctx.lineTo(width - pad.right, y);
     ctx.stroke();
 
-    const rawTick = max - (i / 4) * (max - min);
-    // Use 1 decimal place if max is small to avoid repeating labels
-    const tick = max < 10 ? rawTick.toFixed(1) : Math.round(rawTick);
+    const tick = niceStep * (4 - i);
     ctx.fillText(`${tick}${options.ySuffix ?? "K"}`, 4, y + 4);
   }
 
