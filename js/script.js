@@ -97,7 +97,9 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
   const all = actual.concat(forecast).filter(Number.isFinite);
   if (all.length < 2) return;
   const min = 0;
-  const max = Math.max(...all) * 1.2; // 20% headroom for a better look
+  let max = Math.max(...all);
+  if (max === 0) max = 1; // Prevent division by zero
+  max = max * 1.2; // 20% headroom
 
   ctx.strokeStyle = colors.line;
   ctx.lineWidth = 1;
@@ -110,7 +112,10 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
     ctx.moveTo(pad.left, y);
     ctx.lineTo(width - pad.right, y);
     ctx.stroke();
-    const tick = Math.round(max - (i / 4) * (max - min));
+
+    const rawTick = max - (i / 4) * (max - min);
+    // Use 1 decimal place if max is small to avoid repeating labels
+    const tick = max < 10 ? rawTick.toFixed(1) : Math.round(rawTick);
     ctx.fillText(`${tick}${options.ySuffix ?? "K"}`, 4, y + 4);
   }
 
