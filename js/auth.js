@@ -182,10 +182,15 @@ function updateUserInterface(user) {
     element.textContent = user.email || "";
   });
   document.querySelectorAll("[data-account-label]").forEach((element) => {
-    element.textContent = `${displayName}'s account`;
+    element.textContent = "Sign Out";
   });
   document.querySelectorAll(".welcome-login").forEach((link) => {
-    link.href = "#accountControl";
+    link.href = "#";
+    link.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await signOut(auth);
+      window.location.replace(loginUrl.href);
+    });
   });
   addAccountControl(user);
   if (user.displayName) sessionStorage.removeItem("viewcastDisplayName");
