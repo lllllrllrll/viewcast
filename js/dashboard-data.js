@@ -230,10 +230,10 @@ function fieldValues(connection) {
   };
 }
 
-async function fetchAnalyticsRows(accessToken, {metrics, dimensions = "", sort = "", maxResults = ""}) {
+async function fetchAnalyticsRows(accessToken, {metrics, dimensions = "", sort = "", maxResults = "", days = 28}) {
   const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
   url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", daysAgo(28));
+  url.searchParams.set("startDate", daysAgo(days));
   url.searchParams.set("endDate", today());
   url.searchParams.set("metrics", metrics);
   if (dimensions) url.searchParams.set("dimensions", dimensions);
@@ -272,18 +272,20 @@ async function fetchRecentVideos(accessToken) {
   return videosPayload.items || [];
 }
 
-async function fetchLiveOverview(accessToken) {
+async function fetchLiveOverview(accessToken, days = 30) {
   const [dailyResult, trafficResult, videosResult] = await Promise.allSettled([
     fetchAnalyticsRows(accessToken, {
       metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained",
       dimensions: "day",
-      sort: "day"
+      sort: "day",
+      days: days
     }),
     fetchAnalyticsRows(accessToken, {
       metrics: "views",
       dimensions: "insightTrafficSourceType",
       sort: "-views",
-      maxResults: 5
+      maxResults: 5,
+      days: days
     }),
     fetchRecentVideos(accessToken)
   ]);
@@ -700,7 +702,7 @@ function applyYouTubeData(connection, overviewData = null) {
   renderOverviewData(connection, overviewData);
 }
 
-async function loadYouTubeData(user, db) {
+async function loadYouTubeData(user, db, days = 30) {
   applyYouTubeData(readCachedConnection(), readCachedOverview(user));
 
   const snapshot = await getDoc(doc(db, "users", user.uid));
@@ -714,7 +716,7 @@ async function loadYouTubeData(user, db) {
   if (!activeConnection || !accessToken) return;
 
   try {
-    const liveOverview = await fetchLiveOverview(accessToken);
+    const liveOverview = await fetchLiveOverview(accessToken, days);
     saveCachedOverview(user, liveOverview);
     applyYouTubeData(activeConnection, liveOverview);
   } catch (error) {
@@ -732,6 +734,28 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
     if (!user) return;
     loadYouTubeData(user, db).catch((error) => {
       console.error("Could not load linked YouTube data.", error);
+    });
+
+    // Setup time range buttons
+    document.querySelectorAll(".segmented button").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.classList.contains("active")) return;
+
+        const range = button.textContent.trim();
+        const daysMap = { "7D": 7, "30D": 30, "90D": 90 };
+        const days = daysMap[range];
+
+        if (!days) return;
+
+        // Update UI
+        button.parentElement.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
+        button.classList.add("active");
+
+        // Refresh data
+        loadYouTubeData(user, db, days).catch((error) => {
+          console.error("Could not refresh data for range:", range, error);
+        });
+      });
     });
   });
 
