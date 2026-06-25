@@ -521,9 +521,9 @@ function renderMomentumMix(connection, overviewData) {
   }
 
   window.drawBarChart("mixChart", [
-    ["Views", Math.round((views / max) * 100), "#0f8b8d"],
-    ["Watch", Math.round((watchHoursValue / max) * 100), "#3267d6"],
-    ["Subs", Math.round((Math.max(0, subscribers) / max) * 100), "#2f9b6c"]
+    ["Views", Math.round((views / max) * 100), "#0f8b8d", compactNumber(views)],
+    ["Watch", Math.round((watchHoursValue / max) * 100), "#3267d6", `${compactNumber(watchHoursValue)}h`],
+    ["Subs", Math.round((Math.max(0, subscribers) / max) * 100), "#2f9b6c", compactNumber(Math.max(0, subscribers))]
   ], 100);
 }
 
