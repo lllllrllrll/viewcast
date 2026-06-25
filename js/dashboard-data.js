@@ -98,6 +98,17 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function timeAgo(timestamp) {
+  const date = timestamp ? new Date(timestamp) : null;
+  if (!date || Number.isNaN(date.getTime())) return "Latest scan";
+  const minutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+  if (minutes < 1) return "Just scanned";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 function secondsFromIso(value = "") {
   const match = value.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return 0;
@@ -293,7 +304,8 @@ async function fetchLiveOverview(accessToken, days = 30) {
   return {
     daily: dailyResult.status === "fulfilled" ? dailyResult.value : [],
     traffic: trafficResult.status === "fulfilled" ? trafficResult.value : [],
-    videos: videosResult.status === "fulfilled" ? videosResult.value : []
+    videos: videosResult.status === "fulfilled" ? videosResult.value : [],
+    latestVideoScannedAt: new Date().toISOString()
   };
 }
 
@@ -627,31 +639,33 @@ function performanceNotificationItems(overviewData) {
   const videos = overviewData?.videos || [];
   if (videos.length < 2) return [];
 
-  return videos.reduce((items, video) => {
-    const views = numberValue(video.statistics?.viewCount);
-    const average = recentUploadAverage(videos, video.id);
-    if (views === null || !average) return items;
+  const latestVideo = videos[0];
+  const views = numberValue(latestVideo.statistics?.viewCount);
+  const average = recentUploadAverage(videos, latestVideo.id);
+  if (views === null || !average) return [];
 
-    const ratio = views / average;
-    const title = video.snippet?.title || "Recent upload";
-    if (ratio >= 1.15) {
-      items.push({
-        tone: "teal",
-        title: "Above Average",
-        body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
-        time: "Daily scan"
-      });
-    } else if (ratio <= 0.85) {
-      items.push({
-        tone: "rose",
-        title: "Below Average",
-        body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
-        time: "Daily scan"
-      });
-    }
+  const ratio = views / average;
+  const title = latestVideo.snippet?.title || "Most recent upload";
+  const scanTime = timeAgo(overviewData.latestVideoScannedAt);
+  if (ratio >= 1.15) {
+    return [{
+      tone: "teal",
+      title: "Latest Upload Above Average",
+      body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
+      time: scanTime
+    }];
+  }
 
-    return items;
-  }, []).slice(0, 3);
+  if (ratio <= 0.85) {
+    return [{
+      tone: "rose",
+      title: "Latest Upload Below Average",
+      body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
+      time: scanTime
+    }];
+  }
+
+  return [];
 }
 
 function renderPerformanceNotifications(overviewData) {
@@ -662,7 +676,7 @@ function renderPerformanceNotifications(overviewData) {
 
   const items = performanceNotificationItems(overviewData);
   if (!items.length) {
-    container.innerHTML = '<div class="notif-empty">No upload performance alerts yet.</div>';
+    container.innerHTML = '<div class="notif-empty">No latest-upload performance alert yet.</div>';
     if (badge) badge.hidden = true;
     if (markRead) markRead.hidden = true;
     return;
