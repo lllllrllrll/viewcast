@@ -64,15 +64,19 @@ function drawSparkline(canvas) {
 function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
+
+  // Store data for tooltips/resize
+  canvas._chartData = { actual, forecast, labels, options };
+
   const { ctx, width, height } = scaleCanvas(canvas);
   const pad = { top: 18, right: 18, bottom: 34, left: 44 };
 
   if (width < 2 || height < 2) return;
   ctx.clearRect(0, 0, width, height);
-  ctx.strokeStyle = colors.line;
-  ctx.lineWidth = 1;
 
   if (!actual.length || !forecast.length || !labels.length) {
+    ctx.strokeStyle = colors.line;
+    ctx.lineWidth = 1;
     for (let i = 0; i < 5; i += 1) {
       const y = pad.top + (i / 4) * (height - pad.top - pad.bottom);
       ctx.beginPath();
@@ -80,7 +84,6 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
       ctx.lineTo(width - pad.right, y);
       ctx.stroke();
     }
-
     for (let i = 0; i < 6; i += 1) {
       const x = pad.left + (i / 5) * (width - pad.left - pad.right);
       ctx.beginPath();
@@ -96,6 +99,8 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
   const min = Math.min(...all) - 8;
   const max = Math.max(...all) + 10;
 
+  ctx.strokeStyle = colors.line;
+  ctx.lineWidth = 1;
   ctx.font = "12px Inter, system-ui, sans-serif";
   ctx.fillStyle = colors.muted;
 
@@ -109,11 +114,21 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
     ctx.fillText(`${tick}${options.ySuffix ?? "K"}`, 4, y + 4);
   }
 
+  const points = [];
   labels.forEach((label, index) => {
     const denominator = Math.max(1, labels.length - 1);
     const x = pad.left + (index / denominator) * (width - pad.left - pad.right);
     ctx.fillText(label, x - 10, height - 10);
+
+    // Calculate point positions for tooltip
+    const actualVal = actual[index];
+    const forecastVal = forecast[index];
+    const yActual = pad.top + (1 - (actualVal - min) / (max - min)) * (height - pad.top - pad.bottom);
+    const yForecast = pad.top + (1 - (forecastVal - min) / (max - min)) * (height - pad.top - pad.bottom);
+
+    points.push({ x, yActual, yForecast, actualVal, forecastVal, label });
   });
+  canvas._chartPoints = points;
 
   function plot(data, color, dashed) {
     if (data.length < 2) return;
@@ -133,7 +148,88 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
 
   plot(forecast, colors.amber, true);
   plot(actual, colors.teal, false);
+
+  // Hover state handling
+  if (canvas._hoverPoint && !options.isInternal) {
+    const p = canvas._hoverPoint;
+
+    // Vertical line
+    ctx.beginPath();
+    ctx.setLineDash([4, 4]);
+    ctx.moveTo(p.x, pad.top);
+    ctx.lineTo(p.x, height - pad.bottom);
+    ctx.strokeStyle = colors.muted;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Actual point dot
+    ctx.beginPath();
+    ctx.arc(p.x, p.yActual, 5, 0, Math.PI * 2);
+    ctx.fillStyle = colors.teal;
+    ctx.fill();
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Tooltip box
+    const tipW = 100;
+    const tipH = 45;
+    let tipX = p.x + 10;
+    let tipY = p.yActual - tipH - 10;
+
+    if (tipX + tipW > width) tipX = p.x - tipW - 10;
+    if (tipY < 0) tipY = p.yActual + 10;
+
+    ctx.fillStyle = "rgba(28, 36, 48, 0.95)";
+    ctx.beginPath();
+    ctx.roundRect(tipX, tipY, tipW, tipH, 6);
+    ctx.fill();
+
+    ctx.fillStyle = "white";
+    ctx.font = "bold 12px Inter, sans-serif";
+    ctx.fillText(p.label, tipX + 8, tipY + 18);
+    ctx.font = "12px Inter, sans-serif";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+    const valText = Number(p.actualVal).toLocaleString() + (options.ySuffix ?? "K");
+    ctx.fillText(valText, tipX + 8, tipY + 36);
+  }
+
+  // Attach event listeners once
+  if (!canvas._hasListeners) {
+    canvas.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      let closest = null;
+      let minDist = 30; // Threshold for snapping
+
+      (canvas._chartPoints || []).forEach(p => {
+        const dist = Math.abs(p.x - mx);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = p;
+        }
+      });
+
+      if (closest !== canvas._hoverPoint) {
+        canvas._hoverPoint = closest;
+        const { actual, forecast, labels, options } = canvas._chartData;
+        drawLineChart(canvasId, actual, forecast, labels, { ...options, isInternal: false });
+      }
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+      canvas._hoverPoint = null;
+      const { actual, forecast, labels, options } = canvas._chartData;
+      drawLineChart(canvasId, actual, forecast, labels, { ...options, isInternal: false });
+    });
+
+    canvas._hasListeners = true;
+  }
 }
+
 
 function drawBarChart(canvasId, data, maxVal = 80) {
   const canvas = document.getElementById(canvasId);
