@@ -1487,7 +1487,7 @@ tbody tr:hover {
 }
 
 .modal-card {
-  width: min(800px, 100%);
+  width: min(1000px, 100%);
   background: var(--surface);
   border-radius: 12px;
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.2);
@@ -1538,6 +1538,23 @@ tbody tr:hover {
   border-radius: 12px;
   background: var(--surface);
   transition: transform 0.2s;
+}
+
+.plan-card.current {
+  border-color: var(--line);
+  opacity: 0.9;
+}
+
+body.settings-dark .plan-card.current {
+  border-color: var(--line);
+}
+
+.plan-card li strong {
+  color: var(--teal);
+}
+
+body.settings-dark .plan-card li strong {
+  color: #26c2c5;
 }
 
 .plan-card:hover {

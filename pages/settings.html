@@ -111,22 +111,36 @@
           <button class="close-button" id="closeModal" aria-label="Close modal">&times;</button>
         </div>
         <div class="plans-grid">
+          <div class="plan-card current">
+            <div class="plan-badge">Current</div>
+            <h4>Free Starter</h4>
+            <div class="plan-price">$0<span>/mo</span></div>
+            <ul>
+              <li>5 Video analyses / month</li>
+              <li>Basic channel tracking</li>
+              <li>1 Channel connection</li>
+              <li>Community support</li>
+            </ul>
+            <button class="primary-button" disabled style="width: 100%; background: var(--line); color: var(--muted) !important;">Active Plan</button>
+          </div>
           <div class="plan-card">
             <div class="plan-badge">Popular</div>
             <h4>Pro Studio</h4>
             <div class="plan-price">$29<span>/mo</span></div>
             <ul>
+              <li><strong>Everything in Starter</strong></li>
               <li>Unlimited video analysis</li>
               <li>Advanced retention heatmaps</li>
-              <li>AI prediction (50/mo)</li>
               <li>Custom alert rules</li>
+              <li>AI prediction (50/mo)</li>
             </ul>
-            <button class="primary-button" style="width: 100%;">Choose Pro</button>
+            <button class="primary-button" style="width: 100%;">Upgrade to Pro</button>
           </div>
           <div class="plan-card">
             <h4>Agency</h4>
             <div class="plan-price">$99<span>/mo</span></div>
             <ul>
+              <li><strong>Everything in Pro</strong></li>
               <li>Manage up to 10 channels</li>
               <li>Team collaboration tools</li>
               <li>API access for reporting</li>
