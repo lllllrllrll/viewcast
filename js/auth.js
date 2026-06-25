@@ -149,7 +149,7 @@ function addAccountControl(user) {
     <div class="account-avatar" aria-hidden="true"></div>
     <div class="account-details">
       <strong></strong>
-      <div class="plan-indicator">Free Starter</div>
+      <div class="plan-indicator">Basic</div>
       <span></span>
     </div>
     <button class="account-signout" type="button" title="Sign out" aria-label="Sign out">

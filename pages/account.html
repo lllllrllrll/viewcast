@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ViewCast - Account</title>
+    <link rel="stylesheet" href="../css/style.css">
+  </head>
+  <body>
+    <div class="app">
+      <div data-component="sidebar" data-active="account" data-root=".." data-footer-title="Account" data-footer-text="Manage your personal profile and subscription details."></div>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="title-block">
+            <h2>Account</h2>
+            <p>Manage your profile, view your subscription, and check your account history.</p>
+          </div>
+        </header>
+
+        <section class="dashboard-grid">
+          <article class="panel full showcase-panel">
+            <div class="panel-head">
+              <div>
+                <h3>User Profile</h3>
+                <p>Your basic account information and identity across ViewCast.</p>
+              </div>
+            </div>
+            <div class="showcase-grid">
+              <div class="showcase-item">
+                <b>Display Name</b>
+                <span data-user-name>Loading...</span>
+              </div>
+              <div class="showcase-item">
+                <b>Email Address</b>
+                <span data-user-email>Loading...</span>
+              </div>
+              <div class="showcase-item">
+                <b>Current Plan</b>
+                <span class="plan-indicator" style="margin-top: 8px;">Basic</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel large">
+            <div class="panel-head">
+              <div>
+                <h3>Account Details</h3>
+                <p>Additional information about your account status and activity.</p>
+              </div>
+            </div>
+            <div class="settings-stack">
+              <div class="settings-row">
+                 <span>Account ID</span>
+                 <code id="accountId" style="font-size: 12px; color: var(--muted);">Loading...</code>
+              </div>
+              <div class="settings-row">
+                 <span>Member Since</span>
+                 <span id="memberSince">Loading...</span>
+              </div>
+              <div class="settings-row">
+                 <span>Last Sign In</span>
+                 <span id="lastSignIn">Loading...</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel side">
+            <div class="panel-head">
+              <div>
+                <h3>Security</h3>
+                <p>Manage your account security.</p>
+              </div>
+            </div>
+            <div style="margin-top: 10px; display: grid; gap: 10px;">
+              <button class="primary-button" id="changePassword" type="button" style="width: 100%;">Change Password</button>
+              <button class="primary-button danger-button" id="signOutBtn" type="button" style="width: 100%;">Sign Out</button>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <script src="../components/sidebar.js"></script>
+    <script src="../js/script.js"></script>
+    <script type="module">
+      import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
+      import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+      import { firebaseConfig } from "../js/firebase-config.js";
+
+      const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          document.getElementById("accountId").textContent = user.uid;
+          document.getElementById("memberSince").textContent = new Date(user.metadata.creationTime).toLocaleDateString();
+          document.getElementById("lastSignIn").textContent = new Date(user.metadata.lastSignInTime).toLocaleString();
+
+          document.querySelectorAll("[data-user-name]").forEach(el => el.textContent = user.displayName || user.email.split("@")[0]);
+          document.querySelectorAll("[data-user-email]").forEach(el => el.textContent = user.email);
+        } else {
+          window.location.replace("../login.html");
+        }
+      });
+
+      document.getElementById("signOutBtn").addEventListener("click", () => {
+        signOut(auth).then(() => {
+          window.location.replace("../login.html");
+        });
+      });
+
+      document.getElementById("changePassword").addEventListener("click", () => {
+          alert("Password reset email sent if supported by your current auth provider.");
+      });
+    </script>
+  </body>
+</html>
