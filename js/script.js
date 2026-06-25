@@ -199,10 +199,6 @@ function initCharts() {
   if (document.getElementById("viewsChart")) {
     drawLineChart("viewsChart", [], [], []);
   }
-
-  if (document.getElementById("mixChart")) {
-    drawBarChart("mixChart", []);
-  }
 }
 
 window.addEventListener("resize", initCharts);

@@ -505,28 +505,6 @@ function renderTrafficSources(overviewData) {
   }).join("");
 }
 
-function renderMomentumMix(connection, overviewData) {
-  if (!document.getElementById("mixChart") || typeof window.drawBarChart !== "function") return;
-  const analyticsSummary = connection?.analyticsSummary || {};
-  const dailySummary = summarizeDaily(overviewData?.daily || []);
-  const views = dailySummary.views || numberValue(analyticsSummary.views) || 0;
-  const watchHoursValue = (dailySummary.watchMinutes || numberValue(analyticsSummary.estimatedMinutesWatched) || 0) / 60;
-  const subscribers = dailySummary.subscribers || numberValue(analyticsSummary.subscribersGained) || 0;
-  const values = [views, watchHoursValue, Math.max(0, subscribers)];
-  const max = Math.max(...values, 1);
-
-  if (!values.some((value) => value > 0)) {
-    window.drawBarChart("mixChart", []);
-    return;
-  }
-
-  window.drawBarChart("mixChart", [
-    ["Views", Math.round((views / max) * 100), "#0f8b8d", compactNumber(views)],
-    ["Watch", Math.round((watchHoursValue / max) * 100), "#3267d6", `${compactNumber(watchHoursValue)}h`],
-    ["Subs", Math.round((Math.max(0, subscribers) / max) * 100), "#2f9b6c", compactNumber(Math.max(0, subscribers))]
-  ], 100);
-}
-
 function renderHealth(connection, overviewData) {
   if (!connection) {
     setProgress("watch-hours", 0, emptyValue);
@@ -669,7 +647,6 @@ function renderOverviewData(connection, overviewData = null) {
   renderViewsTrend(overviewData);
   renderSparklineData(overviewData);
   renderTrafficSources(overviewData);
-  renderMomentumMix(connection, overviewData);
   renderHealth(connection, overviewData);
   renderActivity(connection, overviewData);
   renderVideoTable(overviewData);
