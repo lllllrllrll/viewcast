@@ -47,9 +47,44 @@
             <h2>Creator Analytics</h2>
           </div>
           <div class="actions">
-            <button class="icon-button" type="button" aria-label="Notifications" title="Notifications">
-              <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-            </button>
+            <div class="notification-wrap">
+              <button class="icon-button" id="notifButton" type="button" aria-label="Notifications" title="Notifications">
+                <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+                <span class="notif-badge"></span>
+              </button>
+              <div class="notif-dropdown" id="notifDropdown" hidden>
+                <div class="notif-header">
+                  <h4>Notifications</h4>
+                  <button id="markRead">Mark all read</button>
+                </div>
+                <div class="notif-list">
+                  <div class="notif-item unread">
+                    <div class="notif-icon teal"><svg viewBox="0 0 24 24"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg></div>
+                    <div class="notif-body">
+                      <p><strong>Views Spike</strong>: Your latest video is trending higher than usual.</p>
+                      <time>2 mins ago</time>
+                    </div>
+                  </div>
+                  <div class="notif-item unread">
+                    <div class="notif-icon blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+                    <div class="notif-body">
+                      <p><strong>Milestone Reached</strong>: You just passed 50k total views!</p>
+                      <time>1 hour ago</time>
+                    </div>
+                  </div>
+                  <div class="notif-item">
+                    <div class="notif-icon amber"><svg viewBox="0 0 24 24"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9" /><path d="M7 20h10" /><path d="M12 16v4" /></svg></div>
+                    <div class="notif-body">
+                      <p><strong>New Analysis Ready</strong>: Success Predictor results for "Draft 2" are in.</p>
+                      <time>5 hours ago</time>
+                    </div>
+                  </div>
+                </div>
+                <div class="notif-footer">
+                  <a href="#">See all activity</a>
+                </div>
+              </div>
+            </div>
           </div>
         </header>
 

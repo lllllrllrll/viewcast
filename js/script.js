@@ -317,7 +317,37 @@ function initCharts() {
 }
 
 window.addEventListener("resize", initCharts);
-document.addEventListener("DOMContentLoaded", initCharts);
+document.addEventListener("DOMContentLoaded", () => {
+  initCharts();
+
+  // Notification Toggle Logic
+  const notifButton = document.getElementById("notifButton");
+  const notifDropdown = document.getElementById("notifDropdown");
+  const markRead = document.getElementById("markRead");
+  const notifBadge = document.querySelector(".notif-badge");
+
+  if (notifButton && notifDropdown) {
+    notifButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      notifDropdown.hidden = !notifDropdown.hidden;
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!notifDropdown.contains(e.target) && e.target !== notifButton) {
+        notifDropdown.hidden = true;
+      }
+    });
+
+    if (markRead) {
+      markRead.addEventListener("click", () => {
+        document.querySelectorAll(".notif-item.unread").forEach(item => {
+          item.classList.remove("unread");
+        });
+        if (notifBadge) notifBadge.hidden = true;
+      });
+    }
+  }
+});
 
 import("./auth.js").catch((error) => {
   console.error("Authentication failed to initialize.", error);
