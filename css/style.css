@@ -73,10 +73,21 @@ body.settings-dark {
   --shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
 }
 
+body.settings-dark .modal-overlay {
+  background: rgba(0, 0, 0, 0.75);
+}
+
 body.settings-dark .sidebar,
 body.settings-dark .metric-card,
-body.settings-dark .panel {
+body.settings-dark .panel,
+body.settings-dark .modal-card,
+body.settings-dark .plan-card {
   background: rgba(24, 35, 45, 0.92);
+}
+
+body.settings-dark .plan-badge {
+  background: rgba(15, 139, 141, 0.2);
+  color: #26c2c5;
 }
 
 body:not([data-public-page]) .app {
