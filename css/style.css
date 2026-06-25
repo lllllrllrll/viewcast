@@ -1732,6 +1732,7 @@ body.settings-dark .plan-card li strong {
 .notif-icon.teal { background: var(--teal-soft); color: #0d6869; }
 .notif-icon.blue { background: #e6edff; color: var(--blue); }
 .notif-icon.amber { background: #fff1d8; color: var(--amber); }
+.notif-icon.rose { background: #ffe7ec; color: var(--rose); }
 
 .notif-icon svg {
   width: 16px;
@@ -1752,17 +1753,22 @@ body.settings-dark .plan-card li strong {
   color: var(--muted);
 }
 
+.notif-empty {
+  padding: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .notif-footer {
   padding: 12px;
   text-align: center;
   background: var(--bg);
 }
 
-.notif-footer a {
+.notif-footer span {
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
-  text-decoration: none;
 }
-
 

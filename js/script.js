@@ -344,6 +344,7 @@ document.addEventListener("DOMContentLoaded", () => {
           item.classList.remove("unread");
         });
         if (notifBadge) notifBadge.hidden = true;
+        markRead.hidden = true;
       });
     }
   }

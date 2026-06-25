@@ -614,6 +614,75 @@ function renderVideoTable(overviewData) {
   }).join("");
 }
 
+function recentUploadAverage(videos, selectedVideoId = "") {
+  const values = videos
+    .filter((video) => video.id !== selectedVideoId)
+    .map((video) => numberValue(video.statistics?.viewCount))
+    .filter((value) => value !== null);
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function performanceNotificationItems(overviewData) {
+  const videos = overviewData?.videos || [];
+  if (videos.length < 2) return [];
+
+  return videos.reduce((items, video) => {
+    const views = numberValue(video.statistics?.viewCount);
+    const average = recentUploadAverage(videos, video.id);
+    if (views === null || !average) return items;
+
+    const ratio = views / average;
+    const title = video.snippet?.title || "Recent upload";
+    if (ratio >= 1.15) {
+      items.push({
+        tone: "teal",
+        title: "Above Average",
+        body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
+        time: "Daily scan"
+      });
+    } else if (ratio <= 0.85) {
+      items.push({
+        tone: "rose",
+        title: "Below Average",
+        body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
+        time: "Daily scan"
+      });
+    }
+
+    return items;
+  }, []).slice(0, 3);
+}
+
+function renderPerformanceNotifications(overviewData) {
+  const container = document.querySelector("[data-performance-notifications]");
+  const badge = document.querySelector(".notif-badge");
+  const markRead = document.getElementById("markRead");
+  if (!container) return;
+
+  const items = performanceNotificationItems(overviewData);
+  if (!items.length) {
+    container.innerHTML = '<div class="notif-empty">No upload performance alerts yet.</div>';
+    if (badge) badge.hidden = true;
+    if (markRead) markRead.hidden = true;
+    return;
+  }
+
+  container.innerHTML = items.map((item) => `
+    <div class="notif-item unread">
+      <div class="notif-icon ${item.tone}">
+        <svg viewBox="0 0 24 24"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg>
+      </div>
+      <div class="notif-body">
+        <p><strong>${escapeHtml(item.title)}</strong>: ${escapeHtml(item.body)}</p>
+        <time>${escapeHtml(item.time)}</time>
+      </div>
+    </div>
+  `).join("");
+  if (badge) badge.hidden = false;
+  if (markRead) markRead.hidden = false;
+}
+
 function renderOverviewData(connection, overviewData = null) {
   const analyticsSummary = connection?.analyticsSummary || {};
   const channel = connection?.channel || {};
@@ -652,6 +721,7 @@ function renderOverviewData(connection, overviewData = null) {
   renderHealth(connection, overviewData);
   renderActivity(connection, overviewData);
   renderVideoTable(overviewData);
+  renderPerformanceNotifications(overviewData);
 }
 
 function escapeHtml(value) {
