@@ -90,6 +90,10 @@ body.settings-dark .plan-badge {
   color: #26c2c5;
 }
 
+body.settings-dark .modal-card .primary-button {
+  color: white !important;
+}
+
 body:not([data-public-page]) .app {
   visibility: hidden;
 }
