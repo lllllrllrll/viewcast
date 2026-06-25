@@ -96,8 +96,8 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
 
   const all = actual.concat(forecast).filter(Number.isFinite);
   if (all.length < 2) return;
-  const min = Math.min(...all) - 8;
-  const max = Math.max(...all) + 10;
+  const min = 0;
+  const max = Math.max(...all) * 1.2; // 20% headroom for a better look
 
   ctx.strokeStyle = colors.line;
   ctx.lineWidth = 1;
