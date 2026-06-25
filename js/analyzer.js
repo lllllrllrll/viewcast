@@ -226,7 +226,8 @@ function parseVideoId(value) {
       const id = url.pathname.split("/").filter(Boolean)[0];
       return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
     }
-    if (url.searchParams.get("v")) return url.searchParams.get("v");
+    const watchId = url.searchParams.get("v");
+    if (watchId) return /^[a-zA-Z0-9_-]{11}$/.test(watchId) ? watchId : "";
     const shorts = url.pathname.match(/\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})/);
     if (shorts) return shorts[2];
   } catch (error) {
@@ -681,6 +682,12 @@ async function analyzeVideo(event) {
   await analyzeVideoById(videoId);
 }
 
+function initialVideoIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const rawVideo = params.get("video") || params.get("v") || "";
+  return parseVideoId(rawVideo);
+}
+
 async function loadVideoLibrary({allowPrompt = false} = {}) {
   if (!currentUser) return;
 
@@ -746,6 +753,8 @@ if (form && firebaseConfigured) {
       setLibraryStatus("Loading your linked channel uploads...");
     }
     loadVideoLibrary({allowPrompt: false});
+    const initialVideoId = initialVideoIdFromUrl();
+    if (initialVideoId) analyzeVideoById(initialVideoId);
   });
   form.addEventListener("submit", analyzeVideo);
   videoLibrary?.addEventListener("click", (event) => {

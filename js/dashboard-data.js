@@ -649,6 +649,7 @@ function performanceNotificationItems(overviewData) {
   const scanTime = timeAgo(overviewData.latestVideoScannedAt);
   if (ratio >= 1.15) {
     return [{
+      videoId: latestVideo.id,
       tone: "teal",
       title: "Latest Upload Above Average",
       body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
@@ -658,6 +659,7 @@ function performanceNotificationItems(overviewData) {
 
   if (ratio <= 0.85) {
     return [{
+      videoId: latestVideo.id,
       tone: "rose",
       title: "Latest Upload Below Average",
       body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
@@ -683,7 +685,7 @@ function renderPerformanceNotifications(overviewData) {
   }
 
   container.innerHTML = items.map((item) => `
-    <div class="notif-item unread">
+    <a class="notif-item unread" href="pages/analyzer.html?video=${encodeURIComponent(item.videoId)}">
       <div class="notif-icon ${item.tone}">
         <svg viewBox="0 0 24 24"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg>
       </div>
@@ -691,7 +693,7 @@ function renderPerformanceNotifications(overviewData) {
         <p><strong>${escapeHtml(item.title)}</strong>: ${escapeHtml(item.body)}</p>
         <time>${escapeHtml(item.time)}</time>
       </div>
-    </div>
+    </a>
   `).join("");
   if (badge) badge.hidden = false;
   if (markRead) markRead.hidden = false;

@@ -1708,7 +1708,9 @@ body.settings-dark .plan-card li strong {
   gap: 12px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--line);
+  color: inherit;
   cursor: pointer;
+  text-decoration: none;
   transition: background 0.2s;
 }
 
@@ -1771,4 +1773,3 @@ body.settings-dark .plan-card li strong {
   font-weight: 600;
   color: var(--muted);
 }
-
