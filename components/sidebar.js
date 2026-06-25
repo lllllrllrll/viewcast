@@ -7,12 +7,6 @@
       icon: '<path d="M3 13h8V3H3z" /><path d="M13 21h8V11h-8z" /><path d="M13 3h8v6h-8z" /><path d="M3 21h8v-6H3z" />'
     },
     {
-      id: "trends",
-      label: "Trends",
-      file: "trends.html",
-      icon: '<path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" />'
-    },
-    {
       id: "analyzer",
       label: "Video Analyzer",
       file: "analyzer.html",
@@ -29,18 +23,6 @@
       label: "AI Insights",
       file: "insights.html",
       icon: '<path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /><path d="M9 21h6" /><path d="M10 17h4" />'
-    },
-    {
-      id: "audience",
-      label: "Audience",
-      file: "audience.html",
-      icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />'
-    },
-    {
-      id: "retention",
-      label: "Retention",
-      file: "retention.html",
-      icon: '<path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" />'
     },
     {
       id: "settings",
