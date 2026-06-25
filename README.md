@@ -66,4 +66,3 @@ The dashboard requests these scopes: `youtube.readonly` and `yt-analytics.readon
 - Replace blank metric, chart, and table states only after real YouTube or Firebase data is connected.
 
 ### Bugs
-- Fix the avg. view duration not showing
