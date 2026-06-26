@@ -111,16 +111,27 @@ function saveCachedAccessToken(accessToken) {
 }
 
 async function syncConnectionsFromFirestore(user) {
-  const snapshot = await getDoc(doc(db, "users", user.uid));
-  const data = snapshot.exists() ? snapshot.data() : {};
-  const connections = data.youtubeConnections || [];
+  try {
+    const snapshot = await getDoc(doc(db, "users", user.uid));
+    const data = snapshot.exists() ? snapshot.data() : {};
+    let connections = data.youtubeConnections || [];
 
-  // Legacy support for single connection
-  if (data.youtubeConnection && !connections.some(c => c.channel.id === data.youtubeConnection.channel.id)) {
-    connections.push(data.youtubeConnection);
+    // Legacy support for single connection
+    if (data.youtubeConnection && !connections.some(c => c.channel.id === data.youtubeConnection.channel.id)) {
+      connections.push(data.youtubeConnection);
+    }
+
+    // Merge with local connections if Firestore is empty (prevent accidental wipe)
+    if (connections.length === 0) {
+      const local = readAllConnections();
+      if (local.length > 0) connections = local;
+    }
+
+    saveConnections(connections, readActiveConnection()?.channel?.id);
+  } catch (e) {
+    console.error("Sync failed:", e);
+    updateUI();
   }
-
-  saveConnections(connections, readActiveConnection()?.channel?.id);
 }
 
 function createProvider() {
@@ -198,16 +209,22 @@ async function connectYouTube() {
     if (existingIdx > -1) connections[existingIdx] = newConn;
     else connections.push(newConn);
 
-    await updateDoc(doc(db, "users", currentUser.uid), {
+    await setDoc(doc(db, "users", currentUser.uid), {
       youtubeConnections: connections,
       updatedAt: serverTimestamp()
-    });
+    }, { merge: true });
 
     saveConnections(connections, channel.id);
     window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", { detail: newConn }));
   } catch (error) {
-    console.error(error);
+    console.error("Connect failed:", error);
     setButton("Link New Channel");
+    // Show error to user
+    const prompt = document.getElementById("connectionPrompt");
+    if (prompt) {
+      prompt.textContent = "Failed to link channel: " + (error.message || "Unknown error");
+      prompt.style.color = "var(--rose)";
+    }
   }
 }
 
