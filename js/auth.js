@@ -161,6 +161,8 @@ function addAccountControl(user) {
   const footer = document.querySelector(".sidebar-footer");
   if (!footer || document.getElementById("accountControl")) return;
 
+  const plan = (localStorage.getItem("viewcast:plan") || "basic").charAt(0).toUpperCase() + (localStorage.getItem("viewcast:plan") || "basic").slice(1);
+
   const wrapper = document.createElement("div");
   wrapper.className = "account-control";
   wrapper.id = "accountControl";
@@ -168,7 +170,7 @@ function addAccountControl(user) {
     <div class="account-avatar" aria-hidden="true"></div>
     <div class="account-details">
       <strong></strong>
-      <div class="plan-indicator">Basic</div>
+      <div class="plan-indicator">${plan}</div>
       <span></span>
     </div>
     <button class="account-signout" type="button" title="Sign out" aria-label="Sign out">

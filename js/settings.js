@@ -200,6 +200,13 @@
     planModal.hidden = false;
   });
 
+  // Check for auto-upgrade prompt
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("upgrade") === "limit") {
+    if (planModal) planModal.hidden = false;
+    showStatus("You've reached the monthly analysis limit for the Basic plan. Upgrade to continue.");
+  }
+
   closeModal?.addEventListener("click", () => {
     planModal.hidden = true;
   });

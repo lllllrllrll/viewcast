@@ -665,6 +665,17 @@ async function analyzeVideoById(videoId) {
     return;
   }
 
+  // Check plan limits
+  const plan = localStorage.getItem("viewcast:plan") || "basic";
+  if (plan === "basic") {
+    const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
+    const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+    if (usage?.month === currentMonth && usage.count >= 5) {
+      window.location.href = "settings.html?upgrade=limit";
+      return;
+    }
+  }
+
   const requestId = ++analysisRequestId;
 
   try {

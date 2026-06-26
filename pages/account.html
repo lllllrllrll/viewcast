@@ -37,7 +37,7 @@
               </div>
               <div class="showcase-item">
                 <b>Current Plan</b>
-                <span class="plan-indicator" style="margin-top: 8px;">Basic</span>
+                <span class="plan-indicator" id="planLabel" style="margin-top: 8px;">Basic</span>
               </div>
             </div>
           </article>
@@ -92,6 +92,8 @@
 
       onAuthStateChanged(auth, (user) => {
         if (user) {
+          const plan = (localStorage.getItem("viewcast:plan") || "basic").charAt(0).toUpperCase() + (localStorage.getItem("viewcast:plan") || "basic").slice(1);
+          document.getElementById("planLabel").textContent = plan;
           document.getElementById("accountId").textContent = user.uid;
           document.getElementById("memberSince").textContent = new Date(user.metadata.creationTime).toLocaleDateString();
           document.getElementById("lastSignIn").textContent = new Date(user.metadata.lastSignInTime).toLocaleString();
