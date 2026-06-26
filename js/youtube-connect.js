@@ -73,7 +73,18 @@ function setUnlinkButton({visible = false, disabled = false} = {}) {
 
 function readAllConnections() {
   try {
-    return JSON.parse(localStorage.getItem(allConnectionsKey) || "[]");
+    let connections = JSON.parse(localStorage.getItem(allConnectionsKey) || "[]");
+
+    // Migration: If all connections is empty but we have an active one, wrap it
+    if (connections.length === 0) {
+      const active = JSON.parse(localStorage.getItem(activeConnectionKey) || "null");
+      if (active && active.channel) {
+        connections = [active];
+        localStorage.setItem(allConnectionsKey, JSON.stringify(connections));
+      }
+    }
+
+    return connections;
   } catch (e) {
     return [];
   }
