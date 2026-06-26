@@ -54,15 +54,15 @@
     }
   }
 
-  function currentUsageMonth() {
+  function currentUsageDay() {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }
 
   function readVideosAnalyzed() {
     try {
       const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
-      return usage?.month === currentUsageMonth() ? Number(usage.count) || 0 : 0;
+      return usage?.day === currentUsageDay() ? Number(usage.count) || 0 : 0;
     } catch (error) {
       localStorage.removeItem("viewcastVideosAnalyzed");
       return 0;
@@ -206,7 +206,7 @@
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("upgrade") === "limit") {
     if (typeof window.showPlanModal === "function") {
-      window.showPlanModal("You've reached the monthly analysis limit for the Basic plan. Upgrade to continue.");
+      window.showPlanModal("You've reached the daily analysis limit for the Basic plan. Upgrade to continue.");
     }
   }
 })();

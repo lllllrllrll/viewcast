@@ -762,10 +762,10 @@ async function analyzeVideoById(videoId) {
   const plan = localStorage.getItem("viewcast:plan") || "basic";
   if (plan === "basic") {
     const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
-    const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-    if (usage?.month === currentMonth && usage.count >= 5) {
+    const currentDay = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+    if (usage?.day === currentDay && usage.count >= 5) {
       if (typeof window.showPlanModal === "function") {
-        window.showPlanModal("You've reached the monthly analysis limit for the Basic plan. Upgrade to continue.");
+        window.showPlanModal("You've reached the daily analysis limit for the Basic plan. Upgrade to continue.");
       } else {
         window.location.href = "settings.html?upgrade=limit";
       }

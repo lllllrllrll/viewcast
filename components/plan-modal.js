@@ -12,7 +12,7 @@
             <h4>Basic</h4>
             <div class="plan-price">$0<span>/mo</span></div>
             <ul>
-              <li>5 Video analyses / month</li>
+              <li>5 Video analyses / day</li>
               <li>Basic channel tracking</li>
               <li>1 Channel connection</li>
               <li>Community support</li>

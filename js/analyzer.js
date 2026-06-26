@@ -169,17 +169,17 @@ function saveCachedVideos(videos) {
   }));
 }
 
-function usageMonth() {
+function usageDay() {
   const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 function recordVideoAnalysis() {
   const key = "viewcastVideosAnalyzed";
-  let usage = {month: usageMonth(), count: 0};
+  let usage = {day: usageDay(), count: 0};
   try {
     const saved = JSON.parse(localStorage.getItem(key) || "null");
-    if (saved?.month === usage.month) usage.count = Number(saved.count) || 0;
+    if (saved?.day === usage.day) usage.count = Number(saved.count) || 0;
   } catch (error) {
     localStorage.removeItem(key);
   }
@@ -669,10 +669,10 @@ async function analyzeVideoById(videoId) {
   const plan = localStorage.getItem("viewcast:plan") || "basic";
   if (plan === "basic") {
     const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
-    const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-    if (usage?.month === currentMonth && usage.count >= 5) {
+    const currentDay = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+    if (usage?.day === currentDay && usage.count >= 5) {
       if (typeof window.showPlanModal === "function") {
-        window.showPlanModal("You've reached the monthly analysis limit for the Basic plan. Upgrade to continue.");
+        window.showPlanModal("You've reached the daily analysis limit for the Basic plan. Upgrade to continue.");
       } else {
         window.location.href = "settings.html?upgrade=limit";
       }
