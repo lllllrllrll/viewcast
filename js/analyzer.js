@@ -671,7 +671,11 @@ async function analyzeVideoById(videoId) {
     const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
     const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
     if (usage?.month === currentMonth && usage.count >= 5) {
-      window.location.href = "settings.html?upgrade=limit";
+      if (typeof window.showPlanModal === "function") {
+        window.showPlanModal("You've reached the monthly analysis limit for the Basic plan. Upgrade to continue.");
+      } else {
+        window.location.href = "settings.html?upgrade=limit";
+      }
       return;
     }
   }

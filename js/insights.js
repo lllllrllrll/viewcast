@@ -750,6 +750,29 @@ async function loadVideoAnalysisWithRetry(videoId) {
 
 async function analyzeVideoById(videoId) {
   if (!videoId) return;
+
+  // Check if channel is linked before analyzing
+  const connection = localStorage.getItem("viewcastYouTubeConnection");
+  if (!connection) {
+    window.location.href = "channel.html?link=required";
+    return;
+  }
+
+  // Check plan limits
+  const plan = localStorage.getItem("viewcast:plan") || "basic";
+  if (plan === "basic") {
+    const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
+    const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+    if (usage?.month === currentMonth && usage.count >= 5) {
+      if (typeof window.showPlanModal === "function") {
+        window.showPlanModal("You've reached the monthly analysis limit for the Basic plan. Upgrade to continue.");
+      } else {
+        window.location.href = "settings.html?upgrade=limit";
+      }
+      return;
+    }
+  }
+
   const requestId = ++analysisRequestId;
 
   try {

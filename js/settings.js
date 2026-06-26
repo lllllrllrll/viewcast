@@ -197,21 +197,16 @@
   });
 
   upgradeButton?.addEventListener("click", () => {
-    planModal.hidden = false;
+    if (typeof window.showPlanModal === "function") {
+      window.showPlanModal();
+    }
   });
 
   // Check for auto-upgrade prompt
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("upgrade") === "limit") {
-    if (planModal) planModal.hidden = false;
-    showStatus("You've reached the monthly analysis limit for the Basic plan. Upgrade to continue.");
+    if (typeof window.showPlanModal === "function") {
+      window.showPlanModal("You've reached the monthly analysis limit for the Basic plan. Upgrade to continue.");
+    }
   }
-
-  closeModal?.addEventListener("click", () => {
-    planModal.hidden = true;
-  });
-
-  planModal?.addEventListener("click", (e) => {
-    if (e.target === planModal) planModal.hidden = true;
-  });
 })();
