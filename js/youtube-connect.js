@@ -7,12 +7,12 @@ import {
   reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {
-  deleteField,
+  arrayRemove,
+  arrayUnion,
   doc,
   getDoc,
   getFirestore,
   serverTimestamp,
-  setDoc,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
@@ -24,13 +24,18 @@ const scopes = [
 
 const connectButton = document.getElementById("connectYouTube");
 const unlinkButton = document.getElementById("unlinkYouTube");
-const connectionStorageKey = "viewcastYouTubeConnection";
+const channelSelector = document.getElementById("channelSelector");
+const channelSelectorWrap = document.getElementById("channelSelectorWrap");
+
+const allConnectionsKey = "viewcastYouTubeAllConnections";
+const activeConnectionKey = "viewcastYouTubeConnection";
 const channelStorageKey = "viewcastYouTubeChannel";
 const tokenStorageKey = "viewcastYouTubeAccessToken";
+
 let currentUser = null;
 let auth = null;
 let db = null;
-let hasLinkedChannel = false;
+let linkedConnections = [];
 
 function setButton(label, disabled = false) {
   if (!connectButton) return;
@@ -41,29 +46,59 @@ function setButton(label, disabled = false) {
   connectButton.disabled = disabled;
 }
 
-function setUnlinkButton({visible = hasLinkedChannel, disabled = false} = {}) {
+function updateUI() {
+  const active = readActiveConnection();
+  const connections = readAllConnections();
+
+  if (connections.length > 0) {
+    channelSelectorWrap.hidden = false;
+    channelSelector.innerHTML = connections.map(conn =>
+      `<option value="${conn.channel.id}" ${active?.channel?.id === conn.channel.id ? 'selected' : ''}>${conn.channel.title}</option>`
+    ).join("");
+
+    setUnlinkButton({visible: true, disabled: false});
+    setButton("Link New Channel");
+  } else {
+    channelSelectorWrap.hidden = true;
+    setUnlinkButton({visible: false, disabled: true});
+    setButton("Connect YouTube");
+  }
+}
+
+function setUnlinkButton({visible = false, disabled = false} = {}) {
   if (!unlinkButton) return;
   unlinkButton.hidden = !visible;
   unlinkButton.disabled = disabled;
 }
 
-function readSavedConnection() {
+function readAllConnections() {
   try {
-    const savedConnection = JSON.parse(localStorage.getItem(connectionStorageKey) || "null");
-    if (savedConnection?.channel) return savedConnection;
+    return JSON.parse(localStorage.getItem(allConnectionsKey) || "[]");
+  } catch (e) {
+    return [];
+  }
+}
 
-    const savedChannel = JSON.parse(localStorage.getItem(channelStorageKey) || "null");
-    return savedChannel ? {channel: savedChannel, analyticsSummary: {}} : null;
-  } catch (error) {
-    localStorage.removeItem(connectionStorageKey);
-    localStorage.removeItem(channelStorageKey);
+function readActiveConnection() {
+  try {
+    return JSON.parse(localStorage.getItem(activeConnectionKey) || "null");
+  } catch (e) {
     return null;
   }
 }
 
-function saveCachedConnection(connection) {
-  localStorage.setItem(connectionStorageKey, JSON.stringify(connection));
-  localStorage.setItem(channelStorageKey, JSON.stringify(connection.channel || {}));
+function saveConnections(connections, activeId = null) {
+  localStorage.setItem(allConnectionsKey, JSON.stringify(connections));
+
+  let active = connections.find(c => c.channel.id === activeId) || connections[0] || null;
+  if (active) {
+    localStorage.setItem(activeConnectionKey, JSON.stringify(active));
+    localStorage.setItem(channelStorageKey, JSON.stringify(active.channel));
+  } else {
+    localStorage.removeItem(activeConnectionKey);
+    localStorage.removeItem(channelStorageKey);
+  }
+  updateUI();
 }
 
 function saveCachedAccessToken(accessToken) {
@@ -75,61 +110,40 @@ function saveCachedAccessToken(accessToken) {
   }));
 }
 
-async function getSavedConnection(user) {
-  const cachedConnection = readSavedConnection();
-  if (cachedConnection?.channel?.id || cachedConnection?.channel?.url || cachedConnection?.channel?.title) {
-    return cachedConnection;
+async function syncConnectionsFromFirestore(user) {
+  const snapshot = await getDoc(doc(db, "users", user.uid));
+  const data = snapshot.exists() ? snapshot.data() : {};
+  const connections = data.youtubeConnections || [];
+
+  // Legacy support for single connection
+  if (data.youtubeConnection && !connections.some(c => c.channel.id === data.youtubeConnection.channel.id)) {
+    connections.push(data.youtubeConnection);
   }
 
-  const snapshot = await getDoc(doc(db, "users", user.uid));
-  const profile = snapshot.exists() ? snapshot.data() : {};
-  const connection = profile.youtubeConnection || null;
-  if (connection?.channel) return connection;
-  if (profile.youtubeChannelUrl || profile.youtubeChannelTitle) {
-    return {
-      channel: {
-        url: profile.youtubeChannelUrl || "",
-        title: profile.youtubeChannelTitle || ""
-      },
-      analyticsSummary: {}
-    };
-  }
-  return null;
+  saveConnections(connections, readActiveConnection()?.channel?.id);
 }
 
 function createProvider() {
   const provider = new GoogleAuthProvider();
   scopes.forEach((scope) => provider.addScope(scope));
-  provider.setCustomParameters({include_granted_scopes: "true"});
+  provider.setCustomParameters({include_granted_scopes: "true", prompt: "select_account"});
   return provider;
-}
-
-function userHasGoogleProvider(user) {
-  return user.providerData.some((provider) => provider.providerId === "google.com");
 }
 
 async function connectGoogleProvider(user) {
   const provider = createProvider();
-  try {
-    return userHasGoogleProvider(user)
-      ? reauthenticateWithPopup(user, provider)
-      : linkWithPopup(user, provider);
-  } catch (error) {
+  return linkWithPopup(user, provider).catch(error => {
     if (error.code === "auth/provider-already-linked") {
       return reauthenticateWithPopup(user, provider);
     }
     throw error;
-  }
+  });
 }
 
 async function fetchJson(url, accessToken) {
-  const response = await fetch(url, {
-    headers: {Authorization: `Bearer ${accessToken}`}
-  });
+  const response = await fetch(url, { headers: {Authorization: `Bearer ${accessToken}`} });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error?.message || "YouTube API request failed.");
-  }
+  if (!response.ok) throw new Error(payload.error?.message || "YouTube API request failed.");
   return payload;
 }
 
@@ -137,11 +151,9 @@ async function fetchChannel(accessToken) {
   const url = new URL("https://www.googleapis.com/youtube/v3/channels");
   url.searchParams.set("part", "snippet,statistics");
   url.searchParams.set("mine", "true");
-
   const payload = await fetchJson(url, accessToken);
   const channel = payload.items?.[0];
-  if (!channel) throw new Error("No YouTube channel was found for this Google account.");
-
+  if (!channel) throw new Error("No YouTube channel found.");
   return {
     id: channel.id,
     title: channel.snippet?.title || "",
@@ -154,113 +166,66 @@ async function fetchChannel(accessToken) {
 }
 
 async function fetchAnalyticsSummary(accessToken) {
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(endDate.getDate() - 28);
-
-  const formatDate = (date) => date.toISOString().slice(0, 10);
+  const endDate = new Date().toISOString().slice(0, 10);
+  const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
   url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", formatDate(startDate));
-  url.searchParams.set("endDate", formatDate(endDate));
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
   url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,subscribersGained");
-
   try {
     const payload = await fetchJson(url, accessToken);
-    const [views, estimatedMinutesWatched, averageViewDuration, subscribersGained] =
-      payload.rows?.[0] || [];
-    return {
-      views: views || 0,
-      estimatedMinutesWatched: estimatedMinutesWatched || 0,
-      averageViewDuration: averageViewDuration || 0,
-      subscribersGained: subscribersGained || 0
-    };
-  } catch (error) {
-    console.warn("YouTube Analytics summary was not available yet.", error);
-    return null;
-  }
-}
-
-async function saveYouTubeConnection({channel, analyticsSummary}) {
-  await setDoc(
-    doc(db, "users", currentUser.uid),
-    {
-      youtubeConnection: {
-        channel,
-        analyticsSummary,
-        scopes,
-        connectedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      },
-      youtubeChannelUrl: channel.url,
-      youtubeChannelTitle: channel.title,
-      updatedAt: serverTimestamp()
-    },
-    {merge: true}
-  );
+    const [views, minutes, avd, subs] = payload.rows?.[0] || [];
+    return { views: views || 0, estimatedMinutesWatched: minutes || 0, averageViewDuration: avd || 0, subscribersGained: subs || 0 };
+  } catch (e) { return null; }
 }
 
 async function connectYouTube() {
   if (!currentUser) return;
-
   try {
     setButton("Connecting...", true);
-    setUnlinkButton({visible: hasLinkedChannel, disabled: true});
     const result = await connectGoogleProvider(currentUser);
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error("Google did not return a YouTube access token.");
-    }
+    if (!credential?.accessToken) throw new Error("No access token returned.");
 
     saveCachedAccessToken(credential.accessToken);
     const channel = await fetchChannel(credential.accessToken);
-    const analyticsSummary = await fetchAnalyticsSummary(credential.accessToken);
-    const connection = {channel, analyticsSummary};
-    await saveYouTubeConnection(connection);
-    saveCachedConnection(connection);
-    hasLinkedChannel = true;
-    setButton(channel.title || "YouTube connected");
-    setUnlinkButton({visible: true, disabled: false});
-    window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", {
-      detail: connection
-    }));
+    const analytics = await fetchAnalyticsSummary(credential.accessToken);
+    const newConn = { channel, analyticsSummary: analytics, connectedAt: Date.now() };
+
+    const connections = readAllConnections();
+    const existingIdx = connections.findIndex(c => c.channel.id === channel.id);
+    if (existingIdx > -1) connections[existingIdx] = newConn;
+    else connections.push(newConn);
+
+    await updateDoc(doc(db, "users", currentUser.uid), {
+      youtubeConnections: connections,
+      updatedAt: serverTimestamp()
+    });
+
+    saveConnections(connections, channel.id);
+    window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", { detail: newConn }));
   } catch (error) {
-    console.error("Could not connect YouTube.", error);
-    setButton("Connect YouTube");
-    setUnlinkButton({visible: hasLinkedChannel, disabled: false});
-    connectButton.title = error.message || "Could not connect YouTube.";
+    console.error(error);
+    setButton("Link New Channel");
   }
 }
 
 async function unlinkYouTube() {
-  if (!currentUser) return;
-
+  const active = readActiveConnection();
+  if (!currentUser || !active) return;
   try {
-    setUnlinkButton({visible: hasLinkedChannel, disabled: true});
-    setButton("Unlinking...", true);
-    try {
-      await updateDoc(doc(db, "users", currentUser.uid), {
-        youtubeConnection: deleteField(),
-        youtubeChannelUrl: deleteField(),
-        youtubeChannelTitle: deleteField(),
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      if (error.code !== "not-found") throw error;
-    }
-    localStorage.removeItem(connectionStorageKey);
-    localStorage.removeItem(channelStorageKey);
-    localStorage.removeItem("viewcastChannelUrl");
-    localStorage.removeItem(tokenStorageKey);
-    hasLinkedChannel = false;
-    setButton("Connect YouTube");
-    setUnlinkButton({visible: false, disabled: true});
+    setUnlinkButton({visible: true, disabled: true});
+    const connections = readAllConnections().filter(c => c.channel.id !== active.channel.id);
+    await updateDoc(doc(db, "users", currentUser.uid), {
+      youtubeConnections: connections,
+      updatedAt: serverTimestamp()
+    });
+    saveConnections(connections);
     window.dispatchEvent(new CustomEvent("viewcast:youtube-unlinked"));
   } catch (error) {
-    console.error("Could not unlink YouTube.", error);
-    setButton("Connect YouTube");
-    setUnlinkButton({visible: hasLinkedChannel, disabled: false});
-    unlinkButton.title = error.message || "Could not unlink YouTube.";
+    console.error(error);
+    setUnlinkButton({visible: true, disabled: false});
   }
 }
 
@@ -271,41 +236,37 @@ if (connectButton && firebaseConfigured) {
 
   onAuthStateChanged(auth, async (user) => {
     currentUser = user;
+    if (!user) {
+      saveConnections([]);
+      setButton("Sign in to connect", true);
+      return;
+    }
 
-    // Check for redirection prompt
     const params = new URLSearchParams(window.location.search);
     if (params.get("link") === "required") {
       const prompt = document.getElementById("connectionPrompt");
       if (prompt) {
-        prompt.textContent = "Please link your YouTube channel before analyzing videos.";
+        prompt.textContent = "Please link a YouTube channel before analyzing videos.";
         prompt.style.color = "var(--rose)";
         prompt.style.fontWeight = "bold";
       }
     }
 
-    if (!user) {
-      hasLinkedChannel = false;
-      setButton("Sign in to connect", true);
-      setUnlinkButton({visible: false, disabled: true});
-      return;
-    }
-
-    setButton("Checking channel...", true);
-    setUnlinkButton({visible: false, disabled: true});
-
     try {
-      const savedConnection = await getSavedConnection(user);
-      hasLinkedChannel = Boolean(savedConnection);
-      setButton(savedConnection?.channel?.title || "Connect YouTube");
-      setUnlinkButton({visible: hasLinkedChannel, disabled: false});
-    } catch (error) {
-      console.error("Could not load YouTube connection.", error);
-      hasLinkedChannel = Boolean(readSavedConnection());
-      setButton("Connect YouTube");
-      setUnlinkButton({visible: hasLinkedChannel, disabled: false});
+      await syncConnectionsFromFirestore(user);
+    } catch (e) {
+      updateUI();
     }
   });
 
   connectButton.addEventListener("click", connectYouTube);
   unlinkButton?.addEventListener("click", unlinkYouTube);
+
+  channelSelector?.addEventListener("change", () => {
+    const connections = readAllConnections();
+    saveConnections(connections, channelSelector.value);
+    window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", {
+      detail: readActiveConnection()
+    }));
+  });
 }

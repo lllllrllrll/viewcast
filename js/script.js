@@ -325,8 +325,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const notifDropdown = document.getElementById("notifDropdown");
   const markRead = document.getElementById("markRead");
   const notifBadge = document.querySelector(".notif-badge");
+  const storageKey = "viewcastNotificationsRead";
 
   if (notifButton && notifDropdown) {
+    // Check if notifications were previously read
+    if (localStorage.getItem(storageKey) === "true") {
+      if (notifBadge) notifBadge.hidden = true;
+      if (markRead) markRead.hidden = true;
+      document.querySelectorAll(".notif-item.unread").forEach(item => {
+        item.classList.remove("unread");
+      });
+    }
+
     notifButton.addEventListener("click", (e) => {
       e.stopPropagation();
       notifDropdown.hidden = !notifDropdown.hidden;
@@ -345,8 +355,17 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         if (notifBadge) notifBadge.hidden = true;
         markRead.hidden = true;
+        localStorage.setItem(storageKey, "true");
       });
     }
+
+    // Reset notifications if a new connection is established (simulating "new upload" trigger)
+    window.addEventListener("viewcast:youtube-connected", () => {
+      localStorage.removeItem(storageKey);
+      if (notifBadge) notifBadge.hidden = false;
+      if (markRead) markRead.hidden = false;
+      // In a real app, you'd fetch fresh notifications here
+    });
   }
 });
 

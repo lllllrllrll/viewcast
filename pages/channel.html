@@ -45,17 +45,22 @@
           <article class="panel large">
             <div class="panel-head">
               <div>
-                <h3>YouTube Connection</h3>
-                <p id="connectionPrompt">Connect YouTube with OAuth, or unlink the saved channel from this workspace.</p>
+                <h3>YouTube Connections</h3>
+                <p id="connectionPrompt">Link multiple channels and swap between them to monitor your entire portfolio.</p>
+              </div>
+              <div id="channelSelectorWrap" hidden>
+                <select class="settings-select" id="channelSelector" aria-label="Select active channel">
+                   <!-- Options added dynamically -->
+                </select>
               </div>
             </div>
             <div class="channel-connect-form">
               <button class="primary-button youtube-connect-button" id="connectYouTube" type="button">
                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-2C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 2C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" /><path d="m10 15 5-3-5-3z" /></svg>
-                Connect YouTube
+                Link New Channel
               </button>
               <button class="primary-button danger-button" id="unlinkYouTube" type="button" hidden disabled>
-                Unlink Channel
+                Unlink Current
               </button>
             </div>
           </article>

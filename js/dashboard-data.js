@@ -12,6 +12,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const emptyValue = "\u00a0";
 const connectionStorageKey = "viewcastYouTubeConnection";
+const allConnectionsKey = "viewcastYouTubeAllConnections";
 const channelStorageKey = "viewcastYouTubeChannel";
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const overviewStorageKeyPrefix = "viewcastOverviewData:";
@@ -129,22 +130,22 @@ function readCachedAccessToken(user) {
   }
 }
 
-function overviewStorageKey(user) {
-  return `${overviewStorageKeyPrefix}${user?.uid || "guest"}`;
+function overviewStorageKey(user, channelId = "guest") {
+  return `${overviewStorageKeyPrefix}${user?.uid || "guest"}:${channelId}`;
 }
 
-function readCachedOverview(user) {
+function readCachedOverview(user, channelId) {
   try {
-    return JSON.parse(localStorage.getItem(overviewStorageKey(user)) || "null");
+    return JSON.parse(localStorage.getItem(overviewStorageKey(user, channelId)) || "null");
   } catch (error) {
-    localStorage.removeItem(overviewStorageKey(user));
+    localStorage.removeItem(overviewStorageKey(user, channelId));
     return null;
   }
 }
 
-function saveCachedOverview(user, data) {
+function saveCachedOverview(user, channelId, data) {
   if (!data) return;
-  localStorage.setItem(overviewStorageKey(user), JSON.stringify({
+  localStorage.setItem(overviewStorageKey(user, channelId), JSON.stringify({
     ...data,
     cachedAt: Date.now()
   }));
@@ -163,23 +164,6 @@ async function fetchJson(url, accessToken) {
   return payload;
 }
 
-function savedConnectionFromProfile(profile = {}) {
-  const connection = profile.youtubeConnection || {};
-  const channel = connection.channel || {};
-  const analyticsSummary = connection.analyticsSummary || {};
-
-  if (!channel.id && !channel.title && !profile.youtubeChannelUrl) return null;
-
-  return {
-    channel: {
-      ...channel,
-      title: channel.title || profile.youtubeChannelTitle || "",
-      url: channel.url || profile.youtubeChannelUrl || ""
-    },
-    analyticsSummary
-  };
-}
-
 function normalizeConnection(value) {
   if (!value) return null;
   if (value.channel) {
@@ -188,28 +172,13 @@ function normalizeConnection(value) {
       analyticsSummary: value.analyticsSummary || {}
     };
   }
-  if (value.id || value.title || value.url) {
-    return {
-      channel: value,
-      analyticsSummary: {}
-    };
-  }
   return null;
 }
 
-function readCachedConnection() {
+function readActiveConnection() {
   try {
-    const savedConnection = normalizeConnection(
-      JSON.parse(localStorage.getItem(connectionStorageKey) || "null")
-    );
-    if (savedConnection) return savedConnection;
-
-    return normalizeConnection(
-      JSON.parse(localStorage.getItem(channelStorageKey) || "null")
-    );
+    return normalizeConnection(JSON.parse(localStorage.getItem(connectionStorageKey) || "null"));
   } catch (error) {
-    localStorage.removeItem(connectionStorageKey);
-    localStorage.removeItem(channelStorageKey);
     return null;
   }
 }
@@ -220,14 +189,12 @@ function saveCachedConnection(connection) {
     localStorage.removeItem(channelStorageKey);
     return;
   }
-
   localStorage.setItem(connectionStorageKey, JSON.stringify(connection));
   localStorage.setItem(channelStorageKey, JSON.stringify(connection.channel || {}));
 }
 
 function fieldValues(connection) {
   if (!connection) return {};
-
   const channel = connection.channel || {};
   const analyticsSummary = connection.analyticsSummary || {};
   return {
@@ -261,7 +228,7 @@ async function fetchUploadsPlaylistId(accessToken) {
   url.searchParams.set("mine", "true");
   const payload = await fetchJson(url, accessToken);
   const playlistId = payload.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
-  if (!playlistId) throw new Error("No uploads playlist was found for your linked channel.");
+  if (!playlistId) throw new Error("No uploads playlist was found.");
   return playlistId;
 }
 
@@ -272,11 +239,8 @@ async function fetchRecentVideos(accessToken) {
   playlistUrl.searchParams.set("playlistId", playlistId);
   playlistUrl.searchParams.set("maxResults", "4");
   const playlistPayload = await fetchJson(playlistUrl, accessToken);
-  const ids = (playlistPayload.items || [])
-    .map((item) => item.contentDetails?.videoId)
-    .filter(Boolean);
+  const ids = (playlistPayload.items || []).map((item) => item.contentDetails?.videoId).filter(Boolean);
   if (!ids.length) return [];
-
   const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
   videosUrl.searchParams.set("part", "snippet,statistics,contentDetails");
   videosUrl.searchParams.set("id", ids.join(","));
@@ -286,22 +250,10 @@ async function fetchRecentVideos(accessToken) {
 
 async function fetchLiveOverview(accessToken, days = 30) {
   const [dailyResult, trafficResult, videosResult] = await Promise.allSettled([
-    fetchAnalyticsRows(accessToken, {
-      metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained",
-      dimensions: "day",
-      sort: "day",
-      days: days
-    }),
-    fetchAnalyticsRows(accessToken, {
-      metrics: "views",
-      dimensions: "insightTrafficSourceType",
-      sort: "-views",
-      maxResults: 5,
-      days: days
-    }),
+    fetchAnalyticsRows(accessToken, { metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained", dimensions: "day", sort: "day", days: days }),
+    fetchAnalyticsRows(accessToken, { metrics: "views", dimensions: "insightTrafficSourceType", sort: "-views", maxResults: 5, days: days }),
     fetchRecentVideos(accessToken)
   ]);
-
   return {
     daily: dailyResult.status === "fulfilled" ? dailyResult.value : [],
     traffic: trafficResult.status === "fulfilled" ? trafficResult.value : [],
@@ -313,24 +265,11 @@ async function fetchLiveOverview(accessToken, days = 30) {
 function insightItems(connection) {
   if (!connection) {
     return [
-      {
-        title: "Connect YouTube",
-        body: "Link your channel from My Channel so ViewCast can generate recommendations from real analytics.",
-        label: "Setup"
-      },
-      {
-        title: "No channel data yet",
-        body: "AI Insights stays blank until verified YouTube data is available.",
-        label: "Waiting"
-      },
-      {
-        title: "Avoid fake metrics",
-        body: "Recommendations are generated only from saved YouTube channel and analytics values.",
-        label: "Data"
-      }
+      { title: "Connect YouTube", body: "Link your channel from My Channel so ViewCast can generate recommendations.", label: "Setup" },
+      { title: "No channel data yet", body: "AI Insights stays blank until verified YouTube data is available.", label: "Waiting" },
+      { title: "Avoid fake metrics", body: "Recommendations are generated only from real YouTube channel data.", label: "Data" }
     ];
   }
-
   const channel = connection.channel || {};
   const analyticsSummary = connection.analyticsSummary || {};
   const views = numberValue(analyticsSummary.views);
@@ -341,69 +280,35 @@ function insightItems(connection) {
   const totalViews = numberValue(channel.viewCount);
   const videos = numberValue(channel.videoCount);
   const items = [];
-
   if (views !== null && watchMinutes !== null) {
     const minutesPerView = views > 0 ? watchMinutes / views : 0;
     if (minutesPerView >= 3) {
-      items.push({
-        title: "Double down on long-form retention",
-        body: "Your recent viewers are averaging about " + (Math.round(minutesPerView * 10) / 10) + " minutes watched per view. Build follow-up videos around the formats that hold attention longest.",
-        label: "Retention"
-      });
+      items.push({ title: "Double down on long-form retention", body: "Your recent viewers are averaging about " + (Math.round(minutesPerView * 10) / 10) + " minutes watched per view.", label: "Retention" });
     } else if (views > 0) {
-      items.push({
-        title: "Tighten the opening minute",
-        body: "Recent watch time is about " + (Math.round(minutesPerView * 10) / 10) + " minutes per view. Test faster hooks, earlier payoff, and clearer video promises.",
-        label: "Hook"
-      });
+      items.push({ title: "Tighten the opening minute", body: "Recent watch time is about " + (Math.round(minutesPerView * 10) / 10) + " minutes per view.", label: "Hook" });
     }
   }
-
   if (avgDuration !== null) {
     items.push({
       title: avgDuration >= 180 ? "Package deeper follow-ups" : "Improve pacing before the midpoint",
-      body: avgDuration >= 180
-        ? "Average view duration is " + duration(avgDuration) + ", which can support deeper sequels, series, and pinned playlists."
-        : "Average view duration is " + duration(avgDuration) + ". Use chapters, pattern breaks, and earlier examples to keep viewers moving.",
+      body: avgDuration >= 180 ? "Average view duration is " + duration(avgDuration) + ", which can support deeper series." : "Average view duration is " + duration(avgDuration) + ". Use pattern breaks to keep viewers moving.",
       label: "AVD"
     });
   }
-
   if (subscribersGained !== null && views !== null) {
     const subRate = views > 0 ? (subscribersGained / views) * 100 : 0;
     items.push({
       title: subRate >= 0.5 ? "Turn high-intent viewers into a series" : "Strengthen subscriber calls-to-action",
-      body: subRate >= 0.5
-        ? "Subscriber conversion is about " + (Math.round(subRate * 100) / 100) + "% of recent views. Create a clear next episode or recurring format."
-        : "Subscriber conversion is about " + (Math.round(subRate * 100) / 100) + "% of recent views. Add a specific reason to subscribe near your strongest moment.",
+      body: subRate >= 0.5 ? "Subscriber conversion is about " + (Math.round(subRate * 100) / 100) + "%. Create a recurring format." : "Add a specific reason to subscribe near your strongest moment.",
       label: "Growth"
     });
   }
-
   if (totalViews !== null && videos !== null && videos > 0) {
-    items.push({
-      title: "Audit outlier videos",
-      body: "Your channel averages about " + compactNumber(totalViews / videos) + " views per video. Compare top performers against recent uploads for topic and title patterns.",
-      label: "Audit"
-    });
+    items.push({ title: "Audit outlier videos", body: "Your channel averages about " + compactNumber(totalViews / videos) + " views per video.", label: "Audit" });
   }
-
   if (totalSubscribers !== null) {
-    items.push({
-      title: "Build for returning viewers",
-      body: compactNumber(totalSubscribers) + " subscribers gives you a base to test community posts, premieres, and repeatable content pillars.",
-      label: "Audience"
-    });
+    items.push({ title: "Build for returning viewers", body: compactNumber(totalSubscribers) + " subscribers gives you a base to test repeatable content pillars.", label: "Audience" });
   }
-
-  if (!items.length) {
-    items.push({
-      title: "Reconnect YouTube analytics",
-      body: "Channel metadata is available, but the 28-day analytics summary is missing. Reconnect YouTube from My Channel to refresh it.",
-      label: "Refresh"
-    });
-  }
-
   return items.slice(0, 3);
 }
 
@@ -421,9 +326,7 @@ function renderInsights(connection) {
 }
 
 function setElementText(selector, value) {
-  document.querySelectorAll(selector).forEach((element) => {
-    element.textContent = value || emptyValue;
-  });
+  document.querySelectorAll(selector).forEach((element) => { element.textContent = value || emptyValue; });
 }
 
 function setTrend(name, value, className = "good") {
@@ -450,13 +353,7 @@ function summarizeDaily(dailyRows = []) {
     summary.durationCount += row[3] === undefined ? 0 : 1;
     summary.subscribers += numberValue(row[4]) || 0;
     return summary;
-  }, {
-    views: 0,
-    watchMinutes: 0,
-    durationTotal: 0,
-    durationCount: 0,
-    subscribers: 0
-  });
+  }, { views: 0, watchMinutes: 0, durationTotal: 0, durationCount: 0, subscribers: 0 });
 }
 
 function sampledSeries(rows = []) {
@@ -470,11 +367,7 @@ function sampledSeries(rows = []) {
 function renderViewsTrend(overviewData) {
   const rows = sampledSeries(overviewData?.daily || []);
   if (!document.getElementById("viewsChart") || typeof window.drawLineChart !== "function") return;
-  if (!rows.length) {
-    window.drawLineChart("viewsChart", [], [], []);
-    return;
-  }
-
+  if (!rows.length) { window.drawLineChart("viewsChart", [], [], []); return; }
   const actual = rows.map((row) => numberValue(row[1]) || 0);
   const first = actual[0] || 0;
   const last = actual[actual.length - 1] || first;
@@ -499,44 +392,27 @@ function renderTrafficSources(overviewData) {
   if (!container) return;
   const rows = overviewData?.traffic || [];
   const total = rows.reduce((sum, row) => sum + (numberValue(row[1]) || 0), 0);
-
   if (!rows.length || !total) {
     container.innerHTML = ["Browse", "Search", "Shorts", "External", "Suggested"].map((label) => `
       <div class="region-row"><span>${label}</span><div class="bar"><i style="--value: 0%"></i></div><b>${emptyValue}</b></div>
     `).join("");
     return;
   }
-
   container.innerHTML = rows.map((row) => {
     const label = trafficSourceLabels[row[0]] || String(row[0] || "Other").replace(/_/g, " ");
     const share = percent(row[1], total);
-    return `
-      <div class="region-row">
-        <span>${escapeHtml(label)}</span>
-        <div class="bar"><i style="--value: ${share}"></i></div>
-        <b>${share}</b>
-      </div>
-    `;
+    return `<div class="region-row"><span>${escapeHtml(label)}</span><div class="bar"><i style="--value: ${share}"></i></div><b>${share}</b></div>`;
   }).join("");
 }
 
 function renderHealth(connection, overviewData) {
-  if (!connection) {
-    setProgress("watch-hours", 0, emptyValue);
-    setProgress("avg-duration", 0, emptyValue);
-    setProgress("subscribers", 0, emptyValue);
-    return;
-  }
-
+  if (!connection) { setProgress("watch-hours", 0, emptyValue); setProgress("avg-duration", 0, emptyValue); setProgress("subscribers", 0, emptyValue); return; }
   const analyticsSummary = connection?.analyticsSummary || {};
   const dailySummary = summarizeDaily(overviewData?.daily || []);
   const views = dailySummary.views || numberValue(analyticsSummary.views) || 0;
   const watchMinutes = dailySummary.watchMinutes || numberValue(analyticsSummary.estimatedMinutesWatched) || 0;
-  const avgDuration = dailySummary.durationCount
-    ? dailySummary.durationTotal / dailySummary.durationCount
-    : numberValue(analyticsSummary.averageViewDuration) || 0;
+  const avgDuration = dailySummary.durationCount ? dailySummary.durationTotal / dailySummary.durationCount : numberValue(analyticsSummary.averageViewDuration) || 0;
   const subscribers = dailySummary.subscribers || numberValue(analyticsSummary.subscribersGained) || 0;
-
   setProgress("watch-hours", Math.min(100, (watchMinutes / 60) / 10 * 100), `${watchHours(watchMinutes)} hrs`);
   setProgress("avg-duration", Math.min(100, avgDuration / 180 * 100), duration(avgDuration));
   setProgress("subscribers", Math.min(100, Math.max(0, subscribers) / Math.max(1, views) * 10000), wholeNumber(subscribers));
@@ -544,45 +420,20 @@ function renderHealth(connection, overviewData) {
 
 function renderActivity(connection, overviewData) {
   const container = document.querySelector("[data-overview-activity]");
-  if (!container) return;
-  if (!connection) {
-    container.innerHTML = [
-      ["Connect YouTube", "Link your channel from My Channel to populate Overview with verified data.", "Setup"],
-      ["Waiting for analytics", "No private channel summary has been synced yet.", "Data"],
-      ["No recent uploads loaded", "Recent video rows appear after YouTube access is available.", "Uploads"],
-      ["Charts are blank", "View trend and traffic sources stay empty until real analytics are available.", "Charts"]
-    ].map(([title, body, label]) => activityMarkup(title, body, label)).join("");
-    return;
-  }
-
+  if (!container || !connection) return;
   const channel = connection.channel || {};
   const analyticsSummary = connection.analyticsSummary || {};
   const videos = overviewData?.videos || [];
   const dailySummary = summarizeDaily(overviewData?.daily || []);
-  const title = channel.title || "Linked channel";
   const items = [
-    [title, "Channel totals and saved analytics are connected to this dashboard.", "Live"],
-    ["28-day views", dailySummary.views || analyticsSummary.views
-      ? `${wholeNumber(dailySummary.views || analyticsSummary.views)} verified views in the current analytics window.`
-      : "YouTube Analytics views will appear after the next successful sync.", "Views"],
-    ["Watch time", dailySummary.watchMinutes || analyticsSummary.estimatedMinutesWatched
-      ? `${watchHours(dailySummary.watchMinutes || analyticsSummary.estimatedMinutesWatched)} watch hours synced from YouTube Analytics.`
-      : "Watch time will appear after YouTube Analytics is available.", "Watch"],
-    videos[0]
-      ? ["Latest upload", `${videos[0].snippet?.title || "Recent video"} is loaded in the performance table.`, "Video"]
-      : ["Recent uploads", "Use My Channel to refresh YouTube access if recent uploads are missing.", "Refresh"]
+    [channel.title || "Linked channel", "Channel totals and saved analytics are connected.", "Live"],
+    ["28-day views", dailySummary.views || analyticsSummary.views ? `${wholeNumber(dailySummary.views || analyticsSummary.views)} verified views.` : "Views sync pending.", "Views"],
+    ["Watch time", dailySummary.watchMinutes || analyticsSummary.estimatedMinutesWatched ? `${watchHours(dailySummary.watchMinutes || analyticsSummary.estimatedMinutesWatched)} watch hours.` : "Watch time pending.", "Watch"],
+    videos[0] ? ["Latest upload", `${videos[0].snippet?.title || "Recent video"} is loaded.`, "Video"] : ["Recent uploads", "Refresh access if recent uploads are missing.", "Refresh"]
   ];
-  container.innerHTML = items.map(([titleText, body, label]) => activityMarkup(titleText, body, label)).join("");
-}
-
-function activityMarkup(title, body, label) {
-  return `
-    <div class="activity-item">
-      <i class="dot"></i>
-      <div><b>${escapeHtml(title)}</b><span>${escapeHtml(body)}</span></div>
-      <time>${escapeHtml(label)}</time>
-    </div>
-  `;
+  container.innerHTML = items.map(([t, b, l]) => `
+    <div class="activity-item"><i class="dot"></i><div><b>${escapeHtml(t)}</b><span>${escapeHtml(b)}</span></div><time>${escapeHtml(l)}</time></div>
+  `).join("");
 }
 
 function videoFormat(video) {
@@ -596,113 +447,29 @@ function renderVideoTable(overviewData) {
   const tbody = document.querySelector("[data-overview-videos]");
   if (!tbody) return;
   const videos = overviewData?.videos || [];
-  if (!videos.length) {
-    tbody.innerHTML = Array.from({length: 4}, () => `
-      <tr>
-        <td>${emptyValue}</td>
-        <td>${emptyValue}</td>
-        <td>${emptyValue}</td>
-        <td>${emptyValue}</td>
-        <td>${emptyValue}</td>
-        <td>${emptyValue}</td>
-      </tr>
-    `).join("");
-    return;
-  }
-
+  if (!videos.length) { tbody.innerHTML = Array.from({length: 4}, () => `<tr>${"<td>" + emptyValue + "</td>".repeat(6)}</tr>`).join(""); return; }
   tbody.innerHTML = videos.map((video) => {
     const stats = video.statistics || {};
     const views = numberValue(stats.viewCount) || 0;
-    const status = views > 0 ? "Loaded" : "Published";
-    return `
-      <tr>
-        <td>${escapeHtml(video.snippet?.title || "Untitled video")}</td>
-        <td>${videoFormat(video)}</td>
-        <td>${wholeNumber(stats.viewCount)}</td>
-        <td>${wholeNumber(stats.likeCount)}</td>
-        <td>${wholeNumber(stats.commentCount)}</td>
-        <td><span class="trend ${views > 0 ? "good" : "warn"}">${status}</span></td>
-      </tr>
-    `;
+    return `<tr><td>${escapeHtml(video.snippet?.title || "Untitled")}</td><td>${videoFormat(video)}</td><td>${wholeNumber(stats.viewCount)}</td><td>${wholeNumber(stats.likeCount)}</td><td>${wholeNumber(stats.commentCount)}</td><td><span class="trend good">Loaded</span></td></tr>`;
   }).join("");
-}
-
-function recentUploadAverage(videos, selectedVideoId = "") {
-  const values = videos
-    .filter((video) => video.id !== selectedVideoId)
-    .map((video) => numberValue(video.statistics?.viewCount))
-    .filter((value) => value !== null);
-  if (!values.length) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function performanceNotificationItems(overviewData) {
-  const videos = overviewData?.videos || [];
-  if (videos.length < 2) return [];
-
-  const latestVideo = videos[0];
-  const views = numberValue(latestVideo.statistics?.viewCount);
-  const average = recentUploadAverage(videos, latestVideo.id);
-  if (views === null || !average) return [];
-
-  const ratio = views / average;
-  const title = latestVideo.snippet?.title || "Most recent upload";
-  const scanTime = timeAgo(overviewData.latestVideoScannedAt);
-  if (ratio >= 1.15) {
-    return [{
-      videoId: latestVideo.id,
-      tone: "teal",
-      title: "Latest Upload Above Average",
-      body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
-      time: scanTime
-    }];
-  }
-
-  if (ratio <= 0.85) {
-    return [{
-      videoId: latestVideo.id,
-      tone: "rose",
-      title: "Latest Upload Below Average",
-      body: `${title} is ${Math.round(ratio * 100)}% of your recent-upload average.`,
-      time: scanTime
-    }];
-  }
-
-  return [];
 }
 
 function renderPerformanceNotifications(overviewData) {
   const container = document.querySelector("[data-performance-notifications]");
-  const badge = document.querySelector(".notif-badge");
-  const markRead = document.getElementById("markRead");
   if (!container) return;
-
-  const items = performanceNotificationItems(overviewData);
-  if (!items.length) {
-    container.innerHTML = '<div class="notif-empty">No latest-upload performance alert yet.</div>';
-    if (badge) badge.hidden = true;
-    if (markRead) markRead.hidden = true;
-    return;
+  const videos = overviewData?.videos || [];
+  if (videos.length < 2) return;
+  const latestVideo = videos[0];
+  const views = numberValue(latestVideo.statistics?.viewCount);
+  const average = videos.slice(1).reduce((sum, v) => sum + (numberValue(v.statistics?.viewCount) || 0), 0) / (videos.length - 1);
+  if (views === null || !average) return;
+  const ratio = views / average;
+  if (ratio >= 1.15 || ratio <= 0.85) {
+    const tone = ratio >= 1.15 ? "teal" : "rose";
+    const title = ratio >= 1.15 ? "Above Average" : "Below Average";
+    container.innerHTML = `<a class="notif-item unread" href="pages/analyzer.html?video=${encodeURIComponent(latestVideo.id)}"><div class="notif-icon ${tone}"><svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg></div><div class="notif-body"><p><strong>${title}</strong>: ${escapeHtml(latestVideo.snippet?.title)}</p><time>Just scanned</time></div></a>`;
   }
-
-  container.innerHTML = items.map((item) => `
-    <a class="notif-item unread" href="pages/analyzer.html?video=${encodeURIComponent(item.videoId)}" data-analyzer-video="${escapeHtml(item.videoId)}">
-      <div class="notif-icon ${item.tone}">
-        <svg viewBox="0 0 24 24"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg>
-      </div>
-      <div class="notif-body">
-        <p><strong>${escapeHtml(item.title)}</strong>: ${escapeHtml(item.body)}</p>
-        <time>${escapeHtml(item.time)}</time>
-      </div>
-    </a>
-  `).join("");
-  container.querySelectorAll("[data-analyzer-video]").forEach((link) => {
-    link.addEventListener("click", () => {
-      sessionStorage.setItem(pendingAnalyzerVideoKey, link.dataset.analyzerVideo || "");
-    });
-  });
-  if (badge) badge.hidden = false;
-  if (markRead) markRead.hidden = false;
 }
 
 function renderOverviewData(connection, overviewData = null) {
@@ -712,30 +479,13 @@ function renderOverviewData(connection, overviewData = null) {
   const totalViews = numberValue(channel.viewCount);
   const subscribers = numberValue(channel.subscriberCount);
   const videos = numberValue(channel.videoCount);
-  const avgDuration = dailySummary.durationCount
-    ? dailySummary.durationTotal / dailySummary.durationCount
-    : numberValue(analyticsSummary.averageViewDuration);
+  const avgDuration = dailySummary.durationCount ? dailySummary.durationTotal / dailySummary.durationCount : numberValue(analyticsSummary.averageViewDuration);
 
-  setElementText("[data-overview-status]", connection
-    ? "Overview is using verified channel totals plus the latest saved YouTube Analytics data."
-    : "Connect your YouTube channel from My Channel to populate Overview with verified data.");
-  setElementText('[data-overview-kpi="reach"]', totalViews !== null
-    ? [
-      `${wholeNumber(totalViews)} lifetime views`,
-      analyticsSummary.views !== undefined ? `${compactNumber(analyticsSummary.views)} views in the current 28-day window` : ""
-    ].filter(Boolean).join(" with ") + "."
-    : "Connect YouTube to show verified reach and discovery movement.");
-  setElementText('[data-overview-kpi="retention"]', avgDuration !== null
-    ? `Average view duration is ${duration(avgDuration)} with ${watchHours(dailySummary.watchMinutes || analyticsSummary.estimatedMinutesWatched)} watch hours.`
-    : "Average view duration and watch time appear after analytics sync.");
-  setElementText('[data-overview-kpi="next"]', videos !== null
-    ? `${wholeNumber(videos)} uploads are available for planning follow-up content and review.`
-    : "Recent uploads and next actions update from your channel data.");
-
+  setElementText("[data-overview-status]", connection ? "Overview is using verified channel totals." : "Connect your YouTube channel to populate Overview.");
   setTrend("total-views", totalViews !== null ? "Lifetime" : "");
   setTrend("subscriber-count", subscribers !== null ? "Total" : "");
   setTrend("video-count", videos !== null ? "Uploads" : "", "warn");
-  setTrend("average-view-duration", avgDuration !== null ? "28D" : (connection ? "Unavailable" : ""), avgDuration !== null ? "good" : "warn");
+  setTrend("average-view-duration", avgDuration !== null ? "28D" : "", "good");
 
   renderViewsTrend(overviewData);
   renderSparklineData(overviewData);
@@ -746,107 +496,59 @@ function renderOverviewData(connection, overviewData = null) {
   renderPerformanceNotifications(overviewData);
 }
 
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+function escapeHtml(value) { return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
 function applyYouTubeData(connection, overviewData = null) {
   const values = fieldValues(connection);
-
-  document.querySelectorAll("[data-youtube-field]").forEach((element) => {
-    const value = values[element.dataset.youtubeField] || "";
-    element.textContent = value || emptyValue;
-  });
-
-  document.querySelectorAll("[data-youtube-summary]").forEach((element) => {
-    element.dataset.youtubeDefault ||= element.textContent;
-  });
-
-  if (!connection) {
-    document.querySelectorAll("[data-youtube-summary]").forEach((element) => {
-      element.textContent = element.dataset.youtubeDefault || "";
-    });
-    renderInsights(null);
-    renderOverviewData(null, null);
-    return;
-  }
-
-  const channel = connection.channel || {};
-  const analyticsSummary = connection.analyticsSummary || {};
-  const title = channel.title || "your linked channel";
-  const summaryParts = [
-    analyticsSummary.views !== undefined ? `${wholeNumber(analyticsSummary.views)} views` : "",
-    analyticsSummary.estimatedMinutesWatched !== undefined ? `${watchHours(analyticsSummary.estimatedMinutesWatched)} watch hours` : "",
-    analyticsSummary.subscribersGained !== undefined ? `${wholeNumber(analyticsSummary.subscribersGained)} subscribers gained` : ""
-  ].filter(Boolean);
-
-  const summary = summaryParts.length
-    ? `Showing saved YouTube data for ${title}. Last 28 days: ${summaryParts.join(", ")}.`
-    : `Showing saved YouTube channel data for ${title}.`;
-  document.querySelectorAll("[data-youtube-summary]").forEach((element) => {
-    element.textContent = summary;
-  });
+  document.querySelectorAll("[data-youtube-field]").forEach((element) => { element.textContent = values[element.dataset.youtubeField] || emptyValue; });
+  if (!connection) { renderInsights(null); renderOverviewData(null, null); return; }
+  const summary = `Showing saved YouTube data for ${connection.channel.title}.`;
+  document.querySelectorAll("[data-youtube-summary]").forEach((element) => { element.textContent = summary; });
   renderInsights(connection);
   renderOverviewData(connection, overviewData);
 }
 
 async function loadYouTubeData(user, db, days = 30) {
-  applyYouTubeData(readCachedConnection(), readCachedOverview(user));
+  const activeConnection = readActiveConnection();
+  applyYouTubeData(activeConnection, readCachedOverview(user, activeConnection?.channel?.id));
 
   const snapshot = await getDoc(doc(db, "users", user.uid));
-  const profile = snapshot.exists() ? snapshot.data() : {};
-  const connection = savedConnectionFromProfile(profile);
-  if (connection) saveCachedConnection(connection);
-  const activeConnection = connection || readCachedConnection();
-  applyYouTubeData(activeConnection, readCachedOverview(user));
+  const data = snapshot.exists() ? snapshot.data() : {};
+  const connections = data.youtubeConnections || [];
+  if (data.youtubeConnection && !connections.some(c => c.channel.id === data.youtubeConnection.channel.id)) connections.push(data.youtubeConnection);
+
+  localStorage.setItem(allConnectionsKey, JSON.stringify(connections));
+  const currentActive = connections.find(c => c.channel.id === activeConnection?.channel?.id) || connections[0];
+  if (currentActive) saveCachedConnection(currentActive);
 
   const accessToken = readCachedAccessToken(user);
-  if (!activeConnection || !accessToken) return;
+  if (!currentActive || !accessToken) return;
 
   try {
     const liveOverview = await fetchLiveOverview(accessToken, days);
-    saveCachedOverview(user, liveOverview);
-    applyYouTubeData(activeConnection, liveOverview);
-  } catch (error) {
-    console.warn("Could not refresh Overview with live YouTube data.", error);
-  }
+    saveCachedOverview(user, currentActive.channel.id, liveOverview);
+    applyYouTubeData(currentActive, liveOverview);
+  } catch (error) { console.warn(error); }
 }
 
 if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-youtube-summary]")) {
-  applyYouTubeData(readCachedConnection());
+  applyYouTubeData(readActiveConnection());
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
 
   onAuthStateChanged(auth, (user) => {
     if (!user) return;
-    loadYouTubeData(user, db).catch((error) => {
-      console.error("Could not load linked YouTube data.", error);
-    });
+    loadYouTubeData(user, db).catch(console.error);
 
-    // Setup time range buttons
     document.querySelectorAll(".segmented button").forEach((button) => {
       button.addEventListener("click", () => {
         if (button.classList.contains("active")) return;
-
-        const range = button.textContent.trim();
-        const daysMap = { "7D": 7, "30D": 30, "90D": 90 };
-        const days = daysMap[range];
-
+        const days = { "7D": 7, "30D": 30, "90D": 90 }[button.textContent.trim()];
         if (!days) return;
-
-        // Update UI
         button.parentElement.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
         button.classList.add("active");
-
-        // Refresh data
-        loadYouTubeData(user, db, days).catch((error) => {
-          console.error("Could not refresh data for range:", range, error);
-        });
+        loadYouTubeData(user, db, days).catch(console.error);
       });
     });
   });
@@ -854,10 +556,11 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
   window.addEventListener("viewcast:youtube-connected", (event) => {
     saveCachedConnection(event.detail);
     applyYouTubeData(event.detail);
+    const auth = getAuth();
+    if (auth.currentUser) loadYouTubeData(auth.currentUser, getFirestore());
   });
 
   window.addEventListener("viewcast:youtube-unlinked", () => {
-    saveCachedConnection(null);
     applyYouTubeData(null);
   });
 }
