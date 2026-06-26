@@ -75,6 +75,25 @@ function warnIfUnauthorizedHost() {
   );
 }
 
+function safeReturnUrl() {
+  const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+  if (!returnTo) return dashboardUrl.href;
+
+  try {
+    const target = new URL(returnTo, window.location.origin);
+    if (target.origin !== window.location.origin) return dashboardUrl.href;
+    return target.href;
+  } catch (error) {
+    return dashboardUrl.href;
+  }
+}
+
+function loginUrlForCurrentPage() {
+  const url = new URL(loginUrl.href);
+  url.searchParams.set("returnTo", `${window.location.pathname}${window.location.search}`);
+  return url.href;
+}
+
 function setFormBusy(isBusy) {
   const form = document.getElementById("authForm");
   if (!form) return;
@@ -285,7 +304,7 @@ function setupLoginForm() {
       }
       setSubmitStatus("Opening dashboard...");
       showStep("Opening your dashboard...");
-      window.location.replace(dashboardUrl.href);
+      window.location.replace(safeReturnUrl());
     } catch (error) {
       authActionInProgress = false;
       console.error("Firebase authentication request failed.", error);
@@ -332,7 +351,9 @@ if (!firebaseConfigured) {
       control.disabled = true;
     });
   } else {
-    window.location.replace(`${loginUrl.href}?setup=required`);
+    const setupUrl = new URL(loginUrl.href);
+    setupUrl.searchParams.set("setup", "required");
+    window.location.replace(setupUrl.href);
   }
 } else {
   try {
@@ -349,12 +370,12 @@ if (!firebaseConfigured) {
 
     onAuthStateChanged(auth, async (user) => {
       if (isLoginPage) {
-        if (user && !authActionInProgress) window.location.replace(dashboardUrl.href);
+        if (user && !authActionInProgress) window.location.replace(safeReturnUrl());
         return;
       }
 
       if (!user) {
-        window.location.replace(loginUrl.href);
+        window.location.replace(loginUrlForCurrentPage());
         return;
       }
 
