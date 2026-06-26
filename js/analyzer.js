@@ -656,6 +656,15 @@ async function loadVideoAnalysisWithRetry(videoId) {
 
 async function analyzeVideoById(videoId) {
   if (!videoId) return;
+
+  // Check if channel is linked before analyzing
+  const connection = localStorage.getItem("viewcastYouTubeConnection");
+  if (!connection) {
+    sessionStorage.setItem("viewcastPendingAnalyzerVideo", videoId);
+    window.location.href = "channel.html?link=required";
+    return;
+  }
+
   const requestId = ++analysisRequestId;
 
   try {

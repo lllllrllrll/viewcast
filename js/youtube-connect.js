@@ -271,6 +271,18 @@ if (connectButton && firebaseConfigured) {
 
   onAuthStateChanged(auth, async (user) => {
     currentUser = user;
+
+    // Check for redirection prompt
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("link") === "required") {
+      const prompt = document.getElementById("connectionPrompt");
+      if (prompt) {
+        prompt.textContent = "Please link your YouTube channel before analyzing videos.";
+        prompt.style.color = "var(--rose)";
+        prompt.style.fontWeight = "bold";
+      }
+    }
+
     if (!user) {
       hasLinkedChannel = false;
       setButton("Sign in to connect", true);
