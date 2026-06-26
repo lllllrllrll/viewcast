@@ -23,11 +23,13 @@ const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
+const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 let currentUser = null;
 let auth = null;
 let channelVideos = [];
 let selectedVideoId = "";
 let analysisRequestId = 0;
+let initialVideoId = "";
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
@@ -644,6 +646,7 @@ async function analyzeVideoById(videoId) {
     setAnalyzerLoading(true);
     setStatus(readCachedAccessToken() ? "Loading video data from YouTube..." : "Requesting YouTube access...");
     if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
+    sessionStorage.removeItem(pendingAnalyzerVideoKey);
     updateLibrarySelection(videoId);
     const [video, analytics, retentionPoints, searchTerms] = await loadVideoAnalysisWithRetry(videoId);
     if (requestId !== analysisRequestId) return;
@@ -684,7 +687,7 @@ async function analyzeVideo(event) {
 
 function initialVideoIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  const rawVideo = params.get("video") || params.get("v") || "";
+  const rawVideo = params.get("video") || params.get("v") || sessionStorage.getItem(pendingAnalyzerVideoKey) || "";
   return parseVideoId(rawVideo);
 }
 
@@ -729,6 +732,11 @@ async function loadVideoLibrary({allowPrompt = false} = {}) {
 }
 
 clearAnalyzerResults();
+initialVideoId = initialVideoIdFromUrl();
+if (initialVideoId && videoUrlInput) {
+  videoUrlInput.value = "https://www.youtube.com/watch?v=" + initialVideoId;
+  setStatus("Opening selected video for analysis...");
+}
 
 if (form && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
@@ -753,7 +761,6 @@ if (form && firebaseConfigured) {
       setLibraryStatus("Loading your linked channel uploads...");
     }
     loadVideoLibrary({allowPrompt: false});
-    const initialVideoId = initialVideoIdFromUrl();
     if (initialVideoId) analyzeVideoById(initialVideoId);
   });
   form.addEventListener("submit", analyzeVideo);

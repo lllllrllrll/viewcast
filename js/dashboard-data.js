@@ -15,6 +15,7 @@ const connectionStorageKey = "viewcastYouTubeConnection";
 const channelStorageKey = "viewcastYouTubeChannel";
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const overviewStorageKeyPrefix = "viewcastOverviewData:";
+const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 
 const trafficSourceLabels = {
   ADVERTISING: "Advertising",
@@ -685,7 +686,7 @@ function renderPerformanceNotifications(overviewData) {
   }
 
   container.innerHTML = items.map((item) => `
-    <a class="notif-item unread" href="pages/analyzer.html?video=${encodeURIComponent(item.videoId)}">
+    <a class="notif-item unread" href="pages/analyzer.html?video=${encodeURIComponent(item.videoId)}" data-analyzer-video="${escapeHtml(item.videoId)}">
       <div class="notif-icon ${item.tone}">
         <svg viewBox="0 0 24 24"><path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" /></svg>
       </div>
@@ -695,6 +696,11 @@ function renderPerformanceNotifications(overviewData) {
       </div>
     </a>
   `).join("");
+  container.querySelectorAll("[data-analyzer-video]").forEach((link) => {
+    link.addEventListener("click", () => {
+      sessionStorage.setItem(pendingAnalyzerVideoKey, link.dataset.analyzerVideo || "");
+    });
+  });
   if (badge) badge.hidden = false;
   if (markRead) markRead.hidden = false;
 }
