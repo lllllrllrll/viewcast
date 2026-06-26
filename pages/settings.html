@@ -84,17 +84,17 @@
             <div class="panel-head">
               <div>
                 <h3>Plan & Usage</h3>
-                <p>Current subscription status.</p>
+                <p><span data-current-plan>Basic</span> plan limits.</p>
               </div>
             </div>
             <div class="progress-stack">
-              <div class="progress-item">
-                <div class="progress-meta"><b>Storage</b><span>2.4 / 5 GB</span></div>
-                <div class="bar"><i style="--value: 48%"></i></div>
+              <div class="progress-item" data-usage-item="videos">
+                <div class="progress-meta"><b>Videos analyzed</b><span data-usage-label="videos">&nbsp;</span></div>
+                <div class="bar"><i data-usage-bar="videos" style="--value: 0%"></i></div>
               </div>
-              <div class="progress-item">
-                <div class="progress-meta"><b>API Calls</b><span>12K / 50K</span></div>
-                <div class="bar"><i style="--value: 24%"></i></div>
+              <div class="progress-item" data-usage-item="channels">
+                <div class="progress-meta"><b>Channels connected</b><span data-usage-label="channels">&nbsp;</span></div>
+                <div class="bar"><i data-usage-bar="channels" style="--value: 0%"></i></div>
               </div>
               <div style="margin-top: 10px;">
                 <button class="primary-button" id="upgradePlan" type="button" style="width: 100%; background: var(--blue);">Upgrade Plan</button>
@@ -111,7 +111,7 @@
           <button class="close-button" id="closeModal" aria-label="Close modal">&times;</button>
         </div>
         <div class="plans-grid">
-          <div class="plan-card current">
+          <div class="plan-card current" data-plan-card="basic">
             <div class="plan-badge">Current</div>
             <h4>Basic</h4>
             <div class="plan-price">$0<span>/mo</span></div>
@@ -121,9 +121,9 @@
               <li>1 Channel connection</li>
               <li>Community support</li>
             </ul>
-            <button class="primary-button" disabled style="width: 100%; background: var(--line); color: var(--muted) !important;">Active Plan</button>
+            <button class="primary-button" type="button" data-plan-choice="basic" disabled style="width: 100%; background: var(--line); color: var(--muted) !important;">Active Plan</button>
           </div>
-          <div class="plan-card">
+          <div class="plan-card" data-plan-card="pro">
             <div class="plan-badge">Popular</div>
             <h4>Pro</h4>
             <div class="plan-price">$29<span>/mo</span></div>
@@ -134,9 +134,9 @@
               <li>Custom alert rules</li>
               <li>AI prediction (50/mo)</li>
             </ul>
-            <button class="primary-button" style="width: 100%;">Upgrade to Pro</button>
+            <button class="primary-button" type="button" data-plan-choice="pro" style="width: 100%;">Upgrade to Pro</button>
           </div>
-          <div class="plan-card">
+          <div class="plan-card" data-plan-card="premium">
             <h4>Premium</h4>
             <div class="plan-price">$99<span>/mo</span></div>
             <ul>
@@ -146,7 +146,7 @@
               <li>API access for reporting</li>
               <li>Priority AI support</li>
             </ul>
-            <button class="primary-button" style="width: 100%; background: #2c3e50;">Choose Premium</button>
+            <button class="primary-button" type="button" data-plan-choice="premium" style="width: 100%; background: #2c3e50;">Choose Premium</button>
           </div>
         </div>
       </div>

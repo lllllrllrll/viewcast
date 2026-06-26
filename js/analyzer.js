@@ -169,6 +169,24 @@ function saveCachedVideos(videos) {
   }));
 }
 
+function usageMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function recordVideoAnalysis() {
+  const key = "viewcastVideosAnalyzed";
+  let usage = {month: usageMonth(), count: 0};
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    if (saved?.month === usage.month) usage.count = Number(saved.count) || 0;
+  } catch (error) {
+    localStorage.removeItem(key);
+  }
+  usage.count += 1;
+  localStorage.setItem(key, JSON.stringify(usage));
+}
+
 function setLibraryStatus(message) {
   if (videoLibraryStatus) videoLibraryStatus.textContent = message || "";
 }
@@ -651,6 +669,7 @@ async function analyzeVideoById(videoId) {
     const [video, analytics, retentionPoints, searchTerms] = await loadVideoAnalysisWithRetry(videoId);
     if (requestId !== analysisRequestId) return;
 
+    recordVideoAnalysis();
     updateLibrarySelection(video.id);
     updateMetrics(video, analytics);
     updateSearchTerms(searchTerms);
