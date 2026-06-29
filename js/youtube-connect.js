@@ -1,10 +1,7 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {
   getAuth,
-  GoogleAuthProvider,
-  linkWithPopup,
-  onAuthStateChanged,
-  reauthenticateWithPopup
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {
   doc,
@@ -14,7 +11,7 @@ import {
   setDoc,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
-import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
+import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -35,6 +32,7 @@ let currentUser = null;
 let auth = null;
 let db = null;
 let linkedConnections = [];
+let googleIdentityScriptPromise = null;
 
 function setButton(label, disabled = false) {
   if (!connectButton) return;
@@ -144,38 +142,46 @@ async function syncConnectionsFromFirestore(user) {
   }
 }
 
-function createProvider() {
-  const provider = new GoogleAuthProvider();
-  scopes.forEach((scope) => provider.addScope(scope));
-  provider.setCustomParameters({include_granted_scopes: "true", prompt: "select_account"});
-  return provider;
+function loadGoogleIdentityServices() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  if (googleIdentityScriptPromise) return googleIdentityScriptPromise;
+
+  googleIdentityScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Google Identity Services could not load."));
+    document.head.append(script);
+  });
+
+  return googleIdentityScriptPromise;
 }
 
-function userHasGoogleProvider(user) {
-  return user.providerData.some((provider) => provider.providerId === "google.com");
-}
-
-async function connectGoogleProvider(user) {
-  const provider = createProvider();
-  if (userHasGoogleProvider(user)) {
-    return reauthenticateWithPopup(user, provider);
+async function requestYouTubeAccessToken() {
+  if (!googleOAuthClientId) {
+    throw new Error("Missing Google OAuth client ID. Add your Web OAuth client ID in js/firebase-config.js.");
   }
 
-  try {
-    return await linkWithPopup(user, provider);
-  } catch (error) {
-    if (error.code === "auth/provider-already-linked" || error.code === "auth/credential-already-in-use") {
-      try {
-        return await reauthenticateWithPopup(user, provider);
-      } catch (reauthError) {
-        if (error.code === "auth/credential-already-in-use") {
-          throw new Error("That Google account is already attached to another ViewCast login. Sign in with that ViewCast account, or choose a different Google account.");
+  await loadGoogleIdentityServices();
+
+  return new Promise((resolve, reject) => {
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: googleOAuthClientId,
+      scope: scopes.join(" "),
+      prompt: "consent select_account",
+      callback: (response) => {
+        if (response.error) {
+          reject(new Error(response.error_description || response.error));
+          return;
         }
-        throw reauthError;
+        resolve(response.access_token);
       }
-    }
-    throw error;
-  }
+    });
+
+    tokenClient.requestAccessToken();
+  });
 }
 
 async function fetchJson(url, accessToken) {
@@ -222,13 +228,11 @@ async function connectYouTube() {
   if (!currentUser) return;
   try {
     setButton("Connecting...", true);
-    const result = await connectGoogleProvider(currentUser);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) throw new Error("No access token returned.");
+    const accessToken = await requestYouTubeAccessToken();
 
-    saveCachedAccessToken(credential.accessToken);
-    const channel = await fetchChannel(credential.accessToken);
-    const analytics = await fetchAnalyticsSummary(credential.accessToken);
+    saveCachedAccessToken(accessToken);
+    const channel = await fetchChannel(accessToken);
+    const analytics = await fetchAnalyticsSummary(accessToken);
     const newConn = { channel, analyticsSummary: analytics, connectedAt: Date.now() };
 
     const connections = readAllConnections();
