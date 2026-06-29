@@ -7,12 +7,11 @@ import {
   reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {
-  arrayRemove,
-  arrayUnion,
   doc,
   getDoc,
   getFirestore,
   serverTimestamp,
+  setDoc,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
@@ -152,14 +151,31 @@ function createProvider() {
   return provider;
 }
 
+function userHasGoogleProvider(user) {
+  return user.providerData.some((provider) => provider.providerId === "google.com");
+}
+
 async function connectGoogleProvider(user) {
   const provider = createProvider();
-  return linkWithPopup(user, provider).catch(error => {
-    if (error.code === "auth/provider-already-linked") {
-      return reauthenticateWithPopup(user, provider);
+  if (userHasGoogleProvider(user)) {
+    return reauthenticateWithPopup(user, provider);
+  }
+
+  try {
+    return await linkWithPopup(user, provider);
+  } catch (error) {
+    if (error.code === "auth/provider-already-linked" || error.code === "auth/credential-already-in-use") {
+      try {
+        return await reauthenticateWithPopup(user, provider);
+      } catch (reauthError) {
+        if (error.code === "auth/credential-already-in-use") {
+          throw new Error("That Google account is already attached to another ViewCast login. Sign in with that ViewCast account, or choose a different Google account.");
+        }
+        throw reauthError;
+      }
     }
     throw error;
-  });
+  }
 }
 
 async function fetchJson(url, accessToken) {
