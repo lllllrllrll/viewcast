@@ -13,7 +13,7 @@ export const firebaseConfig = {
 
 // Google OAuth 2.0 Web Client ID used only for YouTube API authorization.
 // Keep channel links in Firestore instead of linking Google providers to Firebase Auth.
-export const googleOAuthClientId = "";
+export const googleOAuthClientId = "351557961377-ocbt4u5dm00n0mqfjvf808rpakc0b5bt.apps.googleusercontent.com";
 
 export const firebaseConfigured = Boolean(
   firebaseConfig.apiKey &&
