@@ -1,12 +1,9 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {
   getAuth,
-  GoogleAuthProvider,
-  linkWithPopup,
-  onAuthStateChanged,
-  reauthenticateWithPopup
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
+import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -14,20 +11,23 @@ const scopes = [
 ];
 
 const form = document.getElementById("videoAnalysisForm");
-const videoUrlInput = document.getElementById("videoUrl");
 const submitButton = form?.querySelector('button[type="submit"]');
 const videoLibrary = document.getElementById("videoLibrary");
 const videoLibraryStatus = document.getElementById("videoLibraryStatus");
 const refreshVideosButton = document.getElementById("refreshVideos");
 const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
+
 const tokenStorageKey = "viewcastYouTubeAccessToken";
+const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
+
 let currentUser = null;
 let auth = null;
 let channelVideos = [];
 let selectedVideoId = "";
 let analysisRequestId = 0;
+let googleIdentityScriptPromise = null;
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
@@ -40,7 +40,7 @@ function setStatus(message) {
   if (status) status.textContent = message || "";
 }
 
-function setBusy(isBusy, label = "Analyze") {
+function setBusy(isBusy, label = "Generate Insights") {
   if (!submitButton) return;
   submitButton.disabled = isBusy;
   submitButton.textContent = isBusy ? "Analyzing..." : label;
@@ -67,13 +67,6 @@ function wholeNumber(value) {
   return new Intl.NumberFormat("en").format(Math.round(number));
 }
 
-function percent(value) {
-  const number = numberValue(value);
-  if (number === null) return "";
-  return `
-${Math.round(number * 10) / 10}%`.trim();
-}
-
 function durationFromSeconds(value) {
   const number = numberValue(value);
   if (number === null) return "";
@@ -81,27 +74,21 @@ function durationFromSeconds(value) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return hours ? `
-${hours}:${String(minutes).padStart(2, "0")}:${seconds}`.trim() : `
-${minutes}:${seconds}`.trim();
+  return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
 }
 
 function secondsFromIso(value = "") {
   const match = value.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return null;
-  const [, hours = 0, minutes = 0, seconds = 0] = match.map((part) => Number(part || 0));
+  const hours = Number(match[1] || 0);
+  const minutes = Number(match[2] || 0);
+  const seconds = Number(match[3] || 0);
   return hours * 3600 + minutes * 60 + seconds;
 }
 
 function durationFromIso(value = "") {
   const seconds = secondsFromIso(value);
   return seconds === null ? "" : durationFromSeconds(seconds);
-}
-
-function truncate(value = "", maxLength = 180) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return normalized.slice(0, maxLength - 1).trim() + "...";
 }
 
 function dateLabel(value) {
@@ -115,14 +102,12 @@ function dateLabel(value) {
   }).format(date);
 }
 
-function apiDate(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function daysAgo(days) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return apiDate(date);
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function bestThumbnail(thumbnails = {}) {
@@ -134,12 +119,17 @@ function bestThumbnail(thumbnails = {}) {
     || "";
 }
 
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function median(values) {
+  const sorted = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function average(values) {
+  const usable = values.filter((value) => Number.isFinite(value));
+  if (!usable.length) return null;
+  return usable.reduce((sum, value) => sum + value, 0) / usable.length;
 }
 
 function videosStorageKey() {
@@ -206,41 +196,14 @@ function renderVideoLibrary(videos = channelVideos) {
     const meta = [published, views ? views + " views" : ""].filter(Boolean).join(" - ");
     return '<button class="video-library-card" type="button" data-video-id="' + escapeHtml(video.id) + '" aria-pressed="false">'
       + '<div class="video-library-thumb">'
-      + (thumbnail ? '<img src="' + escapeHtml(thumbnail) + '" alt="' + escapeHtml(title) + ' thumbnail">' : '')
-      + (duration ? '<span class="video-library-duration">' + escapeHtml(duration) + '</span>' : '')
+      + (thumbnail ? '<img src="' + escapeHtml(thumbnail) + '" alt="' + escapeHtml(title) + ' thumbnail">' : "")
+      + (duration ? '<span class="video-library-duration">' + escapeHtml(duration) + '</span>' : "")
       + '</div>'
       + '<div class="video-library-body"><b>' + escapeHtml(title) + '</b><span>' + escapeHtml(meta || "Upload") + '</span></div>'
       + '</button>';
   }).join("");
 
   updateLibrarySelection(selectedVideoId);
-}
-
-function parseVideoId(value) {
-  const trimmed = value.trim();
-  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
-
-  try {
-    const url = new URL(trimmed);
-    if (url.hostname.includes("youtu.be")) {
-      const id = url.pathname.split("/").filter(Boolean)[0];
-      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
-    }
-    if (url.searchParams.get("v")) return url.searchParams.get("v");
-    const shorts = url.pathname.match(/\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})/);
-    if (shorts) return shorts[2];
-  } catch (error) {
-    return "";
-  }
-
-  return "";
-}
-
-function createProvider() {
-  const provider = new GoogleAuthProvider();
-  scopes.forEach((scope) => provider.addScope(scope));
-  provider.setCustomParameters({include_granted_scopes: "true"});
-  return provider;
 }
 
 function readCachedAccessToken() {
@@ -269,20 +232,53 @@ function clearCachedAccessToken() {
   localStorage.removeItem(tokenStorageKey);
 }
 
-function userHasGoogleProvider(user) {
-  return user.providerData.some((provider) => provider.providerId === "google.com");
+function loadGoogleIdentityServices() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  if (googleIdentityScriptPromise) return googleIdentityScriptPromise;
+
+  googleIdentityScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Google Identity Services could not load."));
+    document.head.append(script);
+  });
+
+  return googleIdentityScriptPromise;
 }
 
 async function requestAccessToken() {
-  if (!currentUser) throw new Error("Sign in before analyzing a video.");
-  const provider = createProvider();
-  const result = userHasGoogleProvider(currentUser)
-    ? await reauthenticateWithPopup(currentUser, provider)
-    : await linkWithPopup(currentUser, provider);
-  const credential = GoogleAuthProvider.credentialFromResult(result);
-  if (!credential?.accessToken) throw new Error("Google did not return a YouTube access token.");
-  saveCachedAccessToken(credential.accessToken);
-  return credential.accessToken;
+  if (!currentUser) throw new Error("Sign in before generating insights.");
+  if (!googleOAuthClientId) throw new Error("Missing Google OAuth client ID. Add your Web OAuth client ID in js/firebase-config.js.");
+
+  await loadGoogleIdentityServices();
+
+  return new Promise((resolve, reject) => {
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: googleOAuthClientId,
+      scope: scopes.join(" "),
+      prompt: "consent select_account",
+      callback: (response) => {
+        if (response.error) {
+          reject(new Error(response.error_description || response.error));
+          return;
+        }
+        saveCachedAccessToken(response.access_token);
+        resolve(response.access_token);
+      },
+      error_callback: (error) => {
+        if (error.type === "popup_closed") {
+          reject(new Error("Connection canceled."));
+          return;
+        }
+        reject(new Error(error.message || error.type || "Google authorization failed."));
+      }
+    });
+
+    tokenClient.requestAccessToken();
+  });
 }
 
 async function getAccessToken() {
@@ -329,7 +325,7 @@ async function fetchUploadVideoIds(accessToken) {
       if (id) ids.push(id);
     });
     pageToken = payload.nextPageToken || "";
-  } while (pageToken);
+  } while (pageToken && ids.length < 200);
 
   return ids;
 }
@@ -353,131 +349,178 @@ async function fetchChannelVideos(accessToken) {
   return fetchVideosByIds(videoIds, accessToken);
 }
 
-async function fetchVideo(videoId, accessToken) {
-  const url = new URL("https://www.googleapis.com/youtube/v3/videos");
-  url.searchParams.set("part", "snippet,statistics,contentDetails");
-  url.searchParams.set("id", videoId);
-  const payload = await fetchJson(url, accessToken);
-  const video = payload.items?.[0];
-  if (!video) throw new Error("No video was found for that URL.");
-  return video;
+async function fetchTrendingVideos(accessToken, videos) {
+  const categoryCounts = new Map();
+  videos.forEach((video) => {
+    const categoryId = video.snippet?.categoryId;
+    if (!categoryId) return;
+    categoryCounts.set(categoryId, (categoryCounts.get(categoryId) || 0) + 1);
+  });
+  const categoryId = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+  if (!categoryId) return [];
+
+  try {
+    const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+    url.searchParams.set("part", "snippet,statistics,contentDetails");
+    url.searchParams.set("chart", "mostPopular");
+    url.searchParams.set("regionCode", "US");
+    url.searchParams.set("maxResults", "12");
+    url.searchParams.set("videoCategoryId", categoryId);
+    const payload = await fetchJson(url, accessToken);
+    return payload.items || [];
+  } catch (error) {
+    console.warn("Current popular videos were not available.", error);
+    return [];
+  }
 }
 
-async function fetchVideoAnalyticsRange(videoId, accessToken, {startDate, endDate, label}) {
-  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
-  url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", startDate);
-  url.searchParams.set("endDate", endDate);
-  url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage");
-  url.searchParams.set("filters", `video==${videoId}`);
+function videoScore(video) {
+  const stats = video.statistics || {};
+  const views = numberValue(stats.viewCount) || 0;
+  const likes = numberValue(stats.likeCount) || 0;
+  const comments = numberValue(stats.commentCount) || 0;
+  return views + likes * 20 + comments * 40;
+}
 
-  const payload = await fetchJson(url, accessToken);
-  const row = payload.rows?.[0];
-  if (!row) return null;
+function isShort(video) {
+  const seconds = secondsFromIso(video.contentDetails?.duration);
+  return seconds !== null && seconds <= 75;
+}
+
+function topVideos(videos, count = 8) {
+  return [...videos].sort((a, b) => videoScore(b) - videoScore(a)).slice(0, count);
+}
+
+function bestUploadSlot(videos, format = "all") {
+  const pool = topVideos(videos.filter((video) => {
+    if (format === "short") return isShort(video);
+    if (format === "video") return !isShort(video);
+    return true;
+  }), 10);
+  const fallbackPool = pool.length ? pool : topVideos(videos, 10);
+  const buckets = new Map();
+  fallbackPool.forEach((video) => {
+    const date = new Date(video.snippet?.publishedAt || "");
+    if (Number.isNaN(date.getTime())) return;
+    const day = new Intl.DateTimeFormat("en", {weekday: "short"}).format(date);
+    const hour = date.getHours();
+    const slotHour = Math.round(hour / 3) * 3;
+    const key = `${day} ${String(slotHour % 24).padStart(2, "0")}:00`;
+    buckets.set(key, (buckets.get(key) || 0) + videoScore(video));
+  });
+
+  const best = [...buckets.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return best || "After your next upload";
+}
+
+function recommendedLength(videos, format) {
+  const pool = topVideos(videos.filter((video) => format === "short" ? isShort(video) : !isShort(video)), 8);
+  const seconds = median(pool.map((video) => secondsFromIso(video.contentDetails?.duration)).filter((value) => value !== null));
+  if (!seconds && format === "short") return "30-45 sec";
+  if (!seconds) return "6-9 min";
+  if (format === "short") {
+    const low = Math.max(15, Math.round((seconds - 8) / 5) * 5);
+    const high = Math.min(75, Math.round((seconds + 8) / 5) * 5);
+    return `${low}-${high} sec`;
+  }
+  const low = Math.max(60, Math.round((seconds * 0.85) / 30) * 30);
+  const high = Math.round((seconds * 1.15) / 30) * 30;
+  return `${durationFromSeconds(low)}-${durationFromSeconds(high)}`;
+}
+
+function importantWords(text) {
+  const stopWords = new Set([
+    "the", "and", "for", "with", "you", "your", "this", "that", "from", "into", "what", "when", "why", "how",
+    "are", "was", "were", "will", "can", "about", "after", "before", "video", "short", "shorts", "part", "new",
+    "best", "worst", "full", "official", "live", "first", "last", "more", "less", "just", "like", "than"
+  ]);
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !stopWords.has(word));
+}
+
+function keywordSignals(videos, trendVideos = []) {
+  const scores = new Map();
+  topVideos(videos, 12).forEach((video, index) => {
+    importantWords(video.snippet?.title).forEach((word) => {
+      scores.set(word, (scores.get(word) || 0) + Math.max(1, 12 - index) * 2);
+    });
+  });
+  trendVideos.forEach((video, index) => {
+    importantWords(video.snippet?.title).forEach((word) => {
+      scores.set(word, (scores.get(word) || 0) + Math.max(1, 10 - index));
+    });
+  });
+  return [...scores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([word]) => word)
+    .slice(0, 8);
+}
+
+function buildTopicIdeas(videos, trendVideos) {
+  const keywords = keywordSignals(videos, trendVideos);
+  const best = topVideos(videos, 3);
+  const trendTitle = trendVideos[0]?.snippet?.title || "";
+  const primary = keywords[0] || "your strongest topic";
+  const secondary = keywords[1] || "a viewer problem";
+  const third = keywords[2] || "a current trend";
+  const bestTitle = best[0]?.snippet?.title || "your top upload";
+
+  return [
+    {
+      title: `Make a ${primary} follow-up`,
+      body: `Build from ${bestTitle}. Use the same viewer promise, then add a fresher angle around ${secondary}.`,
+      label: "Topic"
+    },
+    {
+      title: `Turn ${secondary} into a Short`,
+      body: `Make a fast 3-step Short that answers one specific question, then point viewers to a longer upload for the full breakdown.`,
+      label: "Short"
+    },
+    {
+      title: trendTitle ? `Connect ${third} to a current trend` : `Test a trend-shaped version of ${third}`,
+      body: trendTitle
+        ? `A current popular video in your category is ${trendTitle}. Borrow the format, not the idea, and apply it to your channel niche.`
+        : `Use your recent high-performing title patterns and package ${third} as a timely comparison, challenge, or mistake video.`,
+      label: "Trend"
+    }
+  ];
+}
+
+function buildChannelSummary(videos, trendVideos) {
+  const recent = videos.slice(0, 20);
+  const longVideos = videos.filter((video) => !isShort(video));
+  const shorts = videos.filter(isShort);
+  const views = videos.map((video) => numberValue(video.statistics?.viewCount)).filter((value) => value !== null);
+  const avgViews = average(views) || 0;
+  const best = topVideos(videos, 1)[0];
+  const bestViews = numberValue(best?.statistics?.viewCount) || 0;
+  const keywords = keywordSignals(videos, trendVideos);
 
   return {
-    periodLabel: label,
-    views: row[0],
-    estimatedMinutesWatched: row[1],
-    averageViewDuration: row[2],
-    averageViewPercentage: row[3]
+    recent,
+    avgViews,
+    bestViews,
+    best,
+    bestUploadTime: bestUploadSlot(videos, "all"),
+    videoUploadTime: bestUploadSlot(videos, "video"),
+    shortUploadTime: bestUploadSlot(videos, "short"),
+    nextVideoLength: recommendedLength(longVideos.length ? longVideos : videos, "video"),
+    nextShortLength: recommendedLength(shorts.length ? shorts : videos, "short"),
+    topSignal: keywords[0] || "More uploads",
+    topicIdeas: buildTopicIdeas(videos, trendVideos),
+    trendVideos
   };
 }
 
-async function fetchVideoAnalytics(videoId, accessToken) {
-  const endDate = apiDate(new Date());
-  const ranges = [
-    {startDate: daysAgo(28), endDate, label: "28D"},
-    {startDate: "2005-02-14", endDate, label: "Lifetime"}
-  ];
-
-  try {
-    for (const range of ranges) {
-      const analytics = await fetchVideoAnalyticsRange(videoId, accessToken, range);
-      if (analytics) return analytics;
-    }
-    return null;
-  } catch (error) {
-    if (error.status === 401 || error.status === 403) throw error;
-    console.warn("Video analytics were not available for this video.", error);
-    return null;
-  }
-}
-
-async function fetchRetentionCurveRange(videoId, accessToken, {startDate, endDate}) {
-  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
-  url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", startDate);
-  url.searchParams.set("endDate", endDate);
-  url.searchParams.set("metrics", "audienceWatchRatio");
-  url.searchParams.set("dimensions", "elapsedVideoTimeRatio");
-  url.searchParams.set("filters", `video==${videoId}`);
-  url.searchParams.set("sort", "elapsedVideoTimeRatio");
-
-  const payload = await fetchJson(url, accessToken);
-  return (payload.rows || []).map(([position, ratio]) => ({
-    position: Number(position),
-    ratio: Number(ratio)
-  })).filter((point) => Number.isFinite(point.position) && Number.isFinite(point.ratio));
-}
-
-async function fetchRetentionCurve(videoId, accessToken) {
-  const endDate = apiDate(new Date());
-  const ranges = [
-    {startDate: daysAgo(28), endDate},
-    {startDate: "2005-02-14", endDate}
-  ];
-
-  try {
-    for (const range of ranges) {
-      const points = await fetchRetentionCurveRange(videoId, accessToken, range);
-      if (points.length) return points;
-    }
-    return [];
-  } catch (error) {
-    if (error.status === 401 || error.status === 403) throw error;
-    console.warn("Retention curve was not available for this video.", error);
-    return [];
-  }
-}
-
-async function fetchSearchTermsRange(videoId, accessToken, {startDate, endDate, label}) {
-  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
-  url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", startDate);
-  url.searchParams.set("endDate", endDate);
-  url.searchParams.set("metrics", "views");
-  url.searchParams.set("dimensions", "insightTrafficSourceDetail");
-  url.searchParams.set("filters", `video==${videoId};insightTrafficSourceType==YT_SEARCH`);
-  url.searchParams.set("sort", "-views");
-  url.searchParams.set("maxResults", "3");
-
-  const payload = await fetchJson(url, accessToken);
-  return (payload.rows || []).map(([term, views]) => ({
-    term: term || "Unknown search term",
-    views: Number(views) || 0,
-    periodLabel: label
-  }));
-}
-
-async function fetchSearchTerms(videoId, accessToken) {
-  const endDate = apiDate(new Date());
-  const ranges = [
-    {startDate: daysAgo(28), endDate, label: "28D"},
-    {startDate: "2005-02-14", endDate, label: "Lifetime"}
-  ];
-
-  try {
-    for (const range of ranges) {
-      const terms = await fetchSearchTermsRange(videoId, accessToken, range);
-      if (terms.length) return terms;
-    }
-    return [];
-  } catch (error) {
-    if (error.status === 401 || error.status === 403) throw error;
-    console.warn("YouTube search terms were not available for this video.", error);
-    return [];
-  }
+function toneForRatio(value, baseline) {
+  if (!baseline || !value) return "warn";
+  const ratio = value / baseline;
+  if (ratio >= 1.1) return "good";
+  if (ratio >= 0.75) return "warn";
+  return "bad";
 }
 
 function setMetric(index, value, trend = "", trendClass = "") {
@@ -492,137 +535,48 @@ function setMetric(index, value, trend = "", trendClass = "") {
   }
 }
 
-function drawActualRetention(points, video) {
-  if (!points.length || typeof drawLineChart !== "function") {
-    if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
-    return;
-  }
-
-  const totalSeconds = secondsFromIso(video?.contentDetails?.duration) || 0;
-  const sampled = points.filter((_, index) => index % Math.max(1, Math.floor(points.length / 12)) === 0).slice(0, 12);
-  const actual = sampled.map((point) => Math.max(0, Math.min(200, Math.round(point.ratio * 100))));
-  const labels = sampled.map((point) => totalSeconds
-    ? durationFromSeconds(point.position * totalSeconds)
-    : `
-${Math.round(point.position * 100)}%`.trim());
-  drawLineChart("retentionChart", actual, actual, labels, {ySuffix: "%"});
+function drawPerformanceMix(videos) {
+  if (typeof drawLineChart !== "function") return;
+  const recent = [...videos].slice(0, 10).reverse();
+  const values = recent.map((video) => numberValue(video.statistics?.viewCount) || 0);
+  const labels = recent.map((video, index) => {
+    const title = video.snippet?.title || `Upload ${index + 1}`;
+    return title.length > 14 ? title.slice(0, 13) + "..." : title;
+  });
+  drawLineChart("retentionChart", values, values, labels, {ySuffix: ""});
 }
 
-function channelAverage(fieldName, selectedVideoId = "") {
-  const values = channelVideos
-    .filter((video) => video.id !== selectedVideoId)
-    .map((video) => numberValue(video.statistics?.[fieldName]))
-    .filter((value) => value !== null);
-  if (!values.length) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function ratioComparison(value, average) {
-  if (!average || value === null) return {label: "No baseline", className: "warn"};
-  const ratio = value / average;
-  if (ratio > 1) return {label: Math.round(ratio * 100) + "% of avg", className: "good"};
-  if (ratio >= 0.85) return {label: Math.round(ratio * 100) + "% of avg", className: "warn"};
-  return {label: Math.round(ratio * 100) + "% of avg", className: "bad"};
-}
-
-function ratioLabel(value, average) {
-  return ratioComparison(value, average).label;
-}
-
-function generateVideoInsights(video, analytics, retentionPoints, searchTerms) {
-  const stats = video.statistics || {};
-  const title = video.snippet?.title || "this video";
-  const views = numberValue(stats.viewCount);
-  const likes = numberValue(stats.likeCount);
-  const comments = numberValue(stats.commentCount);
-  const avgViews = channelAverage("viewCount", video.id);
-  const avgLikes = channelAverage("likeCount", video.id);
-  const avgComments = channelAverage("commentCount", video.id);
-  const viewsComparison = ratioComparison(views, avgViews);
-  const likeRate = views ? likes / Math.max(views, 1) : null;
-  const avgLikeRate = avgViews ? avgLikes / Math.max(avgViews, 1) : null;
-  const likesComparison = ratioComparison(likeRate, avgLikeRate);
-  const commentsComparison = ratioComparison(comments, avgComments);
-  const insights = [];
-
-  if (avgViews && views !== null) {
-    const lowViews = views < avgViews * 0.85;
-    insights.push({
-      title: lowViews ? "Make a clearer follow-up to this topic" : "Turn this into a repeatable series",
-      body: lowViews
-        ? "Create a second video that answers the same viewer problem with a sharper title, simpler thumbnail promise, and faster payoff than " + title + "."
-        : "This video is " + viewsComparison.label + " on views. Make a part two, sequel, or updated version that uses the same topic angle.",
-      label: viewsComparison.label,
-      tone: viewsComparison.className
-    });
-  }
-
-  if (avgLikes && likes !== null) {
-    const weakLikeRate = views && likes / Math.max(views, 1) < avgLikes / Math.max(avgViews || views, 1);
-    insights.push({
-      title: weakLikeRate ? "Make a payoff-first version" : "Make a deeper version for engaged viewers",
-      body: weakLikeRate
-        ? "Plan a follow-up that delivers the main result in the first minute, then expands with examples. This can test whether the idea is good but the pacing was weak."
-        : "Likes are holding up. Make a deeper tutorial, breakdown, or behind-the-scenes follow-up for viewers who wanted more detail.",
-      label: likesComparison.label,
-      tone: likesComparison.className
-    });
-  }
-
-  if (analytics?.averageViewDuration) {
-    insights.push({
-      title: "Build the next video around the watched section",
-      body: "Average view duration is " + durationFromSeconds(analytics.averageViewDuration) + ". For the next upload, put the strongest payoff before that timestamp and cut any setup that delays it.",
-      label: analytics.periodLabel || "AVD"
-    });
-  } else if (retentionPoints.length) {
-    const lowest = retentionPoints.reduce((min, point) => point.ratio < min.ratio ? point : min, retentionPoints[0]);
-    const totalSeconds = secondsFromIso(video.contentDetails?.duration) || 0;
-    insights.push({
-      title: "Make a shorter, tighter follow-up",
-      body: "Retention gets weakest around " + (totalSeconds ? durationFromSeconds(lowest.position * totalSeconds) : Math.round(lowest.position * 100) + "%") + ". Try a shorter follow-up that removes the slow section and gets to the answer faster.",
-      label: "Retention"
-    });
-  }
-
-  if (searchTerms.length) {
-    insights.push({
-      title: "Make a search-focused answer video",
-      body: "Build a video directly around the search phrase " + searchTerms[0].term + ". Use that phrase in the title and answer it clearly in the first 30 seconds.",
-      label: "Search"
-    });
-  }
-
-  if (avgComments && comments !== null && comments < avgComments * 0.75) {
-    insights.push({
-      title: "Make a question-driven follow-up",
-      body: "Comments are below your norm. Make the next video around one specific debate, mistake, or viewer choice and ask for responses in the pinned comment.",
-      label: commentsComparison.label,
-      tone: commentsComparison.className
-    });
-  }
-
-  if (!insights.length) {
-    insights.push({
-      title: "Make a direct sequel",
-      body: "Load more uploads or reconnect YouTube Analytics for stronger comparisons. For now, create a follow-up that continues the same topic with a clearer promise and faster intro.",
-      label: "Idea"
-    });
-  }
-
-  return insights.slice(0, 3);
-}
-
-function updateVideoInsights(insights) {
-  const items = document.querySelectorAll(".activity-item");
-  items.forEach((item, index) => {
-    const insight = insights[index] || {title: " ", body: " ", label: " ", tone: ""};
+function updateRecommendations(items) {
+  document.querySelectorAll(".activity-item").forEach((item, index) => {
+    const insight = items[index] || {title: " ", body: " ", label: " "};
     const timeEl = item.querySelector("time");
     item.querySelector("b").textContent = insight.title;
     item.querySelector("span").textContent = insight.body;
     timeEl.textContent = insight.label;
     timeEl.className = ["comparison-badge", insight.tone].filter(Boolean).join(" ");
   });
+}
+
+function updateTable(summary) {
+  const tbody = document.querySelector("table tbody");
+  if (!tbody) return;
+  const trendTitle = summary.trendVideos[0]?.snippet?.title || "Current popular videos unavailable";
+  const rows = [
+    ["Upload timing", "Strong uploads cluster around this slot", `Post the next video near ${summary.videoUploadTime}; test Shorts near ${summary.shortUploadTime}.`, "Schedule"],
+    ["Video length", "Your stronger long-form upload durations set the range", `Aim for ${summary.nextVideoLength} unless the topic needs more depth.`, "Format"],
+    ["Short length", "Your strongest short-form durations set the range", `Aim for ${summary.nextShortLength} with the payoff in the opening seconds.`, "Format"],
+    ["Topic direction", "High-performing titles and trend titles overlap", summary.topicIdeas[0]?.title || "Make a direct follow-up", "Idea"],
+    ["Trend context", "YouTube most-popular signal in your category", trendTitle, summary.trendVideos.length ? "Live signal" : "Limited"]
+  ];
+
+  tbody.innerHTML = rows.map(([area, signal, recommendation, impact]) => `
+    <tr>
+      <td>${escapeHtml(area)}</td>
+      <td>${escapeHtml(signal)}</td>
+      <td>${escapeHtml(recommendation)}</td>
+      <td><span class="trend ${impact === "Limited" ? "warn" : "good"}">${escapeHtml(impact)}</span></td>
+    </tr>
+  `).join("");
 }
 
 function setAnalyzerLoading(isLoading) {
@@ -640,7 +594,10 @@ function clearAnalyzerResults() {
     const valueEl = card.querySelector(".metric-value");
     const trendEl = card.querySelector(".trend");
     if (valueEl) valueEl.textContent = " ";
-    if (trendEl) trendEl.textContent = " ";
+    if (trendEl) {
+      trendEl.textContent = " ";
+      trendEl.className = "trend";
+    }
   });
   document.querySelectorAll(".activity-item").forEach((item) => {
     item.querySelector("b").textContent = " ";
@@ -656,121 +613,68 @@ function clearAnalyzerResults() {
   if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
 }
 
-function updateTable(video, analytics, retentionPoints, insights = []) {
-  const tbody = document.querySelector("table tbody");
-  if (!tbody) return;
-  const stats = video.statistics || {};
-  const views = numberValue(stats.viewCount);
-  const likes = numberValue(stats.likeCount);
-  const comments = numberValue(stats.commentCount);
-  const comparisonRows = [
-    ["Comparison", "Views", ratioComparison(views, channelAverage("viewCount", video.id)), "Channel avg"],
-    ["Comparison", "Likes", ratioComparison(likes, channelAverage("likeCount", video.id)), "Channel avg"],
-    ["Comparison", "Comments", ratioComparison(comments, channelAverage("commentCount", video.id)), "Channel avg"]
-  ];
-  const rows = [
-    ...comparisonRows.map(([segment, issue, comparison, impact]) => [segment, issue, comparison.label, impact, comparison.className]),
-    ["Private analytics", "Avg. view duration", analytics ? durationFromSeconds(analytics.averageViewDuration) : "Unavailable", analytics ? (analytics.periodLabel || "Analytics API") : "Needs owner access", analytics ? "good" : "warn"],
-    ["Action", "Top recommendation", insights[0]?.title || "Load more data", insights[0]?.label || "Insight", insights[0]?.tone || "good"]
-  ];
-
-  tbody.innerHTML = rows.map(([segment, issue, recommendation, impact, tone]) => `
-    <tr>
-      <td>${segment}</td>
-      <td>${issue}</td>
-      <td><span class="trend ${tone}">${recommendation}</span></td>
-      <td><span class="trend ${impact.includes("Unavailable") || impact.includes("Needs") ? "warn" : "good"}">${impact}</span></td>
-    </tr>
-  `).join("");
+function renderChannelInsights(summary) {
+  const bestTone = toneForRatio(summary.bestViews, summary.avgViews);
+  setMetric(0, summary.bestUploadTime, "Best performers", "good");
+  setMetric(1, summary.nextVideoLength, summary.videoUploadTime, "good");
+  setMetric(2, summary.nextShortLength, summary.shortUploadTime, "warn");
+  setMetric(3, summary.topSignal, summary.bestViews ? `${compactNumber(summary.bestViews)} top views` : "Signal", bestTone);
+  updateRecommendations(summary.topicIdeas);
+  updateTable(summary);
+  drawPerformanceMix(summary.recent);
 }
 
-function updateMetrics(video, analytics) {
-  const stats = video.statistics || {};
-  const views = numberValue(stats.viewCount);
-  const likes = numberValue(stats.likeCount);
-  const comments = numberValue(stats.commentCount);
-  const viewsComparison = ratioComparison(views, channelAverage("viewCount", video.id));
-  const likesComparison = ratioComparison(likes, channelAverage("likeCount", video.id));
-  const commentsComparison = ratioComparison(comments, channelAverage("commentCount", video.id));
-  setMetric(0, compactNumber(views), viewsComparison.label, viewsComparison.className);
-  setMetric(1, compactNumber(likes), likesComparison.label, likesComparison.className);
-  setMetric(2, compactNumber(comments), commentsComparison.label, commentsComparison.className);
-  setMetric(3, analytics ? durationFromSeconds(analytics.averageViewDuration) : "", analytics ? (analytics.periodLabel || "Analytics") : "Unavailable");
-}
+async function loadVideosWithRetry(allowPrompt) {
+  let accessToken = readCachedAccessToken();
+  if (!accessToken && !allowPrompt) return readCachedVideos();
+  accessToken = accessToken || await requestAccessToken();
 
-async function loadVideoDetailsWithRetry(videoId, accessToken) {
   try {
-    return await fetchVideo(videoId, accessToken);
+    return await fetchChannelVideos(accessToken);
   } catch (error) {
     if (error.status !== 401 && error.status !== 403) throw error;
     clearCachedAccessToken();
-    setStatus("YouTube access needs to be refreshed. Please approve once to continue.");
+    if (!allowPrompt) throw error;
+    setLibraryStatus("YouTube access expired. Please approve once to refresh insights.");
     const refreshedToken = await requestAccessToken();
-    return fetchVideo(videoId, refreshedToken);
+    return fetchChannelVideos(refreshedToken);
   }
 }
 
-async function loadPrivateAnalytics(videoId, accessToken) {
-  const [analyticsResult, retentionResult, searchTermsResult] = await Promise.allSettled([
-    fetchVideoAnalytics(videoId, accessToken),
-    fetchRetentionCurve(videoId, accessToken),
-    fetchSearchTerms(videoId, accessToken)
-  ]);
-  const errors = [analyticsResult, retentionResult, searchTermsResult]
-    .filter((result) => result.status === "rejected")
-    .map((result) => result.reason);
+async function loadVideoLibrary({allowPrompt = false, generateAfterLoad = false} = {}) {
+  if (!currentUser) return [];
 
-  return {
-    analytics: analyticsResult.status === "fulfilled" ? analyticsResult.value : null,
-    retentionPoints: retentionResult.status === "fulfilled" ? retentionResult.value : [],
-    searchTerms: searchTermsResult.status === "fulfilled" ? searchTermsResult.value : [],
-    needsRefresh: errors.some((error) => error?.status === 401 || error?.status === 403),
-    errors
-  };
-}
+  const cachedVideos = readCachedVideos();
+  if (cachedVideos.length) renderVideoLibrary(cachedVideos);
 
-async function loadVideoAnalysisWithRetry(videoId) {
-  let accessToken = await getAccessToken();
-  const video = await loadVideoDetailsWithRetry(videoId, accessToken);
-  let privateData = await loadPrivateAnalytics(videoId, accessToken);
-
-  if (privateData.needsRefresh && !privateData.analytics && !privateData.retentionPoints.length) {
-    clearCachedAccessToken();
-    setStatus("YouTube Analytics access needs to be refreshed. Please approve once to continue.");
-    accessToken = await requestAccessToken();
-    privateData = await loadPrivateAnalytics(videoId, accessToken);
+  if (!readCachedAccessToken() && !allowPrompt) {
+    setLibraryStatus(cachedVideos.length ? "Showing saved uploads. Generate insights from saved data or refresh for current data." : "Refresh videos to load uploads from your linked channel.");
+    return cachedVideos;
   }
 
-  privateData.errors.forEach((error) => {
-    console.warn("Some private video analytics were not available.", error);
-  });
-
-  return [video, privateData.analytics, privateData.retentionPoints, privateData.searchTerms];
+  try {
+    setLibraryBusy(true);
+    setLibraryStatus("Loading uploads from YouTube...");
+    const videos = await loadVideosWithRetry(allowPrompt);
+    saveCachedVideos(videos);
+    renderVideoLibrary(videos);
+    setLibraryStatus(videos.length ? "Uploads loaded. Generate insights for your channel." : "No uploads were found on your linked channel.");
+    if (generateAfterLoad && videos.length) await generateChannelInsights({allowPrompt});
+    return videos;
+  } catch (error) {
+    console.error("Could not load channel videos.", error);
+    setLibraryStatus(error.message || "Could not load videos from YouTube.");
+    return cachedVideos;
+  } finally {
+    setLibraryBusy(false);
+  }
 }
 
-async function analyzeVideoById(videoId) {
-  if (!videoId) return;
-
-  // Check if channel is linked before analyzing
-  const connection = localStorage.getItem("viewcastYouTubeConnection");
+async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} = {}) {
+  const connection = localStorage.getItem(connectionStorageKey);
   if (!connection) {
     window.location.href = "channel.html?link=required";
     return;
-  }
-
-  // Check plan limits
-  const plan = localStorage.getItem("viewcast:plan") || "basic";
-  if (plan === "basic") {
-    const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
-    const currentDay = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
-    if (usage?.day === currentDay && usage.count >= 5) {
-      if (typeof window.showPlanModal === "function") {
-        window.showPlanModal("You've reached the daily analysis limit for the Basic plan. Upgrade to continue.");
-      } else {
-        window.location.href = "settings.html?upgrade=limit";
-      }
-      return;
-    }
   }
 
   const requestId = ++analysisRequestId;
@@ -779,29 +683,41 @@ async function analyzeVideoById(videoId) {
     setBusy(true);
     setAnalyzerResultsVisible(false);
     setAnalyzerLoading(true);
-    setStatus(readCachedAccessToken() ? "Loading video data from YouTube..." : "Requesting YouTube access...");
-    if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
-    updateLibrarySelection(videoId);
-    const [video, analytics, retentionPoints, searchTerms] = await loadVideoAnalysisWithRetry(videoId);
+    setStatus(readCachedAccessToken() ? "Analyzing your channel..." : "Requesting YouTube access...");
+
+    let videos = channelVideos.length ? channelVideos : readCachedVideos();
+    if (!videos.length) {
+      videos = await loadVideoLibrary({allowPrompt});
+    }
+    if (requestId !== analysisRequestId) return;
+    if (!videos.length) throw new Error("Load your channel uploads before generating insights.");
+
+    updateLibrarySelection(focusVideoId);
+    const accessToken = readCachedAccessToken();
+    const trendVideos = accessToken ? await fetchTrendingVideos(accessToken, videos) : [];
     if (requestId !== analysisRequestId) return;
 
-    updateLibrarySelection(video.id);
-    const insights = generateVideoInsights(video, analytics, retentionPoints, searchTerms);
-    updateMetrics(video, analytics);
-    updateVideoInsights(insights);
-    updateTable(video, analytics, retentionPoints, insights);
+    const orderedVideos = focusVideoId
+      ? [videos.find((video) => video.id === focusVideoId), ...videos.filter((video) => video.id !== focusVideoId)].filter(Boolean)
+      : videos;
+    const summary = buildChannelSummary(orderedVideos, trendVideos);
+    renderChannelInsights(summary);
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
-    requestAnimationFrame(() => drawActualRetention(retentionPoints, video));
-    const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
-    setStatus(analytics ? "Video insights generated from YouTube" + period + "." : "Video insights generated from public data. Private analytics are unavailable for this upload right now.");
-    setLibraryStatus("Insights ready for " + (video.snippet?.title || "selected video") + ".");
+    setStatus(trendVideos.length
+      ? "Channel insights generated from your uploads and current popular videos."
+      : "Channel insights generated from your uploads. Current popular videos were unavailable.");
+    setLibraryStatus(focusVideoId ? "Insights weighted toward the selected upload." : "Channel-level insights are ready.");
   } catch (error) {
     if (requestId !== analysisRequestId) return;
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(false);
-    console.error("Could not analyze video.", error);
-    setStatus(error.message || "Could not analyze this video.");
+    if (error.message === "Connection canceled.") {
+      setStatus("");
+      return;
+    }
+    console.error("Could not generate channel insights.", error);
+    setStatus(error.message || "Could not generate channel insights.");
   } finally {
     if (requestId === analysisRequestId) {
       setAnalyzerLoading(false);
@@ -810,54 +726,9 @@ async function analyzeVideoById(videoId) {
   }
 }
 
-async function analyzeVideo(event) {
+async function handleGenerateInsights(event) {
   event.preventDefault();
-  const videoId = parseVideoId(videoUrlInput?.value || "");
-  if (!videoId) {
-    setStatus("Choose one of your videos or paste a valid YouTube video URL for insights.");
-    return;
-  }
-  await analyzeVideoById(videoId);
-}
-
-async function loadVideoLibrary({allowPrompt = false} = {}) {
-  if (!currentUser) return;
-
-  const cachedVideos = readCachedVideos();
-  if (cachedVideos.length) renderVideoLibrary(cachedVideos);
-
-  const cachedToken = readCachedAccessToken();
-  if (!cachedToken && !allowPrompt) {
-    setLibraryStatus(cachedVideos.length ? "Showing saved uploads. Pick a video to generate insights." : "Refresh videos to load uploads from your linked channel.");
-    return;
-  }
-
-  try {
-    setLibraryBusy(true);
-    setLibraryStatus("Loading uploads from YouTube...");
-    let accessToken = cachedToken || await getAccessToken();
-    let videos;
-
-    try {
-      videos = await fetchChannelVideos(accessToken);
-    } catch (error) {
-      if (error.status !== 401) throw error;
-      clearCachedAccessToken();
-      if (!allowPrompt) throw error;
-      setLibraryStatus("YouTube access expired. Please approve once to refresh videos.");
-      accessToken = await requestAccessToken();
-      videos = await fetchChannelVideos(accessToken);
-    }
-
-    saveCachedVideos(videos);
-    renderVideoLibrary(videos);
-    setLibraryStatus(videos.length ? "Select one of your uploads to generate insights." : "No uploads were found on your linked channel.");
-  } catch (error) {
-    console.error("Could not load channel videos.", error);
-    setLibraryStatus(error.message || "Could not load videos from YouTube.");
-  } finally {
-    setLibraryBusy(false);
-  }
+  await generateChannelInsights({allowPrompt: true});
 }
 
 clearAnalyzerResults();
@@ -872,28 +743,29 @@ if (form && firebaseConfigured) {
     if (!user) {
       channelVideos = [];
       renderVideoLibrary([]);
-      setStatus("Sign in before analyzing a video.");
-      setLibraryStatus("Sign in and link a channel to generate video insights.");
+      setStatus("Sign in before generating AI insights.");
+      setLibraryStatus("Sign in and link a channel to generate channel insights.");
       return;
     }
 
     const cachedVideos = readCachedVideos();
     if (cachedVideos.length) {
       renderVideoLibrary(cachedVideos);
-      setLibraryStatus("Showing saved uploads. Pick a video to generate insights.");
+      setLibraryStatus("Showing saved uploads. Generate insights or refresh for current data.");
     } else {
-      setLibraryStatus("Loading uploads for video insights...");
+      setLibraryStatus("Loading uploads for channel insights...");
     }
     loadVideoLibrary({allowPrompt: false});
   });
-  form.addEventListener("submit", analyzeVideo);
+
+  form.addEventListener("submit", handleGenerateInsights);
   videoLibrary?.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : event.target?.parentElement;
     const card = target?.closest("[data-video-id]");
     if (!card) return;
-    analyzeVideoById(card.dataset.videoId);
+    generateChannelInsights({allowPrompt: true, focusVideoId: card.dataset.videoId});
   });
-  refreshVideosButton?.addEventListener("click", () => loadVideoLibrary({allowPrompt: true}));
+  refreshVideosButton?.addEventListener("click", () => loadVideoLibrary({allowPrompt: true, generateAfterLoad: true}));
 } else if (form) {
   setStatus("Firebase is not configured yet.");
 }

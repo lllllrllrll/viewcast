@@ -8,24 +8,17 @@
   </head>
   <body>
     <div class="app">
-      <div data-component="sidebar" data-active="insights" data-root=".." data-footer-title="AI Recommendations" data-footer-text="Choose an upload and get practical recommendations from its real performance signals."></div>
+      <div data-component="sidebar" data-active="insights" data-root=".." data-footer-title="AI Recommendations" data-footer-text="Turn channel performance, upload patterns, and current YouTube trends into next-step ideas."></div>
 
       <main class="main">
         <header class="topbar">
           <div class="title-block">
             <h2>AI Insights</h2>
-            <p>Select one of your uploads to compare it against your channel and generate focused improvement notes.</p>
+            <p>Get channel-level recommendations for upload timing, format length, and topic ideas based on your uploads and current YouTube trend signals.</p>
           </div>
           <div class="actions">
             <form class="channel-link-form" id="videoAnalysisForm">
-              <label class="search" style="width: min(320px, 42vw);">
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.9 5.03" />
-                  <path d="M14 11a5 5 0 0 0-7.07 0L4.8 13.12a5 5 0 0 0 7.07 7.07l1.22-1.22" />
-                </svg>
-                <input id="videoUrl" type="text" inputmode="url" placeholder="Paste video URL" aria-label="Video URL" style="border: 0; background: transparent; width: 100%; outline: 0;" />
-              </label>
-              <button class="primary-button" type="submit">Analyze</button>
+              <button class="primary-button" type="submit">Generate Insights</button>
             </form>
           </div>
         </header>
@@ -35,7 +28,7 @@
             <div class="panel-head">
               <div>
                 <h3>Your Videos</h3>
-                <p id="videoLibraryStatus">Choose an upload to generate AI-style insights.</p>
+                <p id="videoLibraryStatus">Refresh uploads, then generate channel-level recommendations.</p>
               </div>
               <button class="primary-button" id="refreshVideos" type="button">Refresh Videos</button>
             </div>
@@ -47,7 +40,7 @@
           <article class="panel full analyzer-loading-panel" id="analyzerLoading" hidden>
             <div class="analyzer-loader" aria-live="polite">
               <span class="loader-ring" aria-hidden="true"></span>
-              <b>Analyzing</b>
+              <b>Analyzing channel</b>
             </div>
           </article>
 
@@ -57,7 +50,7 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Views vs Average</h3>
+              <h3>Best Upload Time</h3>
               <div class="metric-value">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
@@ -69,7 +62,7 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Likes vs Average</h3>
+              <h3>Next Video Length</h3>
               <div class="metric-value">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
@@ -81,7 +74,7 @@
               <span class="trend warn">&nbsp;</span>
             </div>
             <div>
-              <h3>Comments vs Average</h3>
+              <h3>Next Short Length</h3>
               <div class="metric-value">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
@@ -93,7 +86,7 @@
               <span class="trend good">&nbsp;</span>
             </div>
             <div>
-              <h3>Avg. View Duration</h3>
+              <h3>Top Topic Signal</h3>
               <div class="metric-value">&nbsp;</div>
             </div>
             <canvas class="sparkline" data-empty-graph="true"></canvas>
@@ -102,8 +95,8 @@
           <article class="panel large analyzer-result">
             <div class="panel-head">
               <div>
-                <h3>Retention Curve</h3>
-                <p>Use drop-off shape to find where the video may be losing viewers.</p>
+                <h3>Performance Mix</h3>
+                <p>Recent uploads compared by views so patterns are easier to spot.</p>
               </div>
             </div>
             <div class="chart-wrap">
@@ -115,7 +108,7 @@
             <div class="panel-head">
               <div>
                 <h3>What To Do Next</h3>
-                <p>Follow-up video ideas generated from the selected upload and your channel averages.</p>
+                <p>Next recommendations based on your channel, strong uploads, and current popular videos.</p>
               </div>
             </div>
             <div class="activity">
@@ -128,16 +121,16 @@
           <article class="panel full analyzer-result">
             <div class="panel-head">
               <div>
-                <h3>Video Insight Report</h3>
-                <p>Specific fixes, comparisons, and next actions for this upload.</p>
+                <h3>Channel Insight Report</h3>
+                <p>Recommendations for timing, format length, topics, and trend fit.</p>
               </div>
             </div>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Segment</th>
-                    <th>Issue</th>
+                    <th>Area</th>
+                    <th>Signal</th>
                     <th>Recommendation</th>
                     <th>Impact</th>
                   </tr>
@@ -171,6 +164,6 @@
     <script src="../components/sidebar.js"></script>
     <script src="../components/plan-modal.js"></script>
     <script src="../js/script.js"></script>
-    <script type="module" src="../js/insights.js"></script>
+    <script type="module" src="../js/insights.js?v=2"></script>
   </body>
 </html>
