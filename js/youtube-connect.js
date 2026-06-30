@@ -177,6 +177,13 @@ async function requestYouTubeAccessToken() {
           return;
         }
         resolve(response.access_token);
+      },
+      error_callback: (error) => {
+        if (error.type === "popup_closed") {
+          reject(new Error("Connection canceled."));
+          return;
+        }
+        reject(new Error(error.message || error.type || "Google authorization failed."));
       }
     });
 
@@ -249,8 +256,10 @@ async function connectYouTube() {
     window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", { detail: newConn }));
   } catch (error) {
     console.error("Connect failed:", error);
-    setButton("Link New Channel");
-    // Show error to user
+    updateUI();
+
+    if (error.message === "Connection canceled.") return;
+
     const prompt = document.getElementById("connectionPrompt");
     if (prompt) {
       prompt.textContent = "Failed to link channel: " + (error.message || "Unknown error");
