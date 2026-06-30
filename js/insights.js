@@ -428,44 +428,83 @@ function recommendedLength(videos, format) {
   return `${durationFromSeconds(low)}-${durationFromSeconds(high)}`;
 }
 
-function importantWords(text) {
-  const stopWords = new Set([
-    "the", "and", "for", "with", "you", "your", "this", "that", "from", "into", "what", "when", "why", "how",
-    "are", "was", "were", "will", "can", "about", "after", "before", "video", "short", "shorts", "part", "new",
-    "best", "worst", "full", "official", "live", "first", "last", "more", "less", "just", "like", "than"
-  ]);
+const topicStopWords = new Set([
+  "the", "and", "for", "with", "you", "your", "this", "that", "from", "into", "what", "when", "why", "how",
+  "are", "was", "were", "will", "can", "about", "after", "before", "video", "short", "shorts", "part", "new",
+  "best", "worst", "full", "official", "live", "first", "last", "more", "less", "just", "like", "than",
+  "gets", "got", "get", "has", "had", "have", "does", "did", "using", "use", "made", "make", "making"
+]);
+
+function normalizedTitleWords(text) {
   return String(text || "")
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((word) => word.length > 2 && !stopWords.has(word));
+    .filter((word) => word.length > 1);
 }
 
-function keywordSignals(videos, trendVideos = []) {
+function importantWords(text) {
+  return normalizedTitleWords(text)
+    .filter((word) => word.length > 2 && !topicStopWords.has(word));
+}
+
+function titleTopicPhrases(text) {
+  const words = normalizedTitleWords(text);
+  const important = words.filter((word) => word.length > 2 && !topicStopWords.has(word));
+  const phrases = [];
+
+  if (important.length >= 2 && important.length <= 5) {
+    phrases.push(important.join(" "));
+  }
+
+  for (let size = Math.min(4, important.length); size >= 2; size -= 1) {
+    for (let index = 0; index <= important.length - size; index += 1) {
+      phrases.push(important.slice(index, index + size).join(" "));
+    }
+  }
+
+  return [...new Set(phrases)]
+    .filter((phrase) => phrase.length <= 44)
+    .slice(0, 8);
+}
+
+function addTopicScores(scores, video, weight) {
+  const phrases = titleTopicPhrases(video.snippet?.title);
+  const words = importantWords(video.snippet?.title);
+
+  phrases.forEach((phrase, index) => {
+    const phraseWeight = weight * (phrases.length - index + 1);
+    scores.set(phrase, (scores.get(phrase) || 0) + phraseWeight);
+  });
+
+  if (!phrases.length) {
+    words.forEach((word) => {
+      scores.set(word, (scores.get(word) || 0) + weight);
+    });
+  }
+}
+
+function topicSignals(videos, trendVideos = []) {
   const scores = new Map();
   topVideos(videos, 12).forEach((video, index) => {
-    importantWords(video.snippet?.title).forEach((word) => {
-      scores.set(word, (scores.get(word) || 0) + Math.max(1, 12 - index) * 2);
-    });
+    addTopicScores(scores, video, Math.max(1, 12 - index) * 2);
   });
   trendVideos.forEach((video, index) => {
-    importantWords(video.snippet?.title).forEach((word) => {
-      scores.set(word, (scores.get(word) || 0) + Math.max(1, 10 - index));
-    });
+    addTopicScores(scores, video, Math.max(1, 10 - index));
   });
   return [...scores.entries()]
     .sort((a, b) => b[1] - a[1])
-    .map(([word]) => word)
+    .map(([topic]) => topic)
     .slice(0, 8);
 }
 
 function buildTopicIdeas(videos, trendVideos) {
-  const keywords = keywordSignals(videos, trendVideos);
+  const topics = topicSignals(videos, trendVideos);
   const best = topVideos(videos, 3);
   const trendTitle = trendVideos[0]?.snippet?.title || "";
-  const primary = keywords[0] || "your strongest topic";
-  const secondary = keywords[1] || "a viewer problem";
-  const third = keywords[2] || "a current trend";
+  const primary = topics[0] || "your strongest topic";
+  const secondary = topics[1] || "a viewer problem";
+  const third = topics[2] || "a current trend";
   const bestTitle = best[0]?.snippet?.title || "your top upload";
 
   return [
@@ -497,7 +536,7 @@ function buildChannelSummary(videos, trendVideos) {
   const avgViews = average(views) || 0;
   const best = topVideos(videos, 1)[0];
   const bestViews = numberValue(best?.statistics?.viewCount) || 0;
-  const keywords = keywordSignals(videos, trendVideos);
+  const topics = topicSignals(videos, trendVideos);
 
   return {
     recent,
@@ -509,7 +548,7 @@ function buildChannelSummary(videos, trendVideos) {
     shortUploadTime: bestUploadSlot(videos, "short"),
     nextVideoLength: recommendedLength(longVideos.length ? longVideos : videos, "video"),
     nextShortLength: recommendedLength(shorts.length ? shorts : videos, "short"),
-    topSignal: keywords[0] || "More uploads",
+    topSignal: topics[0] || "More uploads",
     topicIdeas: buildTopicIdeas(videos, trendVideos),
     trendVideos
   };
