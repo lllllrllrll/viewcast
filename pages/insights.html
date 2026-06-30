@@ -121,41 +121,18 @@
           <article class="panel full analyzer-result">
             <div class="panel-head">
               <div>
-                <h3>Channel Insight Report</h3>
-                <p>Recommendations for timing, format length, topics, and trend fit.</p>
+                <h3>Advice Chat</h3>
+                <p>Ask about upload timing, format length, topic ideas, Shorts, or trend fit.</p>
               </div>
             </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Area</th>
-                    <th>Signal</th>
-                    <th>Recommendation</th>
-                    <th>Impact</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-                  <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-                  <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="insight-chat" id="insightChat">
+              <div class="chat-messages" id="chatMessages" aria-live="polite">
+                <div class="chat-message assistant">Generate insights first, then ask for advice about your channel.</div>
+              </div>
+              <form class="chat-form" id="insightChatForm">
+                <input id="insightChatInput" type="text" autocomplete="off" placeholder="Ask for channel advice..." aria-label="Ask for channel advice" />
+                <button class="primary-button" type="submit">Ask</button>
+              </form>
             </div>
           </article>
         </section>
@@ -164,6 +141,6 @@
     <script src="../components/sidebar.js"></script>
     <script src="../components/plan-modal.js"></script>
     <script src="../js/script.js"></script>
-    <script type="module" src="../js/insights.js?v=2"></script>
+    <script type="module" src="../js/insights.js?v=3"></script>
   </body>
 </html>

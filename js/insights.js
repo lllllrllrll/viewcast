@@ -17,6 +17,9 @@ const videoLibraryStatus = document.getElementById("videoLibraryStatus");
 const refreshVideosButton = document.getElementById("refreshVideos");
 const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
+const chatMessages = document.getElementById("chatMessages");
+const chatForm = document.getElementById("insightChatForm");
+const chatInput = document.getElementById("insightChatInput");
 
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
@@ -28,6 +31,7 @@ let channelVideos = [];
 let selectedVideoId = "";
 let analysisRequestId = 0;
 let googleIdentityScriptPromise = null;
+let latestChannelSummary = null;
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
@@ -836,27 +840,59 @@ function updateRecommendations(items) {
   });
 }
 
-function updateTable(summary) {
-  const tbody = document.querySelector("table tbody");
-  if (!tbody) return;
-  const trendTitle = summary.trendVideos[0]?.snippet?.title || "Similar trend signals unavailable";
-  const rows = [
-    ["Channel category", "Detected from your upload titles", summary.channelLane?.label || "General creator channel", "Context"],
-    ["Upload timing", "Strong uploads cluster around this slot", `Post the next video near ${summary.videoUploadTime}; test Shorts near ${summary.shortUploadTime}.`, "Schedule"],
-    ["Video length", "Your stronger long-form upload durations set the range", `Aim for ${summary.nextVideoLength} unless the topic needs more depth.`, "Format"],
-    ["Short length", "Your strongest short-form durations set the range", `Aim for ${summary.nextShortLength} with the payoff in the opening seconds.`, "Format"],
-    ["Topic direction", "High-performing titles and trend titles overlap", summary.topicIdeas[0]?.title || "Make a direct follow-up", "Idea"],
-    ["Trend context", "Similar videos and current popular videos", trendTitle, summary.trendVideos.length ? "Live signal" : "Limited"]
-  ];
+function setChatSeedMessage(message = "Generate insights first, then ask for advice about your channel.") {
+  if (!chatMessages) return;
+  chatMessages.innerHTML = "";
+  appendChatMessage("assistant", message);
+}
 
-  tbody.innerHTML = rows.map(([area, signal, recommendation, impact]) => `
-    <tr>
-      <td>${escapeHtml(area)}</td>
-      <td>${escapeHtml(signal)}</td>
-      <td>${escapeHtml(recommendation)}</td>
-      <td><span class="trend ${impact === "Limited" ? "warn" : "good"}">${escapeHtml(impact)}</span></td>
-    </tr>
-  `).join("");
+function appendChatMessage(role, message) {
+  if (!chatMessages) return;
+  const bubble = document.createElement("div");
+  bubble.className = ["chat-message", role].join(" ");
+  bubble.textContent = message;
+  chatMessages.append(bubble);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function compactAdviceSummary(summary) {
+  const trendTitle = summary.trendVideos[0]?.snippet?.title || "Similar trend signals unavailable";
+  return `I classified this as ${summary.channelLane?.label || "a general creator channel"}. Start with ${summary.topicIdeas[0]?.title || "a direct follow-up"}, post long-form near ${summary.videoUploadTime}, test Shorts near ${summary.shortUploadTime}, aim for ${summary.nextVideoLength} on the next video and ${summary.nextShortLength} on the next Short. Trend reference: ${trendTitle}.`;
+}
+
+function buildChatReply(question, summary) {
+  if (!summary) return "Generate channel insights first, then I can give advice using your uploads, category, and trend signals.";
+
+  const text = question.toLowerCase();
+  const trendTitle = summary.trendVideos[0]?.snippet?.title || "the trend data that was available";
+  const topIdea = summary.topicIdeas[0]?.title || `Make something around ${summary.topSignal}`;
+  const secondIdea = summary.topicIdeas[1]?.title || "Turn the idea into a tighter Short";
+
+  if (text.includes("time") || text.includes("when") || text.includes("upload") || text.includes("post")) {
+    return `For this channel, I would post the next video near ${summary.videoUploadTime}. For Shorts, test ${summary.shortUploadTime}. Those slots come from your stronger uploads, so treat them as the first test window rather than a permanent rule.`;
+  }
+
+  if (text.includes("short")) {
+    return `For the next Short, aim for ${summary.nextShortLength}. I would use ${secondIdea.toLowerCase()} and put the payoff in the first few seconds. If it performs, expand it into a longer upload.`;
+  }
+
+  if (text.includes("long") || text.includes("length") || text.includes("duration") || text.includes("video")) {
+    return `For the next full video, aim for ${summary.nextVideoLength}. Keep the intro tight and make the first promise match ${summary.topSignal}, because that is the strongest nearby topic lane right now.`;
+  }
+
+  if (text.includes("topic") || text.includes("idea") || text.includes("make") || text.includes("post")) {
+    return `I would start with: ${topIdea}. A second option is: ${secondIdea}. The goal is to stay close to your channel category, ${summary.channelLane?.label || "your current lane"}, while borrowing the packaging from ${trendTitle}.`;
+  }
+
+  if (text.includes("trend") || text.includes("popular")) {
+    return `The current outside signal I found is ${trendTitle}. Do not copy the video; borrow the format or viewer promise, then apply it to ${summary.topSignal}.`;
+  }
+
+  if (text.includes("category") || text.includes("niche") || text.includes("channel")) {
+    return `I classified the channel as ${summary.channelLane?.label || "a general creator channel"}. That means I am choosing trend searches that fit that lane instead of generic YouTube trends.`;
+  }
+
+  return `${compactAdviceSummary(summary)} Ask me about timing, Shorts, topic ideas, trends, or video length and I can narrow it down.`;
 }
 
 function setAnalyzerLoading(isLoading) {
@@ -868,6 +904,7 @@ function setAnalyzerResultsVisible(isVisible) {
 }
 
 function clearAnalyzerResults() {
+  latestChannelSummary = null;
   setAnalyzerLoading(false);
   setAnalyzerResultsVisible(false);
   document.querySelectorAll(".metric-card").forEach((card) => {
@@ -886,21 +923,19 @@ function clearAnalyzerResults() {
     timeEl.textContent = " ";
     timeEl.className = "comparison-badge";
   });
-  const tbody = document.querySelector("table tbody");
-  if (tbody) {
-    tbody.innerHTML = Array.from({length: 3}, () => "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>").join("");
-  }
+  setChatSeedMessage();
   if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
 }
 
 function renderChannelInsights(summary) {
+  latestChannelSummary = summary;
   const bestTone = toneForRatio(summary.bestViews, summary.avgViews);
   setMetric(0, summary.bestUploadTime, "Best performers", "good");
   setMetric(1, summary.nextVideoLength, summary.videoUploadTime, "good");
   setMetric(2, summary.nextShortLength, summary.shortUploadTime, "warn");
   setMetric(3, summary.topSignal, summary.channelLane?.label || (summary.bestViews ? `${compactNumber(summary.bestViews)} top views` : "Signal"), bestTone);
   updateRecommendations(summary.topicIdeas);
-  updateTable(summary);
+  setChatSeedMessage(compactAdviceSummary(summary));
   drawPerformanceMix(summary.recent);
 }
 
@@ -1011,6 +1046,15 @@ async function handleGenerateInsights(event) {
   await generateChannelInsights({allowPrompt: true});
 }
 
+function handleChatQuestion(event) {
+  event.preventDefault();
+  const question = chatInput?.value.trim() || "";
+  if (!question) return;
+  appendChatMessage("user", question);
+  chatInput.value = "";
+  appendChatMessage("assistant", buildChatReply(question, latestChannelSummary));
+}
+
 clearAnalyzerResults();
 
 if (form && firebaseConfigured) {
@@ -1039,6 +1083,7 @@ if (form && firebaseConfigured) {
   });
 
   form.addEventListener("submit", handleGenerateInsights);
+  chatForm?.addEventListener("submit", handleChatQuestion);
   videoLibrary?.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : event.target?.parentElement;
     const card = target?.closest("[data-video-id]");
