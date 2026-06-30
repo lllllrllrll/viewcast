@@ -9,7 +9,7 @@ Serve the project over HTTP and open `login.html`. Firebase Authentication does 
 For a quick local preview:
 
 ```bash
-python3 -m http.server 4173
+npx serve . -listen 3000
 ```
 
 Then open `http://localhost:4173/login.html`.
