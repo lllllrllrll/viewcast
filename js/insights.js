@@ -374,6 +374,151 @@ async function fetchTrendingVideos(accessToken, videos) {
   }
 }
 
+function videoTitleText(videos) {
+  return videos.map((video) => video.snippet?.title || "").join(" ").toLowerCase();
+}
+
+function countMatches(text, words) {
+  return words.reduce((sum, word) => sum + (text.includes(word) ? 1 : 0), 0);
+}
+
+const gameTopicNames = [
+  "fortnite", "minecraft", "roblox", "valorant", "gta", "grand theft auto", "call of duty", "warzone",
+  "apex", "apex legends", "league of legends", "valorant", "overwatch", "rocket league", "elden ring",
+  "helldivers", "palworld", "pokemon", "zelda", "mario", "sonic", "fnaf", "five nights at freddy",
+  "brawl stars", "clash royale", "clash of clans", "among us", "terraria", "stardew valley", "gmod",
+  "garry's mod", "geometry dash", "honkai", "genshin", "marvel rivals", "csgo", "counter strike",
+  "rainbow six", "r6", "nba 2k", "madden", "fc 24", "fifa"
+];
+
+function detectedGameTopics(videos) {
+  const text = videoTitleText(videos);
+  return gameTopicNames
+    .map((name) => ({
+      name,
+      count: text.split(name).length - 1
+    }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count);
+}
+
+function detectChannelLane(videos) {
+  const text = videoTitleText(videos);
+  const games = detectedGameTopics(videos);
+  const memeScore = countMatches(text, ["meme", "memes", "funny", "shitpost", "edit", "edits", "compilation", "reaction"]);
+  const gamingScore = countMatches(text, ["gaming", "gameplay", "walkthrough", "ranked", "update", "patch", "boss", "build", "loadout", "stream"]);
+  const animeScore = countMatches(text, ["anime", "manga", "jojo", "one piece", "naruto", "dragon ball", "jjk", "jujutsu", "demon slayer"]);
+
+  if (memeScore >= 2 && memeScore >= gamingScore) {
+    return {
+      key: "memes",
+      label: "Meme channel",
+      seed: games[0]?.name || importantWords(text).slice(0, 2).join(" ")
+    };
+  }
+
+  if (games.length >= 2) {
+    return {
+      key: "general-gaming",
+      label: "General gaming channel",
+      seed: games.slice(0, 3).map((game) => game.name).join(" ")
+    };
+  }
+
+  if (games.length === 1 || gamingScore >= 2) {
+    return {
+      key: "specific-game",
+      label: games[0]?.name ? `${games[0].name} channel` : "Game-specific channel",
+      seed: games[0]?.name || titleTopicPhrases(topVideos(videos, 1)[0]?.snippet?.title || "")[0] || "video game"
+    };
+  }
+
+  if (animeScore >= 2) {
+    return {
+      key: "anime",
+      label: "Anime channel",
+      seed: importantWords(text).slice(0, 3).join(" ") || "anime"
+    };
+  }
+
+  return {
+    key: "general",
+    label: "General creator channel",
+    seed: titleTopicPhrases(topVideos(videos, 1)[0]?.snippet?.title || "")[0] || importantWords(text).slice(0, 3).join(" ")
+  };
+}
+
+function trendQueriesForLane(lane) {
+  const seed = lane.seed || "youtube";
+  const year = new Date().getFullYear();
+
+  if (lane.key === "memes") {
+    return [
+      `${seed} meme trends`,
+      `trending memes ${year}`,
+      `viral meme format ${seed}`
+    ];
+  }
+
+  if (lane.key === "general-gaming") {
+    return [
+      `trending new video games ${year}`,
+      `new games everyone is playing`,
+      `viral gaming trends`
+    ];
+  }
+
+  if (lane.key === "specific-game") {
+    return [
+      `${seed} update`,
+      `${seed} tips tricks`,
+      `${seed} funny moments`,
+      `${seed} meta`
+    ];
+  }
+
+  if (lane.key === "anime") {
+    return [
+      `${seed} anime memes`,
+      `${seed} anime trend`,
+      `anime topics trending`
+    ];
+  }
+
+  return [
+    `${seed} trend`,
+    `${seed} ideas`,
+    `trending youtube topics ${seed}`
+  ];
+}
+
+async function searchVideosByQuery(accessToken, query, maxResults = 8) {
+  const publishedAfter = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+  const url = new URL("https://www.googleapis.com/youtube/v3/search");
+  url.searchParams.set("part", "snippet");
+  url.searchParams.set("type", "video");
+  url.searchParams.set("q", query);
+  url.searchParams.set("order", "relevance");
+  url.searchParams.set("maxResults", String(maxResults));
+  url.searchParams.set("publishedAfter", publishedAfter);
+
+  const payload = await fetchJson(url, accessToken);
+  const ids = (payload.items || [])
+    .map((item) => item.id?.videoId)
+    .filter(Boolean);
+  return ids.length ? fetchVideosByIds(ids, accessToken) : [];
+}
+
+async function fetchLaneTrendVideos(accessToken, videos) {
+  const lane = detectChannelLane(videos);
+  const queries = trendQueriesForLane(lane);
+  const results = await Promise.allSettled(
+    queries.slice(0, 3).map((query) => searchVideosByQuery(accessToken, query, 6))
+  );
+  const videosByQuery = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  return {lane, videos: videosByQuery};
+}
+
 async function fetchSimilarTrendVideos(accessToken, videos) {
   const seedVideo = topVideos(videos, 1)[0] || videos[0];
   const seedTitle = seedVideo?.snippet?.title || "";
@@ -402,20 +547,25 @@ async function fetchSimilarTrendVideos(accessToken, videos) {
 }
 
 async function fetchTrendReferenceVideos(accessToken, videos) {
-  const [popularResult, similarResult] = await Promise.allSettled([
+  const lane = detectChannelLane(videos);
+  const [popularResult, similarResult, laneResult] = await Promise.allSettled([
     fetchTrendingVideos(accessToken, videos),
-    fetchSimilarTrendVideos(accessToken, videos)
+    fetchSimilarTrendVideos(accessToken, videos),
+    fetchLaneTrendVideos(accessToken, videos)
   ]);
   const merged = [
+    ...(laneResult.status === "fulfilled" ? laneResult.value.videos : []),
     ...(similarResult.status === "fulfilled" ? similarResult.value : []),
     ...(popularResult.status === "fulfilled" ? popularResult.value : [])
   ];
   const seen = new Set();
-  return merged.filter((video) => {
+  const trendVideos = merged.filter((video) => {
     if (!video?.id || seen.has(video.id)) return false;
     seen.add(video.id);
     return true;
   });
+  trendVideos.channelLane = laneResult.status === "fulfilled" ? laneResult.value.lane : lane;
+  return trendVideos;
 }
 
 function videoScore(video) {
@@ -625,6 +775,7 @@ function buildChannelSummary(videos, trendVideos) {
   const best = topVideos(videos, 1)[0];
   const bestViews = numberValue(best?.statistics?.viewCount) || 0;
   const topics = topicSignals(videos, trendVideos, {preferTrend: true});
+  const channelLane = trendVideos.channelLane || detectChannelLane(videos);
 
   return {
     recent,
@@ -637,6 +788,7 @@ function buildChannelSummary(videos, trendVideos) {
     nextVideoLength: recommendedLength(longVideos.length ? longVideos : videos, "video"),
     nextShortLength: recommendedLength(shorts.length ? shorts : videos, "short"),
     topSignal: topics[0] || "More uploads",
+    channelLane,
     topicIdeas: buildTopicIdeas(videos, trendVideos),
     trendVideos
   };
@@ -689,6 +841,7 @@ function updateTable(summary) {
   if (!tbody) return;
   const trendTitle = summary.trendVideos[0]?.snippet?.title || "Similar trend signals unavailable";
   const rows = [
+    ["Channel category", "Detected from your upload titles", summary.channelLane?.label || "General creator channel", "Context"],
     ["Upload timing", "Strong uploads cluster around this slot", `Post the next video near ${summary.videoUploadTime}; test Shorts near ${summary.shortUploadTime}.`, "Schedule"],
     ["Video length", "Your stronger long-form upload durations set the range", `Aim for ${summary.nextVideoLength} unless the topic needs more depth.`, "Format"],
     ["Short length", "Your strongest short-form durations set the range", `Aim for ${summary.nextShortLength} with the payoff in the opening seconds.`, "Format"],
@@ -745,7 +898,7 @@ function renderChannelInsights(summary) {
   setMetric(0, summary.bestUploadTime, "Best performers", "good");
   setMetric(1, summary.nextVideoLength, summary.videoUploadTime, "good");
   setMetric(2, summary.nextShortLength, summary.shortUploadTime, "warn");
-  setMetric(3, summary.topSignal, summary.bestViews ? `${compactNumber(summary.bestViews)} top views` : "Signal", bestTone);
+  setMetric(3, summary.topSignal, summary.channelLane?.label || (summary.bestViews ? `${compactNumber(summary.bestViews)} top views` : "Signal"), bestTone);
   updateRecommendations(summary.topicIdeas);
   updateTable(summary);
   drawPerformanceMix(summary.recent);
