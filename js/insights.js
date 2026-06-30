@@ -374,6 +374,50 @@ async function fetchTrendingVideos(accessToken, videos) {
   }
 }
 
+async function fetchSimilarTrendVideos(accessToken, videos) {
+  const seedVideo = topVideos(videos, 1)[0] || videos[0];
+  const seedTitle = seedVideo?.snippet?.title || "";
+  const query = titleTopicPhrases(seedTitle)[0] || importantWords(seedTitle).slice(0, 4).join(" ");
+  if (!query) return [];
+
+  try {
+    const publishedAfter = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+    const url = new URL("https://www.googleapis.com/youtube/v3/search");
+    url.searchParams.set("part", "snippet");
+    url.searchParams.set("type", "video");
+    url.searchParams.set("q", query);
+    url.searchParams.set("order", "relevance");
+    url.searchParams.set("maxResults", "12");
+    url.searchParams.set("publishedAfter", publishedAfter);
+
+    const payload = await fetchJson(url, accessToken);
+    const ids = (payload.items || [])
+      .map((item) => item.id?.videoId)
+      .filter(Boolean);
+    return ids.length ? fetchVideosByIds(ids, accessToken) : [];
+  } catch (error) {
+    console.warn("Similar trend videos were not available.", error);
+    return [];
+  }
+}
+
+async function fetchTrendReferenceVideos(accessToken, videos) {
+  const [popularResult, similarResult] = await Promise.allSettled([
+    fetchTrendingVideos(accessToken, videos),
+    fetchSimilarTrendVideos(accessToken, videos)
+  ]);
+  const merged = [
+    ...(similarResult.status === "fulfilled" ? similarResult.value : []),
+    ...(popularResult.status === "fulfilled" ? popularResult.value : [])
+  ];
+  const seen = new Set();
+  return merged.filter((video) => {
+    if (!video?.id || seen.has(video.id)) return false;
+    seen.add(video.id);
+    return true;
+  });
+}
+
 function videoScore(video) {
   const stats = video.statistics || {};
   const views = numberValue(stats.viewCount) || 0;
@@ -468,6 +512,30 @@ function titleTopicPhrases(text) {
     .slice(0, 8);
 }
 
+function phraseWords(phrase) {
+  return importantWords(phrase);
+}
+
+function normalizedPhrase(phrase) {
+  return phraseWords(phrase).join(" ");
+}
+
+function stronglyOverlapsSourceTopic(topic, sourceTopics) {
+  const topicWords = new Set(phraseWords(topic));
+  if (!topicWords.size) return true;
+
+  return sourceTopics.some((sourceTopic) => {
+    const sourceWords = new Set(phraseWords(sourceTopic));
+    if (!sourceWords.size) return false;
+    const shared = [...topicWords].filter((word) => sourceWords.has(word)).length;
+    const topicCoverage = shared / topicWords.size;
+    const sourceCoverage = shared / sourceWords.size;
+    return normalizedPhrase(topic) === normalizedPhrase(sourceTopic)
+      || topicCoverage >= 0.9
+      || (topicWords.size <= 2 && sourceCoverage >= 0.75);
+  });
+}
+
 function addTopicScores(scores, video, weight) {
   const phrases = titleTopicPhrases(video.snippet?.title);
   const words = importantWords(video.snippet?.title);
@@ -484,14 +552,34 @@ function addTopicScores(scores, video, weight) {
   }
 }
 
-function topicSignals(videos, trendVideos = []) {
+function scoredTopicsFromVideos(videos, baseWeight = 1) {
   const scores = new Map();
-  topVideos(videos, 12).forEach((video, index) => {
-    addTopicScores(scores, video, Math.max(1, 12 - index) * 2);
+  videos.forEach((video, index) => {
+    addTopicScores(scores, video, Math.max(1, videos.length - index) * baseWeight);
   });
-  trendVideos.forEach((video, index) => {
-    addTopicScores(scores, video, Math.max(1, 10 - index));
+  return [...scores.entries()]
+    .sort((a, b) => b[1] - a[1]);
+}
+
+function topicSignals(videos, trendVideos = [], {preferTrend = false} = {}) {
+  const sourceTopics = topVideos(videos, 12).flatMap((video) => titleTopicPhrases(video.snippet?.title));
+
+  if (preferTrend && trendVideos.length) {
+    const trendTopics = scoredTopicsFromVideos(topVideos(trendVideos, 16), 2)
+      .map(([topic]) => topic)
+      .filter((topic) => !stronglyOverlapsSourceTopic(topic, sourceTopics))
+      .slice(0, 8);
+    if (trendTopics.length) return trendTopics;
+  }
+
+  const scores = new Map();
+  scoredTopicsFromVideos(topVideos(videos, 12), 2).forEach(([topic, score]) => {
+    scores.set(topic, (scores.get(topic) || 0) + score);
   });
+  scoredTopicsFromVideos(topVideos(trendVideos, 12), 1).forEach(([topic, score]) => {
+    scores.set(topic, (scores.get(topic) || 0) + score);
+  });
+
   return [...scores.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([topic]) => topic)
@@ -499,7 +587,7 @@ function topicSignals(videos, trendVideos = []) {
 }
 
 function buildTopicIdeas(videos, trendVideos) {
-  const topics = topicSignals(videos, trendVideos);
+  const topics = topicSignals(videos, trendVideos, {preferTrend: true});
   const best = topVideos(videos, 3);
   const trendTitle = trendVideos[0]?.snippet?.title || "";
   const primary = topics[0] || "your strongest topic";
@@ -521,7 +609,7 @@ function buildTopicIdeas(videos, trendVideos) {
     {
       title: trendTitle ? `Connect ${third} to a current trend` : `Test a trend-shaped version of ${third}`,
       body: trendTitle
-        ? `A current popular video in your category is ${trendTitle}. Borrow the format, not the idea, and apply it to your channel niche.`
+        ? `A nearby YouTube trend signal is ${trendTitle}. Borrow the format, not the idea, and apply it to your channel niche.`
         : `Use your recent high-performing title patterns and package ${third} as a timely comparison, challenge, or mistake video.`,
       label: "Trend"
     }
@@ -536,7 +624,7 @@ function buildChannelSummary(videos, trendVideos) {
   const avgViews = average(views) || 0;
   const best = topVideos(videos, 1)[0];
   const bestViews = numberValue(best?.statistics?.viewCount) || 0;
-  const topics = topicSignals(videos, trendVideos);
+  const topics = topicSignals(videos, trendVideos, {preferTrend: true});
 
   return {
     recent,
@@ -599,13 +687,13 @@ function updateRecommendations(items) {
 function updateTable(summary) {
   const tbody = document.querySelector("table tbody");
   if (!tbody) return;
-  const trendTitle = summary.trendVideos[0]?.snippet?.title || "Current popular videos unavailable";
+  const trendTitle = summary.trendVideos[0]?.snippet?.title || "Similar trend signals unavailable";
   const rows = [
     ["Upload timing", "Strong uploads cluster around this slot", `Post the next video near ${summary.videoUploadTime}; test Shorts near ${summary.shortUploadTime}.`, "Schedule"],
     ["Video length", "Your stronger long-form upload durations set the range", `Aim for ${summary.nextVideoLength} unless the topic needs more depth.`, "Format"],
     ["Short length", "Your strongest short-form durations set the range", `Aim for ${summary.nextShortLength} with the payoff in the opening seconds.`, "Format"],
     ["Topic direction", "High-performing titles and trend titles overlap", summary.topicIdeas[0]?.title || "Make a direct follow-up", "Idea"],
-    ["Trend context", "YouTube most-popular signal in your category", trendTitle, summary.trendVideos.length ? "Live signal" : "Limited"]
+    ["Trend context", "Similar videos and current popular videos", trendTitle, summary.trendVideos.length ? "Live signal" : "Limited"]
   ];
 
   tbody.innerHTML = rows.map(([area, signal, recommendation, impact]) => `
@@ -733,7 +821,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
 
     updateLibrarySelection(focusVideoId);
     const accessToken = readCachedAccessToken();
-    const trendVideos = accessToken ? await fetchTrendingVideos(accessToken, videos) : [];
+    const trendVideos = accessToken ? await fetchTrendReferenceVideos(accessToken, videos) : [];
     if (requestId !== analysisRequestId) return;
 
     const orderedVideos = focusVideoId
@@ -744,8 +832,8 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     setStatus(trendVideos.length
-      ? "Channel insights generated from your uploads and current popular videos."
-      : "Channel insights generated from your uploads. Current popular videos were unavailable.");
+      ? "Channel insights generated from your uploads and similar trend signals."
+      : "Channel insights generated from your uploads. Similar trend signals were unavailable.");
     setLibraryStatus(focusVideoId ? "Insights weighted toward the selected upload." : "Channel-level insights are ready.");
   } catch (error) {
     if (requestId !== analysisRequestId) return;
