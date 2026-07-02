@@ -364,6 +364,82 @@ function sampledSeries(rows = []) {
   return sampled[sampled.length - 1] === last ? sampled : sampled.concat([last]);
 }
 
+function fallbackMonthLabels(count = 6) {
+  const formatter = new Intl.DateTimeFormat("en", {month: "short"});
+  return Array.from({length: count}, (_, index) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (count - 1 - index));
+    return formatter.format(date);
+  });
+}
+
+function renderSubscribersTrend(connection, overviewData) {
+  if (!document.getElementById("subsChart") || typeof window.drawLineChart !== "function") return;
+  const rows = sampledSeries(overviewData?.daily || []);
+  const totalSubscribers = numberValue(connection?.channel?.subscriberCount);
+
+  if (!rows.length) {
+    const labels = fallbackMonthLabels(6);
+    const baseline = Array.from({length: labels.length}, () => 0);
+    window.drawLineChart("subsChart", baseline, baseline, labels, {ySuffix: ""});
+    return;
+  }
+
+  const subscriberChanges = rows.map((row) => numberValue(row[4]) || 0);
+  const totalChange = subscriberChanges.reduce((sum, value) => sum + value, 0);
+  let runningTotal = totalSubscribers !== null ? Math.max(0, totalSubscribers - totalChange) : 0;
+  const actual = subscriberChanges.map((value) => {
+    runningTotal += value;
+    return Math.max(0, Math.round(runningTotal));
+  });
+  const labels = rows.map((row) => formatDateLabel(row[0]));
+  const forecast = actual.map((value) => value);
+  window.drawLineChart("subsChart", actual, forecast, labels, {ySuffix: ""});
+}
+
+function weekLabel(date) {
+  return new Intl.DateTimeFormat("en", {month: "short", day: "numeric"}).format(date);
+}
+
+function fallbackWeekRows() {
+  return Array.from({length: 4}, (_, index) => {
+    const start = new Date();
+    start.setDate(start.getDate() - ((3 - index) * 7));
+    return {label: `Week of ${weekLabel(start)}`, count: 0};
+  });
+}
+
+function renderUploadFrequency(overviewData) {
+  const container = document.querySelector("[data-channel-upload-frequency]");
+  if (!container) return;
+  const videos = overviewData?.videos || [];
+  const weekCounts = new Map();
+
+  videos.forEach((video) => {
+    const published = new Date(video.snippet?.publishedAt || "");
+    if (Number.isNaN(published.getTime())) return;
+    const weekStart = new Date(published);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    const key = weekStart.toISOString().slice(0, 10);
+    weekCounts.set(key, (weekCounts.get(key) || 0) + 1);
+  });
+
+  const rows = weekCounts.size
+    ? [...weekCounts.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-4)
+      .map(([date, count]) => ({label: `Week of ${weekLabel(new Date(date))}`, count}))
+    : fallbackWeekRows();
+  const max = Math.max(1, ...rows.map((row) => row.count));
+
+  container.innerHTML = rows.map((row) => {
+    const value = Math.round((row.count / max) * 100);
+    const label = row.count === 1 ? "1 upload" : `${row.count} uploads`;
+    return `<div class="region-row"><span>${escapeHtml(row.label)}</span><div class="bar"><i style="--value: ${value}%"></i></div><b>${escapeHtml(label)}</b></div>`;
+  }).join("");
+}
+
 function renderViewsTrend(overviewData) {
   const rows = sampledSeries(overviewData?.daily || []);
   if (!document.getElementById("viewsChart") || typeof window.drawLineChart !== "function") return;
@@ -494,6 +570,8 @@ function renderOverviewData(connection, overviewData = null) {
   renderActivity(connection, overviewData);
   renderVideoTable(overviewData);
   renderPerformanceNotifications(overviewData);
+  renderSubscribersTrend(connection, overviewData);
+  renderUploadFrequency(overviewData);
 }
 
 function escapeHtml(value) { return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }

@@ -132,7 +132,7 @@
                 <p>Number of uploads per week.</p>
               </div>
             </div>
-            <div class="region-list">
+            <div class="region-list" data-channel-upload-frequency>
               <div class="region-row"><span>&nbsp;</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
               <div class="region-row"><span>&nbsp;</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
               <div class="region-row"><span>&nbsp;</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
@@ -143,11 +143,11 @@
     </div>
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js"></script>
-    <script type="module" src="../js/dashboard-data.js"></script>
+    <script type="module" src="../js/dashboard-data.js?v=2"></script>
     <script type="module" src="../js/youtube-connect.js?v=4"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        drawLineChart("subsChart", [], [], []);
+        drawLineChart("subsChart", [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], ["M1", "M2", "M3", "M4", "M5", "M6"], {ySuffix: ""});
       });
     </script>
   </body>
