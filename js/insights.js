@@ -524,6 +524,17 @@ async function fetchLaneTrendVideos(accessToken, videos) {
   return {lane, videos: videosByQuery};
 }
 
+async function fetchGeminiTrendVideos(accessToken, trendPlan) {
+  if (!trendPlan?.queries?.length) return {lane: null, videos: []};
+  const results = await Promise.allSettled(
+    trendPlan.queries.slice(0, 4).map((query) => searchVideosByQuery(accessToken, query, 6))
+  );
+  return {
+    lane: trendPlan.lane,
+    videos: results.flatMap((result) => result.status === "fulfilled" ? result.value : [])
+  };
+}
+
 async function fetchSimilarTrendVideos(accessToken, videos) {
   const seedVideo = topVideos(videos, 1)[0] || videos[0];
   const seedTitle = seedVideo?.snippet?.title || "";
@@ -551,14 +562,16 @@ async function fetchSimilarTrendVideos(accessToken, videos) {
   }
 }
 
-async function fetchTrendReferenceVideos(accessToken, videos) {
+async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) {
   const lane = detectChannelLane(videos);
-  const [popularResult, similarResult, laneResult] = await Promise.allSettled([
+  const [popularResult, similarResult, laneResult, geminiResult] = await Promise.allSettled([
     fetchTrendingVideos(accessToken, videos),
     fetchSimilarTrendVideos(accessToken, videos),
-    fetchLaneTrendVideos(accessToken, videos)
+    fetchLaneTrendVideos(accessToken, videos),
+    fetchGeminiTrendVideos(accessToken, trendPlan)
   ]);
   const merged = [
+    ...(geminiResult.status === "fulfilled" ? geminiResult.value.videos : []),
     ...(laneResult.status === "fulfilled" ? laneResult.value.videos : []),
     ...(similarResult.status === "fulfilled" ? similarResult.value : []),
     ...(popularResult.status === "fulfilled" ? popularResult.value : [])
@@ -569,7 +582,10 @@ async function fetchTrendReferenceVideos(accessToken, videos) {
     seen.add(video.id);
     return true;
   });
-  trendVideos.channelLane = laneResult.status === "fulfilled" ? laneResult.value.lane : lane;
+  trendVideos.channelLane = geminiResult.status === "fulfilled" && geminiResult.value.lane
+    ? geminiResult.value.lane
+    : laneResult.status === "fulfilled" ? laneResult.value.lane : lane;
+  trendVideos.trendQueries = trendPlan?.queries || trendQueriesForLane(trendVideos.channelLane);
   return trendVideos;
 }
 
@@ -876,6 +892,96 @@ function compactAdviceSummary(summary) {
   return `I classified this as ${summary.channelLane?.label || "a general creator channel"}. Start with ${summary.topicIdeas[0]?.title || "a direct follow-up"}, post long-form near ${summary.videoUploadTime}, test Shorts near ${summary.shortUploadTime}, aim for ${summary.nextVideoLength} on the next video and ${summary.nextShortLength} on the next Short. Trend reference: ${trendTitle}.`;
 }
 
+function channelVideoContext(videos) {
+  return videos.slice(0, 30).map((video) => ({
+    title: video.snippet?.title || "Untitled video",
+    publishedAt: video.snippet?.publishedAt || "",
+    views: numberValue(video.statistics?.viewCount) || 0,
+    likes: numberValue(video.statistics?.likeCount) || 0,
+    comments: numberValue(video.statistics?.commentCount) || 0,
+    duration: durationFromIso(video.contentDetails?.duration),
+    format: isShort(video) ? "Short" : "Video",
+    youtubeCategoryId: video.snippet?.categoryId || ""
+  }));
+}
+
+function normalizeGeminiTrendPlan(value, fallbackLane) {
+  if (!value || typeof value !== "object") return null;
+  const rawQueries = Array.isArray(value.queries) ? value.queries : [];
+  const queries = rawQueries
+    .map((query) => String(query || "").trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  if (!queries.length) return null;
+
+  return {
+    lane: {
+      key: String(value.categoryKey || fallbackLane.key || "general").slice(0, 40),
+      label: String(value.categoryLabel || fallbackLane.label || "General creator channel").slice(0, 80),
+      seed: String(value.categorySeed || fallbackLane.seed || queries[0]).slice(0, 80)
+    },
+    queries
+  };
+}
+
+async function buildGeminiTrendPlan(videos) {
+  const fallbackLane = detectChannelLane(videos);
+  if (!geminiApiKey) {
+    return {
+      lane: fallbackLane,
+      queries: trendQueriesForLane(fallbackLane)
+    };
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
+  const prompt = [
+    "You are classifying a YouTube channel for ViewCast.",
+    "Look at the upload titles, formats, dates, and performance. Decide the channel's real content lane and the best trend-search queries to find similar/current YouTube topics.",
+    "Examples: a meme channel should search meme formats/trends; a general gaming channel should search new/trending games; a channel focused on one game should search topics inside that game.",
+    "Return JSON only with this shape:",
+    `{"categoryKey":"","categoryLabel":"","categorySeed":"","queries":["","",""]}`,
+    "",
+    "Channel uploads:",
+    JSON.stringify(channelVideoContext(videos), null, 2)
+  ].join("\n");
+
+  try {
+    const response = await fetch(`${endpoint}?key=${geminiApiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error?.message || "Gemini could not classify the channel.");
+    const text = payload.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join("")
+      .trim();
+    return normalizeGeminiTrendPlan(safeJsonParse(text), fallbackLane) || {
+      lane: fallbackLane,
+      queries: trendQueriesForLane(fallbackLane)
+    };
+  } catch (error) {
+    console.warn("Gemini trend plan failed.", error);
+    return {
+      lane: fallbackLane,
+      queries: trendQueriesForLane(fallbackLane)
+    };
+  }
+}
+
 function geminiContext(summary) {
   const trendTitles = summary.trendVideos
     .slice(0, 5)
@@ -892,7 +998,8 @@ function geminiContext(summary) {
     nextVideoLength: summary.geminiInsights?.cards?.nextVideoLength?.value || summary.nextVideoLength,
     nextShortLength: summary.geminiInsights?.cards?.nextShortLength?.value || summary.nextShortLength,
     suggestedIdeas: ideas,
-    trendReferences: trendTitles
+    trendReferences: trendTitles,
+    trendQueries: summary.trendVideos.trendQueries || []
   };
 }
 
@@ -901,15 +1008,7 @@ function geminiPageContext(summary, videos) {
     ...geminiContext(summary),
     averageViews: Math.round(summary.avgViews || 0),
     bestUploadViews: summary.bestViews || 0,
-    recentUploads: videos.slice(0, 12).map((video) => ({
-      title: video.snippet?.title || "Untitled video",
-      publishedAt: video.snippet?.publishedAt || "",
-      views: numberValue(video.statistics?.viewCount) || 0,
-      likes: numberValue(video.statistics?.likeCount) || 0,
-      comments: numberValue(video.statistics?.commentCount) || 0,
-      duration: durationFromIso(video.contentDetails?.duration),
-      format: isShort(video) ? "Short" : "Video"
-    }))
+    recentUploads: channelVideoContext(videos).slice(0, 12)
   };
 }
 
@@ -977,9 +1076,11 @@ async function buildGeminiPageInsights(summary, videos) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const prompt = [
     "You are ViewCast's Gemini AI analyst for a YouTube channel dashboard.",
-    "Use only the supplied channel data and trend references. Do not invent exact analytics.",
+    "Gemini should decide the channel category, trend interpretation, topic lane, upload advice, and recommendations from the supplied YouTube data.",
+    "Use only the supplied channel data, Gemini-selected trend queries, and trend references. Do not invent exact analytics.",
     "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
     "Make every visible AI Insights element from your recommendations: metric cards, action list, and chat intro.",
+    "The topTopicSignal card should be a trend/topic lane other creators are posting about, not a restatement of one upload title.",
     "JSON shape:",
     `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"recommendations":[{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
@@ -1200,7 +1301,11 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
 
     updateLibrarySelection(focusVideoId);
     const accessToken = readCachedAccessToken();
-    const trendVideos = accessToken ? await fetchTrendReferenceVideos(accessToken, videos) : [];
+    setStatus(geminiApiKey ? "Asking Gemini to classify your channel..." : "Classifying your channel locally...");
+    const trendPlan = await buildGeminiTrendPlan(videos);
+    if (requestId !== analysisRequestId) return;
+    setStatus(geminiApiKey ? "Searching trends chosen by Gemini..." : "Searching related trend signals...");
+    const trendVideos = accessToken ? await fetchTrendReferenceVideos(accessToken, videos, trendPlan) : [];
     if (requestId !== analysisRequestId) return;
 
     const orderedVideos = focusVideoId
