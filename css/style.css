@@ -102,6 +102,29 @@ body.settings-dark .modal-card .primary-button {
   color: white !important;
 }
 
+body.settings-dark .chat-messages {
+  background: var(--bg);
+  border-color: var(--line);
+}
+
+body.settings-dark .chat-message {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--ink);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+body.settings-dark .chat-message.user {
+  background: rgba(15, 139, 141, 0.15);
+  color: #26c2c5;
+}
+
+body.settings-dark .chat-form input {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
 
 body:not([data-public-page]) .app {
   visibility: hidden;
@@ -1062,7 +1085,7 @@ canvas {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .chat-message {
@@ -1071,7 +1094,8 @@ canvas {
   padding: 10px 12px;
   border-radius: 8px;
   color: var(--ink);
-  background: #ffffff;
+  background: var(--surface);
+  border: 1px solid var(--line);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
   font-size: 13px;
   line-height: 1.45;
@@ -1079,8 +1103,8 @@ canvas {
 
 .chat-message.user {
   justify-self: end;
-  color: #ffffff;
-  background: var(--teal);
+  color: var(--ink);
+  background: var(--teal-soft);
 }
 
 .chat-message.assistant {
@@ -1099,7 +1123,7 @@ canvas {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
   outline: none;

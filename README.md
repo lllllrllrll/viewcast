@@ -66,3 +66,7 @@ The dashboard requests these scopes: `youtube.readonly` and `yt-analytics.readon
 - Replace blank metric, chart, and table states only after real YouTube or Firebase data is connected.
 
 ### Bugs
+- make the ai insights channel use ai
+- change the color of the chatbox to follow the theme
+- add memory in advice chat and make it so that before you analyze anything it asks questions
+- make it automatically generate insights

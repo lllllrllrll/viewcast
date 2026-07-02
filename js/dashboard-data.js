@@ -4,6 +4,10 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {
+  getFunctions,
+  httpsCallable
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
+import {
   doc,
   getDoc,
   getFirestore
@@ -210,42 +214,55 @@ function fieldValues(connection) {
 }
 
 async function fetchAnalyticsRows(accessToken, {metrics, dimensions = "", sort = "", maxResults = "", days = 28}) {
-  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
-  url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", daysAgo(days));
-  url.searchParams.set("endDate", today());
-  url.searchParams.set("metrics", metrics);
-  if (dimensions) url.searchParams.set("dimensions", dimensions);
-  if (sort) url.searchParams.set("sort", sort);
-  if (maxResults) url.searchParams.set("maxResults", String(maxResults));
-  const payload = await fetchJson(url, accessToken);
-  return payload.rows || [];
+  const functions = getFunctions();
+  const getAnalytics = httpsCallable(functions, 'getYouTubeAnalytics');
+
+  const result = await getAnalytics({
+    accessToken,
+    startDate: daysAgo(days),
+    endDate: today(),
+    metrics,
+    dimensions,
+    sort,
+    maxResults: String(maxResults)
+  });
+
+  return result.data.rows || [];
 }
 
 async function fetchUploadsPlaylistId(accessToken) {
-  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
-  url.searchParams.set("part", "contentDetails");
-  url.searchParams.set("mine", "true");
-  const payload = await fetchJson(url, accessToken);
-  const playlistId = payload.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  const functions = getFunctions();
+  const getChannelData = httpsCallable(functions, 'getYouTubeChannelData');
+
+  const result = await getChannelData({ accessToken, mine: true });
+  const playlistId = result.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
   if (!playlistId) throw new Error("No uploads playlist was found.");
   return playlistId;
 }
 
 async function fetchRecentVideos(accessToken) {
   const playlistId = await fetchUploadsPlaylistId(accessToken);
-  const playlistUrl = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
-  playlistUrl.searchParams.set("part", "contentDetails");
-  playlistUrl.searchParams.set("playlistId", playlistId);
-  playlistUrl.searchParams.set("maxResults", "4");
-  const playlistPayload = await fetchJson(playlistUrl, accessToken);
-  const ids = (playlistPayload.items || []).map((item) => item.contentDetails?.videoId).filter(Boolean);
+  const functions = getFunctions();
+  const getPlaylistItems = httpsCallable(functions, 'getYouTubePlaylistItems');
+
+  const playlistResult = await getPlaylistItems({
+    accessToken,
+    playlistId,
+    maxResults: 4
+  });
+
+  const ids = (playlistResult.data.items || [])
+    .map((item) => item.contentDetails?.videoId)
+    .filter(Boolean);
   if (!ids.length) return [];
-  const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
-  videosUrl.searchParams.set("part", "snippet,statistics,contentDetails");
-  videosUrl.searchParams.set("id", ids.join(","));
-  const videosPayload = await fetchJson(videosUrl, accessToken);
-  return videosPayload.items || [];
+
+  const getVideos = httpsCallable(functions, 'getYouTubeVideos');
+  const videosResult = await getVideos({
+    accessToken,
+    ids
+  });
+
+  return videosResult.data.items || [];
 }
 
 async function fetchLiveOverview(accessToken, days = 30) {
