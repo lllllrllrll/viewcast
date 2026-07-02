@@ -45,7 +45,7 @@ function setStatus(message) {
   if (status) status.textContent = message || "";
 }
 
-function setBusy(isBusy, label = "Generate Insights") {
+function setBusy(isBusy, label = "Insights Ready") {
   if (!submitButton) return;
   submitButton.disabled = isBusy;
   submitButton.textContent = isBusy ? "Analyzing..." : label;
@@ -913,17 +913,6 @@ function setMetric(index, value, trend = "", trendClass = "") {
   }
 }
 
-function drawPerformanceMix(videos) {
-  if (typeof drawLineChart !== "function") return;
-  const recent = [...videos].slice(0, 10).reverse();
-  const values = recent.map((video) => numberValue(video.statistics?.viewCount) || 0);
-  const labels = recent.map((video, index) => {
-    const title = video.snippet?.title || `Upload ${index + 1}`;
-    return title.length > 14 ? title.slice(0, 13) + "..." : title;
-  });
-  drawLineChart("retentionChart", values, values, labels, {ySuffix: ""});
-}
-
 function updateRecommendations(items) {
   document.querySelectorAll(".activity-item").forEach((item, index) => {
     const insight = items[index] || {title: " ", body: " ", label: " "};
@@ -1177,7 +1166,7 @@ async function buildGeminiPageInsights(summary, videos) {
     "Use only the supplied channel data, Gemini-selected trend queries, and trend references. Do not invent exact analytics.",
     "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
     "Make every visible AI Insights element from your recommendations: metric cards, action list, and chat intro.",
-    "The topTopicSignal card should be a category-relevant trend/topic lane other creators are posting about, not a restatement of one upload title.",
+    "The topTopicSignal card appears as Current YouTube Trends. It should be a category-relevant trend/topic lane other creators are posting about, not a restatement of one upload title.",
     "JSON shape:",
     `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"recommendations":[{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
@@ -1291,7 +1280,6 @@ function clearAnalyzerResults() {
     timeEl.className = "comparison-badge";
   });
   setChatSeedMessage();
-  if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
 }
 
 function renderChannelInsights(summary) {
@@ -1325,7 +1313,6 @@ function renderChannelInsights(summary) {
   );
   updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
   setChatSeedMessage(geminiInsights?.chatIntro || compactAdviceSummary(summary));
-  drawPerformanceMix(summary.recent);
 }
 
 async function loadVideosWithRetry(allowPrompt) {
