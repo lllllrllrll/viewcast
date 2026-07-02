@@ -115,6 +115,34 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+const youtubeCategoryNames = {
+  "1": "Film & Animation",
+  "2": "Autos & Vehicles",
+  "10": "Music",
+  "15": "Pets & Animals",
+  "17": "Sports",
+  "19": "Travel & Events",
+  "20": "Gaming",
+  "22": "People & Blogs",
+  "23": "Comedy",
+  "24": "Entertainment",
+  "25": "News & Politics",
+  "26": "Howto & Style",
+  "27": "Education",
+  "28": "Science & Technology"
+};
+
+function shortText(value = "", max = 280) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
+function youtubeCategoryName(categoryId) {
+  return youtubeCategoryNames[String(categoryId || "")] || "";
+}
+
 function bestThumbnail(thumbnails = {}) {
   return thumbnails.maxres?.url
     || thumbnails.standard?.url
@@ -311,6 +339,28 @@ async function fetchUploadsPlaylistId(accessToken) {
   const playlistId = payload.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
   if (!playlistId) throw new Error("No uploads playlist was found for your linked channel.");
   return playlistId;
+}
+
+async function fetchChannelProfile(accessToken) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+  url.searchParams.set("part", "snippet,statistics,brandingSettings,topicDetails");
+  url.searchParams.set("mine", "true");
+  const payload = await fetchJson(url, accessToken);
+  const channel = payload.items?.[0];
+  if (!channel) return null;
+
+  return {
+    id: channel.id || "",
+    title: channel.snippet?.title || "",
+    description: shortText(channel.snippet?.description || "", 700),
+    customUrl: channel.snippet?.customUrl || "",
+    country: channel.snippet?.country || "",
+    keywords: shortText(channel.brandingSettings?.channel?.keywords || "", 500),
+    subscriberCount: numberValue(channel.statistics?.subscriberCount) || 0,
+    videoCount: numberValue(channel.statistics?.videoCount) || 0,
+    viewCount: numberValue(channel.statistics?.viewCount) || 0,
+    topicCategories: channel.topicDetails?.topicCategories || []
+  };
 }
 
 async function fetchUploadVideoIds(accessToken) {
@@ -814,7 +864,7 @@ function buildTopicIdeas(videos, trendVideos) {
   ];
 }
 
-function buildChannelSummary(videos, trendVideos) {
+function buildChannelSummary(videos, trendVideos, channelProfile = null) {
   const recent = videos.slice(0, 20);
   const longVideos = videos.filter((video) => !isShort(video));
   const shorts = videos.filter(isShort);
@@ -837,6 +887,7 @@ function buildChannelSummary(videos, trendVideos) {
     nextShortLength: recommendedLength(shorts.length ? shorts : videos, "short"),
     topSignal: topics[0] || "More uploads",
     channelLane,
+    channelProfile,
     topicIdeas: buildTopicIdeas(videos, trendVideos),
     trendVideos
   };
@@ -915,13 +966,16 @@ function compactAdviceSummary(summary) {
 function channelVideoContext(videos) {
   return videos.slice(0, 30).map((video) => ({
     title: video.snippet?.title || "Untitled video",
+    description: shortText(video.snippet?.description || "", 320),
+    tags: (video.snippet?.tags || []).slice(0, 10),
     publishedAt: video.snippet?.publishedAt || "",
     views: numberValue(video.statistics?.viewCount) || 0,
     likes: numberValue(video.statistics?.likeCount) || 0,
     comments: numberValue(video.statistics?.commentCount) || 0,
     duration: durationFromIso(video.contentDetails?.duration),
     format: isShort(video) ? "Short" : "Video",
-    youtubeCategoryId: video.snippet?.categoryId || ""
+    youtubeCategoryId: video.snippet?.categoryId || "",
+    youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId)
   }));
 }
 
@@ -953,7 +1007,7 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
   };
 }
 
-async function buildGeminiTrendPlan(videos) {
+async function buildGeminiTrendPlan(videos, channelProfile = null) {
   const fallbackLane = detectChannelLane(videos);
   if (!geminiApiKey) {
     return {
@@ -965,13 +1019,18 @@ async function buildGeminiTrendPlan(videos) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const prompt = [
     "You are classifying a YouTube channel for ViewCast.",
-    "Look at the upload titles, formats, dates, and performance. Decide the channel's broad category and, when possible, a specific subcategory.",
+    "Use the channel profile first, then repeated patterns across uploads, descriptions, tags, YouTube category names, formats, dates, and performance.",
+    "Decide the channel's broad category and, when possible, a specific subcategory. Do not classify from one ambiguous word or one outlier upload.",
     "Use clean creator categories. Examples: Music, Gaming, Roblox, Minecraft, Fortnite, Anime, Memes, Sports, Beauty, Education, Tech, Vlogs, Cooking.",
     "If the channel is broad gaming, primaryCategory should be Gaming and specificCategory should be General gaming. If it is mostly Roblox, primaryCategory should be Gaming and specificCategory should be Roblox.",
     "If a channel has music videos, songs, covers, albums, beats, or artist content, classify it as Music. Use a specific subcategory like Rap, Covers, Beats, or Artist edits only when clear.",
+    "If the channel mixes memes with another fandom, game, anime, or music niche, classify the primary content type and put the fandom/game/style in specificCategory.",
     "Then choose trend-search queries that match that classification. A Roblox channel should search Roblox-specific topics; a Music channel should search music trends for its style; a meme channel should search meme formats/trends.",
     "Return JSON only with this shape:",
     `{"categoryKey":"","primaryCategory":"","specificCategory":"","categoryLabel":"","categorySeed":"","categoryConfidence":"high","queries":["","",""]}`,
+    "",
+    "Channel profile:",
+    JSON.stringify(channelProfile || {}, null, 2),
     "",
     "Channel uploads:",
     JSON.stringify(channelVideoContext(videos), null, 2)
@@ -1022,6 +1081,7 @@ function geminiContext(summary) {
   const visibleIdeas = summary.geminiInsights?.recommendations || summary.topicIdeas;
   const ideas = visibleIdeas.map((idea) => `${idea.title}: ${idea.body}`);
   return {
+    channelProfile: summary.channelProfile || {},
     channelCategory: summary.channelLane?.label || "General creator channel",
     primaryCategory: summary.channelLane?.primaryCategory || summary.channelLane?.label || "General",
     specificCategory: summary.channelLane?.specificCategory || summary.channelLane?.seed || "",
@@ -1111,8 +1171,9 @@ async function buildGeminiPageInsights(summary, videos) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const prompt = [
     "You are ViewCast's Gemini AI analyst for a YouTube channel dashboard.",
-    "Gemini should decide the channel category, trend interpretation, topic lane, upload advice, and recommendations from the supplied YouTube data.",
+    "Gemini should decide the channel category, trend interpretation, topic lane, upload advice, and recommendations from the supplied YouTube channel profile and upload data.",
     "All insight cards and recommendations must be based on the category classification. For example, Music channels need music-specific ideas; Gaming channels need gaming ideas; Roblox channels need Roblox-specific ideas.",
+    "Use the channel profile, repeated upload patterns, descriptions, tags, and category names before relying on a single title. Keep the classification consistent across every card.",
     "Use only the supplied channel data, Gemini-selected trend queries, and trend references. Do not invent exact analytics.",
     "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
     "Make every visible AI Insights element from your recommendations: metric cards, action list, and chat intro.",
@@ -1337,8 +1398,18 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
 
     updateLibrarySelection(focusVideoId);
     const accessToken = readCachedAccessToken();
+    let channelProfile = null;
+    if (accessToken) {
+      setStatus("Loading channel profile...");
+      try {
+        channelProfile = await fetchChannelProfile(accessToken);
+      } catch (error) {
+        console.warn("Could not load channel profile for Gemini classification.", error);
+      }
+      if (requestId !== analysisRequestId) return;
+    }
     setStatus(geminiApiKey ? "Asking Gemini to classify your channel..." : "Classifying your channel locally...");
-    const trendPlan = await buildGeminiTrendPlan(videos);
+    const trendPlan = await buildGeminiTrendPlan(videos, channelProfile);
     if (requestId !== analysisRequestId) return;
     setStatus(geminiApiKey ? "Searching trends chosen by Gemini..." : "Searching related trend signals...");
     const trendVideos = accessToken ? await fetchTrendReferenceVideos(accessToken, videos, trendPlan) : [];
@@ -1347,7 +1418,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     const orderedVideos = focusVideoId
       ? [videos.find((video) => video.id === focusVideoId), ...videos.filter((video) => video.id !== focusVideoId)].filter(Boolean)
       : videos;
-    const summary = buildChannelSummary(orderedVideos, trendVideos);
+    const summary = buildChannelSummary(orderedVideos, trendVideos, channelProfile);
     setStatus(geminiApiKey ? "Asking Gemini for AI insights..." : "Gemini key missing. Using local insight fallback.");
     summary.geminiInsights = await buildGeminiPageInsights(summary, orderedVideos);
     if (requestId !== analysisRequestId) return;
