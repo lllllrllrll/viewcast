@@ -237,7 +237,7 @@ async function fetchRecentVideos(accessToken) {
   const playlistUrl = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
   playlistUrl.searchParams.set("part", "contentDetails");
   playlistUrl.searchParams.set("playlistId", playlistId);
-  playlistUrl.searchParams.set("maxResults", "4");
+  playlistUrl.searchParams.set("maxResults", "50");
   const playlistPayload = await fetchJson(playlistUrl, accessToken);
   const ids = (playlistPayload.items || []).map((item) => item.contentDetails?.videoId).filter(Boolean);
   if (!ids.length) return [];
@@ -364,35 +364,46 @@ function sampledSeries(rows = []) {
   return sampled[sampled.length - 1] === last ? sampled : sampled.concat([last]);
 }
 
-function fallbackMonthLabels(count = 6) {
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function recentMonthBuckets(count = 6) {
   const formatter = new Intl.DateTimeFormat("en", {month: "short"});
   return Array.from({length: count}, (_, index) => {
     const date = new Date();
+    date.setDate(1);
     date.setMonth(date.getMonth() - (count - 1 - index));
-    return formatter.format(date);
+    return {
+      key: monthKey(date),
+      label: formatter.format(date),
+      value: 0
+    };
   });
 }
 
 function renderSubscribersTrend(connection, overviewData) {
   if (!document.getElementById("subsChart") || typeof window.drawLineChart !== "function") return;
-  const rows = sampledSeries(overviewData?.daily || []);
-  const totalSubscribers = numberValue(connection?.channel?.subscriberCount);
+  const rows = overviewData?.daily || [];
+  const buckets = recentMonthBuckets(6);
+  const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]));
 
   if (!rows.length) {
-    const labels = fallbackMonthLabels(6);
+    const labels = buckets.map((bucket) => bucket.label);
     const baseline = Array.from({length: labels.length}, () => 0);
     window.drawLineChart("subsChart", baseline, baseline, labels, {ySuffix: ""});
     return;
   }
 
-  const subscriberChanges = rows.map((row) => numberValue(row[4]) || 0);
-  const totalChange = subscriberChanges.reduce((sum, value) => sum + value, 0);
-  let runningTotal = totalSubscribers !== null ? Math.max(0, totalSubscribers - totalChange) : 0;
-  const actual = subscriberChanges.map((value) => {
-    runningTotal += value;
-    return Math.max(0, Math.round(runningTotal));
+  rows.forEach((row) => {
+    const date = new Date(row[0]);
+    if (Number.isNaN(date.getTime())) return;
+    const bucket = bucketMap.get(monthKey(date));
+    if (bucket) bucket.value += numberValue(row[4]) || 0;
   });
-  const labels = rows.map((row) => formatDateLabel(row[0]));
+
+  const actual = buckets.map((bucket) => Math.max(0, Math.round(bucket.value)));
+  const labels = buckets.map((bucket) => bucket.label);
   const forecast = actual.map((value) => value);
   window.drawLineChart("subsChart", actual, forecast, labels, {ySuffix: ""});
 }
@@ -402,10 +413,30 @@ function weekLabel(date) {
 }
 
 function fallbackWeekRows() {
-  return Array.from({length: 4}, (_, index) => {
+  return recentWeekBuckets().map((bucket) => ({
+    label: bucket.label,
+    count: 0
+  }));
+}
+
+function weekKey(date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  copy.setDate(copy.getDate() - copy.getDay());
+  return copy.toISOString().slice(0, 10);
+}
+
+function recentWeekBuckets(count = 4) {
+  return Array.from({length: count}, (_, index) => {
     const start = new Date();
     start.setDate(start.getDate() - ((3 - index) * 7));
-    return {label: `Week of ${weekLabel(start)}`, count: 0};
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - start.getDay());
+    return {
+      key: weekKey(start),
+      label: `Week of ${weekLabel(start)}`,
+      count: 0
+    };
   });
 }
 
@@ -413,24 +444,17 @@ function renderUploadFrequency(overviewData) {
   const container = document.querySelector("[data-channel-upload-frequency]");
   if (!container) return;
   const videos = overviewData?.videos || [];
-  const weekCounts = new Map();
+  const buckets = recentWeekBuckets(4);
+  const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]));
 
   videos.forEach((video) => {
     const published = new Date(video.snippet?.publishedAt || "");
     if (Number.isNaN(published.getTime())) return;
-    const weekStart = new Date(published);
-    weekStart.setHours(0, 0, 0, 0);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    const key = weekStart.toISOString().slice(0, 10);
-    weekCounts.set(key, (weekCounts.get(key) || 0) + 1);
+    const bucket = bucketMap.get(weekKey(published));
+    if (bucket) bucket.count += 1;
   });
 
-  const rows = weekCounts.size
-    ? [...weekCounts.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-4)
-      .map(([date, count]) => ({label: `Week of ${weekLabel(new Date(date))}`, count}))
-    : fallbackWeekRows();
+  const rows = videos.length ? buckets : fallbackWeekRows();
   const max = Math.max(1, ...rows.map((row) => row.count));
 
   container.innerHTML = rows.map((row) => {
@@ -522,7 +546,7 @@ function videoFormat(video) {
 function renderVideoTable(overviewData) {
   const tbody = document.querySelector("[data-overview-videos]");
   if (!tbody) return;
-  const videos = overviewData?.videos || [];
+  const videos = (overviewData?.videos || []).slice(0, 4);
   if (!videos.length) { tbody.innerHTML = Array.from({length: 4}, () => `<tr>${"<td>" + emptyValue + "</td>".repeat(6)}</tr>`).join(""); return; }
   tbody.innerHTML = videos.map((video) => {
     const stats = video.statistics || {};
@@ -587,6 +611,8 @@ function applyYouTubeData(connection, overviewData = null) {
 }
 
 async function loadYouTubeData(user, db, days = 30) {
+  const shouldLoadChannelHistory = Boolean(document.getElementById("subsChart"));
+  if (shouldLoadChannelHistory) days = Math.max(days, 180);
   const activeConnection = readActiveConnection();
   applyYouTubeData(activeConnection, readCachedOverview(user, activeConnection?.channel?.id));
 
