@@ -590,6 +590,13 @@ function topVideos(videos, count = 8) {
   return [...videos].sort((a, b) => videoScore(b) - videoScore(a)).slice(0, count);
 }
 
+function formatStandardTime(hour) {
+  const normalizedHour = ((hour % 24) + 24) % 24;
+  const suffix = normalizedHour >= 12 ? "PM" : "AM";
+  const displayHour = normalizedHour % 12 || 12;
+  return `${displayHour} ${suffix}`;
+}
+
 function bestUploadSlot(videos, format = "all") {
   const pool = topVideos(videos.filter((video) => {
     if (format === "short") return isShort(video);
@@ -604,7 +611,7 @@ function bestUploadSlot(videos, format = "all") {
     const day = new Intl.DateTimeFormat("en", {weekday: "short"}).format(date);
     const hour = date.getHours();
     const slotHour = Math.round(hour / 3) * 3;
-    const key = `${day} ${String(slotHour % 24).padStart(2, "0")}:00`;
+    const key = `${day} ${formatStandardTime(slotHour)}`;
     buckets.set(key, (buckets.get(key) || 0) + videoScore(video));
   });
 
