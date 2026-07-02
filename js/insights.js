@@ -881,18 +881,142 @@ function geminiContext(summary) {
     .slice(0, 5)
     .map((video) => video.snippet?.title)
     .filter(Boolean);
-  const ideas = summary.topicIdeas.map((idea) => `${idea.title}: ${idea.body}`);
+  const visibleIdeas = summary.geminiInsights?.recommendations || summary.topicIdeas;
+  const ideas = visibleIdeas.map((idea) => `${idea.title}: ${idea.body}`);
   return {
     channelCategory: summary.channelLane?.label || "General creator channel",
-    topTopicSignal: summary.topSignal,
-    bestUploadTime: summary.bestUploadTime,
+    topTopicSignal: summary.geminiInsights?.cards?.topTopicSignal?.value || summary.topSignal,
+    bestUploadTime: summary.geminiInsights?.cards?.bestUploadTime?.value || summary.bestUploadTime,
     videoUploadTime: summary.videoUploadTime,
     shortUploadTime: summary.shortUploadTime,
-    nextVideoLength: summary.nextVideoLength,
-    nextShortLength: summary.nextShortLength,
+    nextVideoLength: summary.geminiInsights?.cards?.nextVideoLength?.value || summary.nextVideoLength,
+    nextShortLength: summary.geminiInsights?.cards?.nextShortLength?.value || summary.nextShortLength,
     suggestedIdeas: ideas,
     trendReferences: trendTitles
   };
+}
+
+function geminiPageContext(summary, videos) {
+  return {
+    ...geminiContext(summary),
+    averageViews: Math.round(summary.avgViews || 0),
+    bestUploadViews: summary.bestViews || 0,
+    recentUploads: videos.slice(0, 12).map((video) => ({
+      title: video.snippet?.title || "Untitled video",
+      publishedAt: video.snippet?.publishedAt || "",
+      views: numberValue(video.statistics?.viewCount) || 0,
+      likes: numberValue(video.statistics?.likeCount) || 0,
+      comments: numberValue(video.statistics?.commentCount) || 0,
+      duration: durationFromIso(video.contentDetails?.duration),
+      format: isShort(video) ? "Short" : "Video"
+    }))
+  };
+}
+
+function safeJsonParse(value) {
+  const cleaned = String(value || "")
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (error) {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    return match ? JSON.parse(match[0]) : null;
+  }
+}
+
+function normalizeRecommendation(item = {}, fallback = {}) {
+  return {
+    title: String(item.title || fallback.title || "Make a direct follow-up").slice(0, 80),
+    body: String(item.body || fallback.body || "Use your strongest topic and connect it to a timely viewer problem.").slice(0, 220),
+    label: String(item.label || fallback.label || "Gemini").slice(0, 20),
+    tone: ["good", "warn", "bad"].includes(item.tone) ? item.tone : (fallback.tone || "good")
+  };
+}
+
+function normalizeGeminiInsights(value, summary) {
+  if (!value || typeof value !== "object") return null;
+  const cards = value.cards || {};
+  const fallbackIdeas = summary.topicIdeas || [];
+  const recommendations = Array.isArray(value.recommendations)
+    ? value.recommendations.slice(0, 3).map((item, index) => normalizeRecommendation(item, fallbackIdeas[index]))
+    : [];
+
+  return {
+    cards: {
+      bestUploadTime: {
+        value: String(cards.bestUploadTime?.value || summary.bestUploadTime || "").slice(0, 24),
+        detail: String(cards.bestUploadTime?.detail || "Gemini").slice(0, 32),
+        tone: cards.bestUploadTime?.tone || "good"
+      },
+      nextVideoLength: {
+        value: String(cards.nextVideoLength?.value || summary.nextVideoLength || "").slice(0, 24),
+        detail: String(cards.nextVideoLength?.detail || summary.videoUploadTime || "Gemini").slice(0, 32),
+        tone: cards.nextVideoLength?.tone || "good"
+      },
+      nextShortLength: {
+        value: String(cards.nextShortLength?.value || summary.nextShortLength || "").slice(0, 24),
+        detail: String(cards.nextShortLength?.detail || summary.shortUploadTime || "Gemini").slice(0, 32),
+        tone: cards.nextShortLength?.tone || "warn"
+      },
+      topTopicSignal: {
+        value: String(cards.topTopicSignal?.value || summary.topSignal || "").slice(0, 40),
+        detail: String(cards.topTopicSignal?.detail || summary.channelLane?.label || "Gemini").slice(0, 32),
+        tone: cards.topTopicSignal?.tone || "good"
+      }
+    },
+    recommendations: recommendations.length ? recommendations : fallbackIdeas.slice(0, 3),
+    chatIntro: String(value.chatIntro || compactAdviceSummary(summary)).slice(0, 360)
+  };
+}
+
+async function buildGeminiPageInsights(summary, videos) {
+  if (!geminiApiKey) return null;
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
+  const prompt = [
+    "You are ViewCast's Gemini AI analyst for a YouTube channel dashboard.",
+    "Use only the supplied channel data and trend references. Do not invent exact analytics.",
+    "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
+    "Make every visible AI Insights element from your recommendations: metric cards, action list, and chat intro.",
+    "JSON shape:",
+    `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"recommendations":[{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
+    "",
+    "Channel data:",
+    JSON.stringify(geminiPageContext(summary, videos), null, 2)
+  ].join("\n");
+
+  try {
+    const response = await fetch(`${endpoint}?key=${geminiApiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error?.message || "Gemini could not generate page insights.");
+    const text = payload.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join("")
+      .trim();
+    return normalizeGeminiInsights(safeJsonParse(text), summary);
+  } catch (error) {
+    console.warn("Gemini page insights failed.", error);
+    return null;
+  }
 }
 
 async function buildGeminiChatReply(question, summary) {
@@ -975,12 +1099,34 @@ function clearAnalyzerResults() {
 function renderChannelInsights(summary) {
   latestChannelSummary = summary;
   const bestTone = toneForRatio(summary.bestViews, summary.avgViews);
-  setMetric(0, summary.bestUploadTime, "Best performers", "good");
-  setMetric(1, summary.nextVideoLength, summary.videoUploadTime, "good");
-  setMetric(2, summary.nextShortLength, summary.shortUploadTime, "warn");
-  setMetric(3, summary.topSignal, summary.channelLane?.label || (summary.bestViews ? `${compactNumber(summary.bestViews)} top views` : "Signal"), bestTone);
-  updateRecommendations(summary.topicIdeas);
-  setChatSeedMessage(compactAdviceSummary(summary));
+  const geminiInsights = summary.geminiInsights;
+  const cards = geminiInsights?.cards || {};
+  setMetric(
+    0,
+    cards.bestUploadTime?.value || summary.bestUploadTime,
+    cards.bestUploadTime?.detail || "Best performers",
+    cards.bestUploadTime?.tone || "good"
+  );
+  setMetric(
+    1,
+    cards.nextVideoLength?.value || summary.nextVideoLength,
+    cards.nextVideoLength?.detail || summary.videoUploadTime,
+    cards.nextVideoLength?.tone || "good"
+  );
+  setMetric(
+    2,
+    cards.nextShortLength?.value || summary.nextShortLength,
+    cards.nextShortLength?.detail || summary.shortUploadTime,
+    cards.nextShortLength?.tone || "warn"
+  );
+  setMetric(
+    3,
+    cards.topTopicSignal?.value || summary.topSignal,
+    cards.topTopicSignal?.detail || summary.channelLane?.label || (summary.bestViews ? `${compactNumber(summary.bestViews)} top views` : "Signal"),
+    cards.topTopicSignal?.tone || bestTone
+  );
+  updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
+  setChatSeedMessage(geminiInsights?.chatIntro || compactAdviceSummary(summary));
   drawPerformanceMix(summary.recent);
 }
 
@@ -1061,12 +1207,15 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
       ? [videos.find((video) => video.id === focusVideoId), ...videos.filter((video) => video.id !== focusVideoId)].filter(Boolean)
       : videos;
     const summary = buildChannelSummary(orderedVideos, trendVideos);
+    setStatus(geminiApiKey ? "Asking Gemini for AI insights..." : "Gemini key missing. Using local insight fallback.");
+    summary.geminiInsights = await buildGeminiPageInsights(summary, orderedVideos);
+    if (requestId !== analysisRequestId) return;
     renderChannelInsights(summary);
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
-    setStatus(trendVideos.length
-      ? "Channel insights generated from your uploads and similar trend signals."
-      : "Channel insights generated from your uploads. Similar trend signals were unavailable.");
+    setStatus(summary.geminiInsights
+      ? "Gemini AI insights generated from your uploads and trend signals."
+      : "Local insight fallback generated from your uploads and trend signals.");
     setLibraryStatus(focusVideoId ? "Insights weighted toward the selected upload." : "Channel-level insights are ready.");
   } catch (error) {
     if (requestId !== analysisRequestId) return;
