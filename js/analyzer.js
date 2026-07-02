@@ -2,13 +2,11 @@ import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14
 import {
   getAuth,
   GoogleAuthProvider,
-  onAuthStateChanged
+  linkWithPopup,
+  onAuthStateChanged,
+  reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import {
-  getFunctions,
-  httpsCallable
-} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
-import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
+import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -32,7 +30,6 @@ let channelVideos = [];
 let selectedVideoId = "";
 let analysisRequestId = 0;
 let initialVideoId = "";
-let googleIdentityScriptPromise = null;
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
@@ -102,23 +99,53 @@ function durationFromIso(value = "") {
   return seconds === null ? "" : durationFromSeconds(seconds);
 }
 
+function truncate(value = "", maxLength = 180) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return normalized.slice(0, maxLength - 1).trim() + "...";
+}
+
 function dateLabel(value) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(date);
 }
 
-function apiDate(date) { return date.toISOString().slice(0, 10); }
-function daysAgo(days) { const date = new Date(); date.setDate(date.getDate() - days); return apiDate(date); }
+function apiDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function daysAgo(days) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return apiDate(date);
+}
 
 function bestThumbnail(thumbnails = {}) {
-  return thumbnails.maxres?.url || thumbnails.standard?.url || thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url || "";
+  return thumbnails.maxres?.url
+    || thumbnails.standard?.url
+    || thumbnails.high?.url
+    || thumbnails.medium?.url
+    || thumbnails.default?.url
+    || "";
 }
 
-function escapeHtml(value) { return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-function videosStorageKey() { return currentUser ? videosStorageKeyPrefix + currentUser.uid : ""; }
+function videosStorageKey() {
+  return currentUser ? videosStorageKeyPrefix + currentUser.uid : "";
+}
 
 function readCachedVideos() {
   const key = videosStorageKey();
@@ -126,13 +153,19 @@ function readCachedVideos() {
   try {
     const saved = JSON.parse(localStorage.getItem(key) || "null");
     return Array.isArray(saved?.videos) ? saved.videos : [];
-  } catch (error) { localStorage.removeItem(key); return []; }
+  } catch (error) {
+    localStorage.removeItem(key);
+    return [];
+  }
 }
 
 function saveCachedVideos(videos) {
   const key = videosStorageKey();
   if (!key) return;
-  localStorage.setItem(key, JSON.stringify({ videos, savedAt: Date.now() }));
+  localStorage.setItem(key, JSON.stringify({
+    videos,
+    savedAt: Date.now()
+  }));
 }
 
 function usageDay() {
@@ -146,12 +179,16 @@ function recordVideoAnalysis() {
   try {
     const saved = JSON.parse(localStorage.getItem(key) || "null");
     if (saved?.day === usage.day) usage.count = Number(saved.count) || 0;
-  } catch (error) { localStorage.removeItem(key); }
+  } catch (error) {
+    localStorage.removeItem(key);
+  }
   usage.count += 1;
   localStorage.setItem(key, JSON.stringify(usage));
 }
 
-function setLibraryStatus(message) { if (videoLibraryStatus) videoLibraryStatus.textContent = message || ""; }
+function setLibraryStatus(message) {
+  if (videoLibraryStatus) videoLibraryStatus.textContent = message || "";
+}
 
 function setLibraryBusy(isBusy) {
   if (!refreshVideosButton) return;
@@ -171,98 +208,453 @@ function updateLibrarySelection(videoId) {
 function renderVideoLibrary(videos = channelVideos) {
   channelVideos = Array.isArray(videos) ? videos : [];
   if (!videoLibrary) return;
+
   if (!channelVideos.length) {
-    videoLibrary.innerHTML = '<div class="video-library-empty">No uploads loaded. Refresh to pull from your channel.</div>';
+    videoLibrary.innerHTML = '<div class="video-library-empty">No uploads are loaded yet. Refresh videos to pull from your linked channel.</div>';
     return;
   }
+
   videoLibrary.innerHTML = channelVideos.map((video) => {
     const snippet = video.snippet || {};
     const stats = video.statistics || {};
-    const meta = [dateLabel(snippet.publishedAt), wholeNumber(stats.viewCount) ? wholeNumber(stats.viewCount) + " views" : ""].filter(Boolean).join(" - ");
-    return `<button class="video-library-card" type="button" data-video-id="${escapeHtml(video.id)}">
-      <div class="video-library-thumb">
-        ${snippet.thumbnails ? `<img src="${escapeHtml(bestThumbnail(snippet.thumbnails))}" alt="">` : ""}
-        <span class="video-library-duration">${escapeHtml(durationFromIso(video.contentDetails?.duration))}</span>
-      </div>
-      <div class="video-library-body"><b>${escapeHtml(snippet.title)}</b><span>${escapeHtml(meta)}</span></div>
-    </button>`;
+    const title = snippet.title || "Untitled video";
+    const thumbnail = bestThumbnail(snippet.thumbnails);
+    const published = dateLabel(snippet.publishedAt);
+    const duration = durationFromIso(video.contentDetails?.duration);
+    const views = wholeNumber(stats.viewCount);
+    const meta = [published, views ? views + " views" : ""].filter(Boolean).join(" - ");
+    return '<button class="video-library-card" type="button" data-video-id="' + escapeHtml(video.id) + '" aria-pressed="false">'
+      + '<div class="video-library-thumb">'
+      + (thumbnail ? '<img src="' + escapeHtml(thumbnail) + '" alt="' + escapeHtml(title) + ' thumbnail">' : '')
+      + (duration ? '<span class="video-library-duration">' + escapeHtml(duration) + '</span>' : '')
+      + '</div>'
+      + '<div class="video-library-body"><b>' + escapeHtml(title) + '</b><span>' + escapeHtml(meta || "Upload") + '</span></div>'
+      + '</button>';
   }).join("");
+
   updateLibrarySelection(selectedVideoId);
 }
 
 function parseVideoId(value) {
   const trimmed = value.trim();
   if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+
   try {
     const url = new URL(trimmed);
-    if (url.hostname.includes("youtu.be")) return url.pathname.split("/")[1];
-    return url.searchParams.get("v") || url.pathname.split("/").pop();
-  } catch (e) { return ""; }
+    if (url.hostname.includes("youtu.be")) {
+      const id = url.pathname.split("/").filter(Boolean)[0];
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
+    }
+    const watchId = url.searchParams.get("v");
+    if (watchId) return /^[a-zA-Z0-9_-]{11}$/.test(watchId) ? watchId : "";
+    const shorts = url.pathname.match(/\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})/);
+    if (shorts) return shorts[2];
+  } catch (error) {
+    return "";
+  }
+
+  return "";
 }
 
-function loadGoogleIdentityServices() {
-  if (window.google?.accounts?.oauth2) return Promise.resolve();
-  if (googleIdentityScriptPromise) return googleIdentityScriptPromise;
-  googleIdentityScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true; script.onload = resolve; script.onerror = reject;
-    document.head.append(script);
-  });
-  return googleIdentityScriptPromise;
+function createProvider() {
+  const provider = new GoogleAuthProvider();
+  scopes.forEach((scope) => provider.addScope(scope));
+  provider.setCustomParameters({include_granted_scopes: "true"});
+  return provider;
+}
+
+function readCachedAccessToken() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(tokenStorageKey) || "null");
+    if (saved?.accessToken && saved.uid === currentUser?.uid && saved.expiresAt > Date.now() + 60 * 1000) {
+      return saved.accessToken;
+    }
+  } catch (error) {
+    // Fall through and clear bad token cache below.
+  }
+  localStorage.removeItem(tokenStorageKey);
+  return "";
+}
+
+function saveCachedAccessToken(accessToken) {
+  if (!accessToken || !currentUser) return;
+  localStorage.setItem(tokenStorageKey, JSON.stringify({
+    accessToken,
+    uid: currentUser.uid,
+    expiresAt: Date.now() + 50 * 60 * 1000
+  }));
+}
+
+function clearCachedAccessToken() {
+  localStorage.removeItem(tokenStorageKey);
+}
+
+function userHasGoogleProvider(user) {
+  return user.providerData.some((provider) => provider.providerId === "google.com");
+}
+
+async function requestAccessToken() {
+  if (!currentUser) throw new Error("Sign in before analyzing a video.");
+  const provider = createProvider();
+  const result = userHasGoogleProvider(currentUser)
+    ? await reauthenticateWithPopup(currentUser, provider)
+    : await linkWithPopup(currentUser, provider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  if (!credential?.accessToken) throw new Error("Google did not return a YouTube access token.");
+  saveCachedAccessToken(credential.accessToken);
+  return credential.accessToken;
 }
 
 async function getAccessToken() {
-  const saved = JSON.parse(localStorage.getItem(tokenStorageKey) || "null");
-  if (saved?.accessToken && saved.uid === currentUser?.uid && saved.expiresAt > Date.now() + 60000) return saved.accessToken;
+  return readCachedAccessToken() || requestAccessToken();
+}
 
-  await loadGoogleIdentityServices();
-  return new Promise((resolve, reject) => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: googleOAuthClientId,
-      scope: scopes.join(" "),
-      callback: (res) => {
-        if (res.error) return reject(new Error(res.error));
-        localStorage.setItem(tokenStorageKey, JSON.stringify({ accessToken: res.access_token, uid: currentUser.uid, expiresAt: Date.now() + 3000000 }));
-        resolve(res.access_token);
-      }
-    });
-    client.requestAccessToken();
+async function fetchJson(url, accessToken) {
+  const response = await fetch(url, {
+    headers: {Authorization: `Bearer ${accessToken}`}
   });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error?.message || "YouTube API request failed.");
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+async function fetchUploadsPlaylistId(accessToken) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+  url.searchParams.set("part", "contentDetails");
+  url.searchParams.set("mine", "true");
+  const payload = await fetchJson(url, accessToken);
+  const playlistId = payload.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  if (!playlistId) throw new Error("No uploads playlist was found for your linked channel.");
+  return playlistId;
+}
+
+async function fetchUploadVideoIds(accessToken) {
+  const playlistId = await fetchUploadsPlaylistId(accessToken);
+  const ids = [];
+  let pageToken = "";
+
+  do {
+    const url = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+    url.searchParams.set("part", "contentDetails");
+    url.searchParams.set("playlistId", playlistId);
+    url.searchParams.set("maxResults", "50");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const payload = await fetchJson(url, accessToken);
+    payload.items?.forEach((item) => {
+      const id = item.contentDetails?.videoId;
+      if (id) ids.push(id);
+    });
+    pageToken = payload.nextPageToken || "";
+  } while (pageToken);
+
+  return ids;
+}
+
+async function fetchVideosByIds(videoIds, accessToken) {
+  const videos = [];
+  for (let index = 0; index < videoIds.length; index += 50) {
+    const chunk = videoIds.slice(index, index + 50);
+    const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+    url.searchParams.set("part", "snippet,statistics,contentDetails");
+    url.searchParams.set("id", chunk.join(","));
+    const payload = await fetchJson(url, accessToken);
+    videos.push(...(payload.items || []));
+  }
+  return videos;
 }
 
 async function fetchChannelVideos(accessToken) {
-  const functions = getFunctions();
-  const getChannelData = httpsCallable(functions, 'getYouTubeChannelData');
-  const channelRes = await getChannelData({ accessToken, mine: true });
-  const playlistId = channelRes.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
-  if (!playlistId) throw new Error("Uploads not found.");
+  const videoIds = await fetchUploadVideoIds(accessToken);
+  if (!videoIds.length) return [];
+  return fetchVideosByIds(videoIds, accessToken);
+}
 
-  const getPlaylistItems = httpsCallable(functions, 'getYouTubePlaylistItems');
-  const playlistRes = await getPlaylistItems({ accessToken, playlistId, maxResults: 50 });
-  const ids = (playlistRes.data.items || []).map(i => i.contentDetails.videoId);
+async function fetchVideo(videoId, accessToken) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+  url.searchParams.set("part", "snippet,statistics,contentDetails");
+  url.searchParams.set("id", videoId);
+  const payload = await fetchJson(url, accessToken);
+  const video = payload.items?.[0];
+  if (!video) throw new Error("No video was found for that URL.");
+  return video;
+}
 
-  const getVideos = httpsCallable(functions, 'getYouTubeVideos');
-  const videosRes = await getVideos({ accessToken, ids });
-  return videosRes.data.items || [];
+async function fetchVideoAnalyticsRange(videoId, accessToken, {startDate, endDate, label}) {
+  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+  url.searchParams.set("ids", "channel==MINE");
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
+  url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage");
+  url.searchParams.set("filters", `video==${videoId}`);
+
+  const payload = await fetchJson(url, accessToken);
+  const row = payload.rows?.[0];
+  if (!row) return null;
+
+  return {
+    periodLabel: label,
+    views: row[0],
+    estimatedMinutesWatched: row[1],
+    averageViewDuration: row[2],
+    averageViewPercentage: row[3]
+  };
 }
 
 async function fetchVideoAnalytics(videoId, accessToken) {
-  const functions = getFunctions();
-  const getAnalytics = httpsCallable(functions, 'getYouTubeAnalytics');
-  const result = await getAnalytics({
-    accessToken,
-    startDate: "2005-01-01",
-    endDate: apiDate(new Date()),
-    metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage",
-    filters: `video==${videoId}`
+  const endDate = apiDate(new Date());
+  const ranges = [
+    {startDate: daysAgo(28), endDate, label: "28D"},
+    {startDate: "2005-02-14", endDate, label: "Lifetime"}
+  ];
+
+  try {
+    for (const range of ranges) {
+      const analytics = await fetchVideoAnalyticsRange(videoId, accessToken, range);
+      if (analytics) return analytics;
+    }
+    return null;
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) throw error;
+    console.warn("Video analytics were not available for this video.", error);
+    return null;
+  }
+}
+
+async function fetchRetentionCurveRange(videoId, accessToken, {startDate, endDate}) {
+  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+  url.searchParams.set("ids", "channel==MINE");
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
+  url.searchParams.set("metrics", "audienceWatchRatio");
+  url.searchParams.set("dimensions", "elapsedVideoTimeRatio");
+  url.searchParams.set("filters", `video==${videoId}`);
+  url.searchParams.set("sort", "elapsedVideoTimeRatio");
+
+  const payload = await fetchJson(url, accessToken);
+  return (payload.rows || []).map(([position, ratio]) => ({
+    position: Number(position),
+    ratio: Number(ratio)
+  })).filter((point) => Number.isFinite(point.position) && Number.isFinite(point.ratio));
+}
+
+async function fetchRetentionCurve(videoId, accessToken) {
+  const endDate = apiDate(new Date());
+  const ranges = [
+    {startDate: daysAgo(28), endDate},
+    {startDate: "2005-02-14", endDate}
+  ];
+
+  try {
+    for (const range of ranges) {
+      const points = await fetchRetentionCurveRange(videoId, accessToken, range);
+      if (points.length) return points;
+    }
+    return [];
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) throw error;
+    console.warn("Retention curve was not available for this video.", error);
+    return [];
+  }
+}
+
+async function fetchSearchTermsRange(videoId, accessToken, {startDate, endDate, label}) {
+  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+  url.searchParams.set("ids", "channel==MINE");
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
+  url.searchParams.set("metrics", "views");
+  url.searchParams.set("dimensions", "insightTrafficSourceDetail");
+  url.searchParams.set("filters", `video==${videoId};insightTrafficSourceType==YT_SEARCH`);
+  url.searchParams.set("sort", "-views");
+  url.searchParams.set("maxResults", "3");
+
+  const payload = await fetchJson(url, accessToken);
+  return (payload.rows || []).map(([term, views]) => ({
+    term: term || "Unknown search term",
+    views: Number(views) || 0,
+    periodLabel: label
+  }));
+}
+
+async function fetchSearchTerms(videoId, accessToken) {
+  const endDate = apiDate(new Date());
+  const ranges = [
+    {startDate: daysAgo(28), endDate, label: "28D"},
+    {startDate: "2005-02-14", endDate, label: "Lifetime"}
+  ];
+
+  try {
+    for (const range of ranges) {
+      const terms = await fetchSearchTermsRange(videoId, accessToken, range);
+      if (terms.length) return terms;
+    }
+    return [];
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) throw error;
+    console.warn("YouTube search terms were not available for this video.", error);
+    return [];
+  }
+}
+
+function setMetric(index, value, trend = "") {
+  const card = document.querySelectorAll(".metric-card")[index];
+  if (!card) return;
+  const valueEl = card.querySelector(".metric-value");
+  const trendEl = card.querySelector(".trend");
+  if (valueEl) valueEl.textContent = value === "" || value === null || value === undefined ? " " : value;
+  if (trendEl) trendEl.textContent = trend || " ";
+}
+
+function drawActualRetention(points, video) {
+  if (!points.length || typeof drawLineChart !== "function") {
+    if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+    return;
+  }
+
+  const totalSeconds = secondsFromIso(video?.contentDetails?.duration) || 0;
+  const sampled = points.filter((_, index) => index % Math.max(1, Math.floor(points.length / 12)) === 0).slice(0, 12);
+  const actual = sampled.map((point) => Math.max(0, Math.min(200, Math.round(point.ratio * 100))));
+  const labels = sampled.map((point) => totalSeconds
+    ? durationFromSeconds(point.position * totalSeconds)
+    : `${Math.round(point.position * 100)}%`);
+  drawLineChart("retentionChart", actual, actual, labels, {ySuffix: "%"});
+}
+
+function updateSearchTerms(searchTerms) {
+  const items = document.querySelectorAll(".activity-item");
+  const rows = searchTerms.length ? searchTerms : [
+    {
+      term: "Search terms unavailable",
+      views: null,
+      periodLabel: "API"
+    }
+  ];
+
+  items.forEach((item, index) => {
+    const row = rows[index] || {term: " ", views: null, periodLabel: " "};
+    item.querySelector("b").textContent = row.term;
+    item.querySelector("span").textContent = row.views === null ? "YouTube Analytics did not return search phrase data." : wholeNumber(row.views) + " views from search";
+    item.querySelector("time").textContent = row.periodLabel || " ";
   });
-  const row = result.data.rows?.[0];
-  return row ? { views: row[0], estimatedMinutesWatched: row[1], averageViewDuration: row[2], averageViewPercentage: row[3] } : null;
+}
+
+function setAnalyzerLoading(isLoading) {
+  if (analyzerLoading) analyzerLoading.hidden = !isLoading;
+}
+
+function setAnalyzerResultsVisible(isVisible) {
+  analyzerDashboard?.classList.toggle("analyzer-results-hidden", !isVisible);
+}
+
+function clearAnalyzerResults() {
+  setAnalyzerLoading(false);
+  setAnalyzerResultsVisible(false);
+  document.querySelectorAll(".metric-card").forEach((card) => {
+    const valueEl = card.querySelector(".metric-value");
+    const trendEl = card.querySelector(".trend");
+    if (valueEl) valueEl.textContent = " ";
+    if (trendEl) trendEl.textContent = " ";
+  });
+  document.querySelectorAll(".activity-item").forEach((item) => {
+    item.querySelector("b").textContent = " ";
+    item.querySelector("span").textContent = " ";
+    item.querySelector("time").textContent = " ";
+  });
+  const tbody = document.querySelector("table tbody");
+  if (tbody) {
+    tbody.innerHTML = Array.from({length: 3}, () => "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>").join("");
+  }
+  if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+}
+
+function updateTable(video, analytics, retentionPoints) {
+  const tbody = document.querySelector("table tbody");
+  if (!tbody) return;
+  const stats = video.statistics || {};
+  const rows = [
+    ["Public stats", "Views", wholeNumber(stats.viewCount) || "Unavailable", "Data API"],
+    ["Public stats", "Likes", wholeNumber(stats.likeCount) || "Unavailable", "Data API"],
+    ["Public stats", "Comments", wholeNumber(stats.commentCount) || "Unavailable", "Data API"],
+    ["Private analytics", "Avg. view %", analytics ? percent(analytics.averageViewPercentage) : "Unavailable", analytics ? (analytics.periodLabel || "Analytics API") : "Needs owner access"],
+    ["Private analytics", "Retention curve", retentionPoints.length ? `${retentionPoints.length} samples` : "Unavailable", retentionPoints.length ? "Analytics API" : "Needs owner access"]
+  ];
+
+  tbody.innerHTML = rows.map(([segment, issue, recommendation, impact]) => `
+    <tr>
+      <td>${segment}</td>
+      <td>${issue}</td>
+      <td>${recommendation}</td>
+      <td><span class="trend ${impact.includes("Unavailable") || impact.includes("Needs") ? "warn" : "good"}">${impact}</span></td>
+    </tr>
+  `).join("");
+}
+
+function updateMetrics(video, analytics) {
+  const stats = video.statistics || {};
+  setMetric(0, compactNumber(stats.viewCount), "Public");
+  setMetric(1, compactNumber(stats.likeCount), "Public");
+  setMetric(2, compactNumber(stats.commentCount), "Public");
+  setMetric(3, analytics ? durationFromSeconds(analytics.averageViewDuration) : "", analytics ? (analytics.periodLabel || "Analytics") : "Unavailable");
+}
+
+async function loadVideoDetailsWithRetry(videoId, accessToken) {
+  try {
+    return await fetchVideo(videoId, accessToken);
+  } catch (error) {
+    if (error.status !== 401 && error.status !== 403) throw error;
+    clearCachedAccessToken();
+    setStatus("YouTube access needs to be refreshed. Please approve once to continue.");
+    const refreshedToken = await requestAccessToken();
+    return fetchVideo(videoId, refreshedToken);
+  }
+}
+
+async function loadPrivateAnalytics(videoId, accessToken) {
+  const [analyticsResult, retentionResult, searchTermsResult] = await Promise.allSettled([
+    fetchVideoAnalytics(videoId, accessToken),
+    fetchRetentionCurve(videoId, accessToken),
+    fetchSearchTerms(videoId, accessToken)
+  ]);
+  const errors = [analyticsResult, retentionResult, searchTermsResult]
+    .filter((result) => result.status === "rejected")
+    .map((result) => result.reason);
+
+  return {
+    analytics: analyticsResult.status === "fulfilled" ? analyticsResult.value : null,
+    retentionPoints: retentionResult.status === "fulfilled" ? retentionResult.value : [],
+    searchTerms: searchTermsResult.status === "fulfilled" ? searchTermsResult.value : [],
+    needsRefresh: errors.some((error) => error?.status === 401 || error?.status === 403),
+    errors
+  };
+}
+
+async function loadVideoAnalysisWithRetry(videoId) {
+  let accessToken = await getAccessToken();
+  const video = await loadVideoDetailsWithRetry(videoId, accessToken);
+  let privateData = await loadPrivateAnalytics(videoId, accessToken);
+
+  if (privateData.needsRefresh && !privateData.analytics && !privateData.retentionPoints.length) {
+    clearCachedAccessToken();
+    setStatus("YouTube Analytics access needs to be refreshed. Please approve once to continue.");
+    accessToken = await requestAccessToken();
+    privateData = await loadPrivateAnalytics(videoId, accessToken);
+  }
+
+  privateData.errors.forEach((error) => {
+    console.warn("Some private video analytics were not available.", error);
+  });
+
+  return [video, privateData.analytics, privateData.retentionPoints, privateData.searchTerms];
 }
 
 async function analyzeVideoById(videoId) {
   if (!videoId) return;
+
+  // Check if channel is linked before analyzing
   const connection = localStorage.getItem("viewcastYouTubeConnection");
   if (!connection) {
     sessionStorage.setItem(pendingAnalyzerVideoKey, videoId);
@@ -270,88 +662,155 @@ async function analyzeVideoById(videoId) {
     return;
   }
 
+  // Check plan limits
   const plan = localStorage.getItem("viewcast:plan") || "basic";
   if (plan === "basic") {
     const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
-    if (usage?.day === usageDay() && usage.count >= 5) {
-      if (typeof window.showPlanModal === "function") window.showPlanModal("You've reached the daily limit. Upgrade to continue.");
-      else window.location.href = "settings.html?upgrade=limit";
+    const currentDay = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+    if (usage?.day === currentDay && usage.count >= 5) {
+      if (typeof window.showPlanModal === "function") {
+        window.showPlanModal("You've reached the daily analysis limit for the Basic plan. Upgrade to continue.");
+      } else {
+        window.location.href = "settings.html?upgrade=limit";
+      }
       return;
     }
   }
 
   const requestId = ++analysisRequestId;
+
   try {
-    setBusy(true); setAnalyzerResultsVisible(false); setAnalyzerLoading(true);
-    const accessToken = await getAccessToken();
-    const functions = getFunctions();
-    const getVideos = httpsCallable(functions, 'getYouTubeVideos');
-    const videoRes = await getVideos({ accessToken, ids: [videoId] });
-    const video = videoRes.data.items?.[0];
-    if (!video) throw new Error("Video not found.");
-
-    const [analytics, retentionRes, searchRes] = await Promise.all([
-      fetchVideoAnalytics(videoId, accessToken),
-      httpsCallable(functions, 'getYouTubeAnalytics')({ accessToken, startDate: "2005-01-01", endDate: apiDate(new Date()), metrics: "audienceWatchRatio", dimensions: "elapsedVideoTimeRatio", filters: `video==${videoId}`, sort: "elapsedVideoTimeRatio" }),
-      httpsCallable(functions, 'getYouTubeAnalytics')({ accessToken, startDate: "2005-01-01", endDate: apiDate(new Date()), metrics: "views", dimensions: "insightTrafficSourceDetail", filters: `video==${videoId};insightTrafficSourceType==YT_SEARCH`, sort: "-views", maxResults: 3 })
-    ]);
-
+    setBusy(true);
+    setAnalyzerResultsVisible(false);
+    setAnalyzerLoading(true);
+    setStatus(readCachedAccessToken() ? "Loading video data from YouTube..." : "Requesting YouTube access...");
+    if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
+    sessionStorage.removeItem(pendingAnalyzerVideoKey);
+    updateLibrarySelection(videoId);
+    const [video, analytics, retentionPoints, searchTerms] = await loadVideoAnalysisWithRetry(videoId);
     if (requestId !== analysisRequestId) return;
+
     recordVideoAnalysis();
-    updateMetrics(video, analytics);
     updateLibrarySelection(video.id);
-    setAnalyzerLoading(false); setAnalyzerResultsVisible(true);
-    setStatus("Analysis complete.");
+    updateMetrics(video, analytics);
+    updateSearchTerms(searchTerms);
+    updateTable(video, analytics, retentionPoints);
+    setAnalyzerLoading(false);
+    setAnalyzerResultsVisible(true);
+    requestAnimationFrame(() => drawActualRetention(retentionPoints, video));
+    const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
+    setStatus(analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now.");
+    setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
   } catch (error) {
-    setStatus(error.message);
-  } finally { setBusy(false); setAnalyzerLoading(false); }
+    if (requestId !== analysisRequestId) return;
+    setAnalyzerLoading(false);
+    setAnalyzerResultsVisible(false);
+    console.error("Could not analyze video.", error);
+    setStatus(error.message || "Could not analyze this video.");
+  } finally {
+    if (requestId === analysisRequestId) {
+      setAnalyzerLoading(false);
+      setBusy(false);
+    }
+  }
 }
 
-function updateMetrics(video, analytics) {
-  const stats = video.statistics || {};
-  setMetric(0, compactNumber(stats.viewCount), "Views");
-  setMetric(1, compactNumber(stats.likeCount), "Likes");
-  setMetric(2, compactNumber(stats.commentCount), "Comments");
-  setMetric(3, analytics ? durationFromSeconds(analytics.averageViewDuration) : "N/A", "AVD");
+async function analyzeVideo(event) {
+  event.preventDefault();
+  const videoId = parseVideoId(videoUrlInput?.value || "");
+  if (!videoId) {
+    setStatus("Choose one of your videos or paste a valid YouTube video URL.");
+    return;
+  }
+  await analyzeVideoById(videoId);
 }
 
-function setMetric(idx, val, label) {
-  const card = document.querySelectorAll(".metric-card")[idx];
-  if (card) { card.querySelector(".metric-value").textContent = val; card.querySelector(".trend").textContent = label; }
+function initialVideoIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const rawVideo = params.get("video") || params.get("v") || sessionStorage.getItem(pendingAnalyzerVideoKey) || "";
+  return parseVideoId(rawVideo);
 }
 
-function setAnalyzerLoading(l) { if (analyzerLoading) analyzerLoading.hidden = !l; }
-function setAnalyzerResultsVisible(v) { analyzerDashboard?.classList.toggle("analyzer-results-hidden", !v); }
-function clearAnalyzerResults() { setAnalyzerLoading(false); setAnalyzerResultsVisible(false); }
+async function loadVideoLibrary({allowPrompt = false} = {}) {
+  if (!currentUser) return;
 
-onAuthStateChanged(getAuth(), (user) => {
-  currentUser = user;
-  if (!user) return;
-  const cached = readCachedVideos();
-  if (cached.length) renderVideoLibrary(cached);
-  loadVideoLibrary();
-});
+  const cachedVideos = readCachedVideos();
+  if (cachedVideos.length) renderVideoLibrary(cachedVideos);
 
-async function loadVideoLibrary() {
+  const cachedToken = readCachedAccessToken();
+  if (!cachedToken && !allowPrompt) {
+    setLibraryStatus(cachedVideos.length ? "Showing saved uploads. Refresh videos to check for new uploads." : "Refresh videos to load uploads from your linked channel.");
+    return;
+  }
+
   try {
     setLibraryBusy(true);
-    const token = await getAccessToken();
-    const videos = await fetchChannelVideos(token);
+    setLibraryStatus("Loading uploads from YouTube...");
+    let accessToken = cachedToken || await getAccessToken();
+    let videos;
+
+    try {
+      videos = await fetchChannelVideos(accessToken);
+    } catch (error) {
+      if (error.status !== 401) throw error;
+      clearCachedAccessToken();
+      if (!allowPrompt) throw error;
+      setLibraryStatus("YouTube access expired. Please approve once to refresh videos.");
+      accessToken = await requestAccessToken();
+      videos = await fetchChannelVideos(accessToken);
+    }
+
     saveCachedVideos(videos);
     renderVideoLibrary(videos);
-  } catch (e) { setLibraryStatus(e.message); } finally { setLibraryBusy(false); }
+    setLibraryStatus(videos.length ? "Select one of your uploads to load its analytics." : "No uploads were found on your linked channel.");
+  } catch (error) {
+    console.error("Could not load channel videos.", error);
+    setLibraryStatus(error.message || "Could not load videos from YouTube.");
+  } finally {
+    setLibraryBusy(false);
+  }
 }
 
-form?.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const id = parseVideoId(videoUrlInput.value);
-  if (id) analyzeVideoById(id);
-});
-
-videoLibrary?.addEventListener("click", (e) => {
-  const card = e.target.closest("[data-video-id]");
-  if (card) analyzeVideoById(card.dataset.videoId);
-});
-
-refreshVideosButton?.addEventListener("click", loadVideoLibrary);
 clearAnalyzerResults();
+initialVideoId = initialVideoIdFromUrl();
+if (initialVideoId && videoUrlInput) {
+  videoUrlInput.value = "https://www.youtube.com/watch?v=" + initialVideoId;
+  setStatus("Opening selected video for analysis...");
+}
+
+if (form && firebaseConfigured) {
+  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    selectedVideoId = "";
+    clearAnalyzerResults();
+    if (!user) {
+      channelVideos = [];
+      renderVideoLibrary([]);
+      setStatus("Sign in before analyzing a video.");
+      setLibraryStatus("Sign in and link a channel to load your videos.");
+      return;
+    }
+
+    const cachedVideos = readCachedVideos();
+    if (cachedVideos.length) {
+      renderVideoLibrary(cachedVideos);
+      setLibraryStatus("Showing saved uploads. Refresh videos to check for new uploads.");
+    } else {
+      setLibraryStatus("Loading your linked channel uploads...");
+    }
+    loadVideoLibrary({allowPrompt: false});
+    if (initialVideoId) analyzeVideoById(initialVideoId);
+  });
+  form.addEventListener("submit", analyzeVideo);
+  videoLibrary?.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+    const card = target?.closest("[data-video-id]");
+    if (!card) return;
+    analyzeVideoById(card.dataset.videoId);
+  });
+  refreshVideosButton?.addEventListener("click", () => loadVideoLibrary({allowPrompt: true}));
+} else if (form) {
+  setStatus("Firebase is not configured yet.");
+}

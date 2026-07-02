@@ -1,12 +1,11 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {
   getAuth,
-  onAuthStateChanged
+  GoogleAuthProvider,
+  linkWithPopup,
+  onAuthStateChanged,
+  reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import {
-  getFunctions,
-  httpsCallable
-} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
 import {
   doc,
   getDoc,
@@ -203,11 +202,11 @@ async function fetchJson(url, accessToken) {
 }
 
 async function fetchChannel(accessToken) {
-  const functions = getFunctions();
-  const getChannelData = httpsCallable(functions, 'getYouTubeChannelData');
-  const result = await getChannelData({ accessToken });
-
-  const channel = result.data.items?.[0];
+  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+  url.searchParams.set("part", "snippet,statistics");
+  url.searchParams.set("mine", "true");
+  const payload = await fetchJson(url, accessToken);
+  const channel = payload.items?.[0];
   if (!channel) throw new Error("No YouTube channel found.");
   return {
     id: channel.id,
@@ -223,19 +222,14 @@ async function fetchChannel(accessToken) {
 async function fetchAnalyticsSummary(accessToken) {
   const endDate = new Date().toISOString().slice(0, 10);
   const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-  const functions = getFunctions();
-  const getAnalytics = httpsCallable(functions, 'getYouTubeAnalytics');
-
+  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+  url.searchParams.set("ids", "channel==MINE");
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
+  url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,subscribersGained");
   try {
-    const result = await getAnalytics({
-      accessToken,
-      startDate,
-      endDate,
-      metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained"
-    });
-
-    const [views, minutes, avd, subs] = result.data.rows?.[0] || [];
+    const payload = await fetchJson(url, accessToken);
+    const [views, minutes, avd, subs] = payload.rows?.[0] || [];
     return { views: views || 0, estimatedMinutesWatched: minutes || 0, averageViewDuration: avd || 0, subscribersGained: subs || 0 };
   } catch (e) { return null; }
 }
