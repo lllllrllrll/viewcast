@@ -910,7 +910,7 @@ async function buildGeminiChatReply(question, summary) {
       },
       body: JSON.stringify({
         contents: chatHistory,
-        systemInstruction: {
+        system_instruction: {
           parts: [{ text: systemInstruction }]
         }
       })
