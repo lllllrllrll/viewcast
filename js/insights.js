@@ -834,6 +834,38 @@ function topicSignals(videos, trendVideos = [], {preferTrend = false} = {}) {
     .slice(0, 8);
 }
 
+function readableTrendQuery(query = "") {
+  return String(query || "")
+    .replace(/\b(20\d{2}|19\d{2})\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .slice(0, 40);
+}
+
+function currentTrendSignal(videos, trendVideos = []) {
+  const sourceTopics = topVideos(videos, 16).flatMap((video) => titleTopicPhrases(video.snippet?.title));
+  const trendTopics = scoredTopicsFromVideos(topVideos(trendVideos, 20), 2)
+    .map(([topic]) => topic)
+    .filter((topic) => !stronglyOverlapsSourceTopic(topic, sourceTopics));
+  if (trendTopics.length) return trendTopics[0];
+
+  const query = (trendVideos.trendQueries || [])
+    .map(readableTrendQuery)
+    .find(Boolean);
+  if (query && !stronglyOverlapsSourceTopic(query, sourceTopics)) return query;
+  const laneLabel = trendVideos.channelLane?.specificCategory
+    || trendVideos.channelLane?.primaryCategory
+    || trendVideos.channelLane?.label;
+  return laneLabel ? `${laneLabel} trends` : "Current creator trends";
+}
+
+function isOwnUploadRestatement(value, videos = []) {
+  if (!value) return false;
+  const sourceTopics = topVideos(videos, 16).flatMap((video) => titleTopicPhrases(video.snippet?.title));
+  return stronglyOverlapsSourceTopic(value, sourceTopics);
+}
+
 function buildTopicIdeas(videos, trendVideos) {
   const topics = topicSignals(videos, trendVideos, {preferTrend: true});
   const best = topVideos(videos, 3);
@@ -874,6 +906,7 @@ function buildChannelSummary(videos, trendVideos, channelProfile = null) {
   const bestViews = numberValue(best?.statistics?.viewCount) || 0;
   const topics = topicSignals(videos, trendVideos, {preferTrend: true});
   const channelLane = trendVideos.channelLane || detectChannelLane(videos);
+  const currentTrend = currentTrendSignal(videos, trendVideos);
 
   return {
     recent,
@@ -885,7 +918,8 @@ function buildChannelSummary(videos, trendVideos, channelProfile = null) {
     shortUploadTime: bestUploadSlot(videos, "short"),
     nextVideoLength: recommendedLength(longVideos.length ? longVideos : videos, "video"),
     nextShortLength: recommendedLength(shorts.length ? shorts : videos, "short"),
-    topSignal: topics[0] || "More uploads",
+    topSignal: topics[0] || currentTrend || "Current trends",
+    currentTrend,
     channelLane,
     channelProfile,
     topicIdeas: buildTopicIdeas(videos, trendVideos),
@@ -1075,7 +1109,7 @@ function geminiContext(summary) {
     primaryCategory: summary.channelLane?.primaryCategory || summary.channelLane?.label || "General",
     specificCategory: summary.channelLane?.specificCategory || summary.channelLane?.seed || "",
     categoryConfidence: summary.channelLane?.confidence || "medium",
-    topTopicSignal: summary.geminiInsights?.cards?.topTopicSignal?.value || summary.topSignal,
+    currentYouTubeTrend: summary.geminiInsights?.cards?.topTopicSignal?.value || summary.currentTrend || summary.topSignal,
     bestUploadTime: summary.geminiInsights?.cards?.bestUploadTime?.value || summary.bestUploadTime,
     videoUploadTime: summary.videoUploadTime,
     shortUploadTime: summary.shortUploadTime,
@@ -1122,6 +1156,12 @@ function normalizeGeminiInsights(value, summary) {
   if (!value || typeof value !== "object") return null;
   const cards = value.cards || {};
   const fallbackIdeas = summary.topicIdeas || [];
+  const trendValue = isOwnUploadRestatement(cards.topTopicSignal?.value, summary.recent)
+    ? summary.currentTrend
+    : cards.topTopicSignal?.value;
+  const trendDetail = isOwnUploadRestatement(cards.topTopicSignal?.detail, summary.recent)
+    ? summary.channelLane?.label
+    : cards.topTopicSignal?.detail;
   const recommendations = Array.isArray(value.recommendations)
     ? value.recommendations.slice(0, 3).map((item, index) => normalizeRecommendation(item, fallbackIdeas[index]))
     : [];
@@ -1144,8 +1184,8 @@ function normalizeGeminiInsights(value, summary) {
         tone: cards.nextShortLength?.tone || "warn"
       },
       topTopicSignal: {
-        value: String(cards.topTopicSignal?.value || summary.topSignal || "").slice(0, 40),
-        detail: String(cards.topTopicSignal?.detail || summary.channelLane?.label || "Gemini category").slice(0, 32),
+        value: String(trendValue || summary.currentTrend || summary.topSignal || "").slice(0, 40),
+        detail: String(trendDetail || "Current YouTube trend").slice(0, 32),
         tone: cards.topTopicSignal?.tone || "good"
       }
     },
@@ -1166,7 +1206,8 @@ async function buildGeminiPageInsights(summary, videos) {
     "Use only the supplied channel data, Gemini-selected trend queries, and trend references. Do not invent exact analytics.",
     "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
     "Make every visible AI Insights element from your recommendations: metric cards, action list, and chat intro.",
-    "The topTopicSignal card appears as Current YouTube Trends. It should be a category-relevant trend/topic lane other creators are posting about, not a restatement of one upload title.",
+    "The topTopicSignal card appears as Current YouTube Trends. It must be based on currentYouTubeTrend, trendQueries, or trendReferences from outside the channel.",
+    "Do not copy or closely paraphrase one of the channel's own recent upload titles for topTopicSignal. If the external trend evidence is weak, summarize the trend query/category instead.",
     "JSON shape:",
     `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"recommendations":[{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
@@ -1307,8 +1348,8 @@ function renderChannelInsights(summary) {
   );
   setMetric(
     3,
-    cards.topTopicSignal?.value || summary.topSignal,
-    cards.topTopicSignal?.detail || summary.channelLane?.label || summary.channelLane?.primaryCategory || (summary.bestViews ? `${compactNumber(summary.bestViews)} top views` : "Signal"),
+    isOwnUploadRestatement(cards.topTopicSignal?.value, summary.recent) ? summary.currentTrend : (cards.topTopicSignal?.value || summary.currentTrend || summary.topSignal),
+    cards.topTopicSignal?.detail || "Current YouTube trend",
     cards.topTopicSignal?.tone || bestTone
   );
   updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
