@@ -1353,6 +1353,7 @@ async function loadVideoLibrary({allowPrompt = false, generateAfterLoad = false}
 
   if (!readCachedAccessToken() && !allowPrompt) {
     setLibraryStatus(cachedVideos.length ? "Showing saved uploads. Generate insights from saved data or refresh for current data." : "Refresh videos to load uploads from your linked channel.");
+    if (generateAfterLoad && cachedVideos.length) await generateChannelInsights({allowPrompt: false});
     return cachedVideos;
   }
 
@@ -1505,7 +1506,7 @@ if (form && firebaseConfigured) {
     } else {
       setLibraryStatus("Loading uploads for channel insights...");
     }
-    loadVideoLibrary({allowPrompt: false});
+    loadVideoLibrary({allowPrompt: false, generateAfterLoad: true});
   });
 
   form.addEventListener("submit", handleGenerateInsights);
