@@ -396,6 +396,17 @@ const gameTopicNames = [
   "rainbow six", "r6", "nba 2k", "madden", "fc 24", "fifa"
 ];
 
+function lane(key, label, seed, primaryCategory, specificCategory = "", confidence = "medium") {
+  return {
+    key,
+    label,
+    seed,
+    primaryCategory,
+    specificCategory,
+    confidence
+  };
+}
+
 function detectedGameTopics(videos) {
   const text = videoTitleText(videos);
   return gameTopicNames
@@ -413,44 +424,45 @@ function detectChannelLane(videos) {
   const memeScore = countMatches(text, ["meme", "memes", "funny", "shitpost", "edit", "edits", "compilation", "reaction"]);
   const gamingScore = countMatches(text, ["gaming", "gameplay", "walkthrough", "ranked", "update", "patch", "boss", "build", "loadout", "stream"]);
   const animeScore = countMatches(text, ["anime", "manga", "jojo", "one piece", "naruto", "dragon ball", "jjk", "jujutsu", "demon slayer"]);
+  const musicScore = countMatches(text, ["music", "song", "songs", "album", "beat", "beats", "cover", "remix", "lyrics", "instrumental", "rap", "artist", "guitar", "piano"]);
+
+  if (musicScore >= 2 && musicScore >= gamingScore && musicScore >= memeScore) {
+    const specific = text.includes("beat") || text.includes("instrumental") ? "Beats"
+      : text.includes("cover") ? "Covers"
+      : text.includes("rap") ? "Rap"
+      : "Music";
+    return lane(
+      "music",
+      specific === "Music" ? "Music" : `Music - ${specific}`,
+      specific,
+      "Music",
+      specific,
+      "medium"
+    );
+  }
 
   if (memeScore >= 2 && memeScore >= gamingScore) {
-    return {
-      key: "memes",
-      label: "Meme channel",
-      seed: games[0]?.name || importantWords(text).slice(0, 2).join(" ")
-    };
+    return lane("memes", "Memes", games[0]?.name || importantWords(text).slice(0, 2).join(" "), "Memes", games[0]?.name || "Memes");
   }
 
   if (games.length >= 2) {
-    return {
-      key: "general-gaming",
-      label: "General gaming channel",
-      seed: games.slice(0, 3).map((game) => game.name).join(" ")
-    };
+    const hasDominantGame = games[0].count >= 2 && games[0].count >= (games[1]?.count || 0) * 2;
+    if (hasDominantGame) {
+      return lane(games[0].name, `Gaming - ${games[0].name}`, games[0].name, "Gaming", games[0].name, "medium");
+    }
+    return lane("general-gaming", "Gaming - General gaming", games.slice(0, 3).map((game) => game.name).join(" "), "Gaming", "General gaming");
   }
 
   if (games.length === 1 || gamingScore >= 2) {
-    return {
-      key: "specific-game",
-      label: games[0]?.name ? `${games[0].name} channel` : "Game-specific channel",
-      seed: games[0]?.name || titleTopicPhrases(topVideos(videos, 1)[0]?.snippet?.title || "")[0] || "video game"
-    };
+    const game = games[0]?.name || titleTopicPhrases(topVideos(videos, 1)[0]?.snippet?.title || "")[0] || "Video game";
+    return lane("specific-game", games[0]?.name ? `Gaming - ${game}` : "Gaming - Game-specific", game, "Gaming", game);
   }
 
   if (animeScore >= 2) {
-    return {
-      key: "anime",
-      label: "Anime channel",
-      seed: importantWords(text).slice(0, 3).join(" ") || "anime"
-    };
+    return lane("anime", "Anime", importantWords(text).slice(0, 3).join(" ") || "anime", "Anime", "Anime");
   }
 
-  return {
-    key: "general",
-    label: "General creator channel",
-    seed: titleTopicPhrases(topVideos(videos, 1)[0]?.snippet?.title || "")[0] || importantWords(text).slice(0, 3).join(" ")
-  };
+  return lane("general", "General", titleTopicPhrases(topVideos(videos, 1)[0]?.snippet?.title || "")[0] || importantWords(text).slice(0, 3).join(" "), "General", "");
 }
 
 function trendQueriesForLane(lane) {
@@ -462,6 +474,14 @@ function trendQueriesForLane(lane) {
       `${seed} meme trends`,
       `trending memes ${year}`,
       `viral meme format ${seed}`
+    ];
+  }
+
+  if (lane.primaryCategory === "Music" || lane.key === "music") {
+    return [
+      `${seed} music trends`,
+      `${seed} song ideas`,
+      `trending ${seed} music`
     ];
   }
 
@@ -914,11 +934,20 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
     .slice(0, 4);
   if (!queries.length) return null;
 
+  const primaryCategory = String(value.primaryCategory || value.categoryLabel || fallbackLane.label || "General").slice(0, 60);
+  const specificCategory = String(value.specificCategory || value.categorySeed || fallbackLane.seed || primaryCategory).slice(0, 80);
+  const categoryLabel = specificCategory && specificCategory.toLowerCase() !== primaryCategory.toLowerCase()
+    ? `${primaryCategory} - ${specificCategory}`
+    : primaryCategory;
+
   return {
     lane: {
-      key: String(value.categoryKey || fallbackLane.key || "general").slice(0, 40),
-      label: String(value.categoryLabel || fallbackLane.label || "General creator channel").slice(0, 80),
-      seed: String(value.categorySeed || fallbackLane.seed || queries[0]).slice(0, 80)
+      key: String(value.categoryKey || primaryCategory.toLowerCase().replace(/\s+/g, "-") || fallbackLane.key || "general").slice(0, 40),
+      label: categoryLabel.slice(0, 80),
+      seed: specificCategory || queries[0],
+      primaryCategory,
+      specificCategory,
+      confidence: String(value.categoryConfidence || "medium").slice(0, 20)
     },
     queries
   };
@@ -936,10 +965,13 @@ async function buildGeminiTrendPlan(videos) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const prompt = [
     "You are classifying a YouTube channel for ViewCast.",
-    "Look at the upload titles, formats, dates, and performance. Decide the channel's real content lane and the best trend-search queries to find similar/current YouTube topics.",
-    "Examples: a meme channel should search meme formats/trends; a general gaming channel should search new/trending games; a channel focused on one game should search topics inside that game.",
+    "Look at the upload titles, formats, dates, and performance. Decide the channel's broad category and, when possible, a specific subcategory.",
+    "Use clean creator categories. Examples: Music, Gaming, Roblox, Minecraft, Fortnite, Anime, Memes, Sports, Beauty, Education, Tech, Vlogs, Cooking.",
+    "If the channel is broad gaming, primaryCategory should be Gaming and specificCategory should be General gaming. If it is mostly Roblox, primaryCategory should be Gaming and specificCategory should be Roblox.",
+    "If a channel has music videos, songs, covers, albums, beats, or artist content, classify it as Music. Use a specific subcategory like Rap, Covers, Beats, or Artist edits only when clear.",
+    "Then choose trend-search queries that match that classification. A Roblox channel should search Roblox-specific topics; a Music channel should search music trends for its style; a meme channel should search meme formats/trends.",
     "Return JSON only with this shape:",
-    `{"categoryKey":"","categoryLabel":"","categorySeed":"","queries":["","",""]}`,
+    `{"categoryKey":"","primaryCategory":"","specificCategory":"","categoryLabel":"","categorySeed":"","categoryConfidence":"high","queries":["","",""]}`,
     "",
     "Channel uploads:",
     JSON.stringify(channelVideoContext(videos), null, 2)
@@ -991,6 +1023,9 @@ function geminiContext(summary) {
   const ideas = visibleIdeas.map((idea) => `${idea.title}: ${idea.body}`);
   return {
     channelCategory: summary.channelLane?.label || "General creator channel",
+    primaryCategory: summary.channelLane?.primaryCategory || summary.channelLane?.label || "General",
+    specificCategory: summary.channelLane?.specificCategory || summary.channelLane?.seed || "",
+    categoryConfidence: summary.channelLane?.confidence || "medium",
     topTopicSignal: summary.geminiInsights?.cards?.topTopicSignal?.value || summary.topSignal,
     bestUploadTime: summary.geminiInsights?.cards?.bestUploadTime?.value || summary.bestUploadTime,
     videoUploadTime: summary.videoUploadTime,
@@ -1061,7 +1096,7 @@ function normalizeGeminiInsights(value, summary) {
       },
       topTopicSignal: {
         value: String(cards.topTopicSignal?.value || summary.topSignal || "").slice(0, 40),
-        detail: String(cards.topTopicSignal?.detail || summary.channelLane?.label || "Gemini").slice(0, 32),
+        detail: String(cards.topTopicSignal?.detail || summary.channelLane?.label || "Gemini category").slice(0, 32),
         tone: cards.topTopicSignal?.tone || "good"
       }
     },
@@ -1077,10 +1112,11 @@ async function buildGeminiPageInsights(summary, videos) {
   const prompt = [
     "You are ViewCast's Gemini AI analyst for a YouTube channel dashboard.",
     "Gemini should decide the channel category, trend interpretation, topic lane, upload advice, and recommendations from the supplied YouTube data.",
+    "All insight cards and recommendations must be based on the category classification. For example, Music channels need music-specific ideas; Gaming channels need gaming ideas; Roblox channels need Roblox-specific ideas.",
     "Use only the supplied channel data, Gemini-selected trend queries, and trend references. Do not invent exact analytics.",
     "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
     "Make every visible AI Insights element from your recommendations: metric cards, action list, and chat intro.",
-    "The topTopicSignal card should be a trend/topic lane other creators are posting about, not a restatement of one upload title.",
+    "The topTopicSignal card should be a category-relevant trend/topic lane other creators are posting about, not a restatement of one upload title.",
     "JSON shape:",
     `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"recommendations":[{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
@@ -1223,7 +1259,7 @@ function renderChannelInsights(summary) {
   setMetric(
     3,
     cards.topTopicSignal?.value || summary.topSignal,
-    cards.topTopicSignal?.detail || summary.channelLane?.label || (summary.bestViews ? `${compactNumber(summary.bestViews)} top views` : "Signal"),
+    cards.topTopicSignal?.detail || summary.channelLane?.label || summary.channelLane?.primaryCategory || (summary.bestViews ? `${compactNumber(summary.bestViews)} top views` : "Signal"),
     cards.topTopicSignal?.tone || bestTone
   );
   updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
