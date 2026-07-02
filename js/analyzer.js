@@ -6,7 +6,7 @@ import {
   onAuthStateChanged,
   reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
+import { firebaseConfig, firebaseConfigured, geminiApiKey, geminiModel } from "./firebase-config.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -103,6 +103,34 @@ function truncate(value = "", maxLength = 180) {
   const normalized = String(value || "").replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return normalized;
   return normalized.slice(0, maxLength - 1).trim() + "...";
+}
+
+function shortText(value = "", max = 320) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
+const youtubeCategoryNames = {
+  "1": "Film & Animation",
+  "2": "Autos & Vehicles",
+  "10": "Music",
+  "15": "Pets & Animals",
+  "17": "Sports",
+  "19": "Travel & Events",
+  "20": "Gaming",
+  "22": "People & Blogs",
+  "23": "Comedy",
+  "24": "Entertainment",
+  "25": "News & Politics",
+  "26": "Howto & Style",
+  "27": "Education",
+  "28": "Science & Technology"
+};
+
+function youtubeCategoryName(categoryId) {
+  return youtubeCategoryNames[String(categoryId || "")] || "";
 }
 
 function dateLabel(value) {
@@ -332,6 +360,27 @@ async function fetchUploadsPlaylistId(accessToken) {
   return playlistId;
 }
 
+async function fetchChannelProfile(accessToken) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+  url.searchParams.set("part", "snippet,statistics,brandingSettings,topicDetails");
+  url.searchParams.set("mine", "true");
+  const payload = await fetchJson(url, accessToken);
+  const channel = payload.items?.[0];
+  if (!channel) return null;
+
+  return {
+    id: channel.id || "",
+    title: channel.snippet?.title || "",
+    description: shortText(channel.snippet?.description || "", 700),
+    customUrl: channel.snippet?.customUrl || "",
+    keywords: shortText(channel.brandingSettings?.channel?.keywords || "", 500),
+    subscriberCount: numberValue(channel.statistics?.subscriberCount) || 0,
+    videoCount: numberValue(channel.statistics?.videoCount) || 0,
+    viewCount: numberValue(channel.statistics?.viewCount) || 0,
+    topicCategories: channel.topicDetails?.topicCategories || []
+  };
+}
+
 async function fetchUploadVideoIds(accessToken) {
   const playlistId = await fetchUploadsPlaylistId(accessToken);
   const ids = [];
@@ -542,6 +591,154 @@ function updateSearchTerms(searchTerms) {
   });
 }
 
+function safeJsonParse(value) {
+  const cleaned = String(value || "")
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (error) {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    return match ? JSON.parse(match[0]) : null;
+  }
+}
+
+function channelVideoContext(videos) {
+  return videos.slice(0, 30).map((video) => ({
+    id: video.id || "",
+    title: video.snippet?.title || "Untitled video",
+    description: shortText(video.snippet?.description || "", 260),
+    tags: (video.snippet?.tags || []).slice(0, 8),
+    publishedAt: video.snippet?.publishedAt || "",
+    views: numberValue(video.statistics?.viewCount) || 0,
+    likes: numberValue(video.statistics?.likeCount) || 0,
+    comments: numberValue(video.statistics?.commentCount) || 0,
+    duration: durationFromIso(video.contentDetails?.duration),
+    youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId)
+  }));
+}
+
+function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, channelProfile, videos) {
+  const stats = video.statistics || {};
+  const durationSeconds = secondsFromIso(video.contentDetails?.duration) || 0;
+  const views = videos.map((item) => numberValue(item.statistics?.viewCount)).filter((value) => value !== null);
+  const averageViews = views.length ? Math.round(views.reduce((sum, value) => sum + value, 0) / views.length) : 0;
+  const retentionSamples = retentionPoints
+    .filter((_, index) => index % Math.max(1, Math.floor(retentionPoints.length / 8)) === 0)
+    .slice(0, 10)
+    .map((point) => ({
+      time: durationSeconds ? durationFromSeconds(point.position * durationSeconds) : `${Math.round(point.position * 100)}%`,
+      retentionPercent: Math.round(point.ratio * 100)
+    }));
+
+  return {
+    channelProfile: channelProfile || {},
+    selectedVideo: {
+      id: video.id || "",
+      title: video.snippet?.title || "Untitled video",
+      description: shortText(video.snippet?.description || "", 700),
+      tags: (video.snippet?.tags || []).slice(0, 12),
+      publishedAt: video.snippet?.publishedAt || "",
+      duration: durationFromIso(video.contentDetails?.duration),
+      youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId),
+      publicStats: {
+        views: numberValue(stats.viewCount) || 0,
+        likes: numberValue(stats.likeCount) || 0,
+        comments: numberValue(stats.commentCount) || 0
+      },
+      privateAnalytics: analytics ? {
+        period: analytics.periodLabel || "Analytics API",
+        averageViewDuration: durationFromSeconds(analytics.averageViewDuration),
+        averageViewPercentage: percent(analytics.averageViewPercentage),
+        estimatedMinutesWatched: Math.round(analytics.estimatedMinutesWatched || 0)
+      } : null,
+      retentionSamples,
+      youtubeSearchTerms: searchTerms.map((term) => ({
+        term: term.term,
+        views: term.views,
+        period: term.periodLabel
+      }))
+    },
+    channelComparison: {
+      averageViews,
+      recentUploads: channelVideoContext(videos)
+    }
+  };
+}
+
+function normalizeGeminiVideoAnalysis(value) {
+  if (!value || typeof value !== "object") return null;
+  const labels = value.metricLabels || {};
+  const edits = Array.isArray(value.recommendedEdits)
+    ? value.recommendedEdits.slice(0, 5).map((item) => ({
+      segment: String(item.segment || "Overall").slice(0, 40),
+      issue: String(item.issue || "Opportunity").slice(0, 80),
+      recommendation: String(item.recommendation || "Make one clear improvement based on the supplied analytics.").slice(0, 220),
+      impact: String(item.impact || "AI").slice(0, 32)
+    }))
+    : [];
+
+  return {
+    metricLabels: {
+      views: String(labels.views || "Gemini").slice(0, 18),
+      likes: String(labels.likes || "Gemini").slice(0, 18),
+      comments: String(labels.comments || "Gemini").slice(0, 18),
+      averageViewDuration: String(labels.averageViewDuration || "Gemini").slice(0, 18)
+    },
+    recommendedEdits: edits
+  };
+}
+
+async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, searchTerms, channelProfile, videos}) {
+  if (!geminiApiKey) return null;
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
+  const prompt = [
+    "You are ViewCast's Gemini AI video analyst.",
+    "Analyze the selected YouTube video against the creator's channel profile, recent uploads, private analytics, retention samples, and YouTube search terms.",
+    "Use only the supplied data. Do not invent views, retention, search terms, or exact private analytics.",
+    "Metric labels should be short comparisons such as Above avg, Needs lift, Strong, Watch drop, or Unavailable.",
+    "Recommended edits should be practical next actions for the video: title/thumbnail promise, intro pacing, retention drops, search intent, pinned comment, chapters, cards, follow-up upload, or Shorts cutdowns.",
+    "Return JSON only with this shape:",
+    `{"metricLabels":{"views":"","likes":"","comments":"","averageViewDuration":""},"recommendedEdits":[{"segment":"","issue":"","recommendation":"","impact":""}]}`,
+    "",
+    "Video and channel data:",
+    JSON.stringify(videoAnalysisContext(video, analytics, retentionPoints, searchTerms, channelProfile, videos), null, 2)
+  ].join("\n");
+
+  try {
+    const response = await fetch(`${endpoint}?key=${geminiApiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error?.message || "Gemini could not analyze this video.");
+    const text = payload.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join("")
+      .trim();
+    return normalizeGeminiVideoAnalysis(safeJsonParse(text));
+  } catch (error) {
+    console.warn("Gemini video analysis failed.", error);
+    return null;
+  }
+}
+
 function setAnalyzerLoading(isLoading) {
   if (analyzerLoading) analyzerLoading.hidden = !isLoading;
 }
@@ -571,11 +768,16 @@ function clearAnalyzerResults() {
   if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
 }
 
-function updateTable(video, analytics, retentionPoints) {
+function updateTable(video, analytics, retentionPoints, geminiAnalysis = null) {
   const tbody = document.querySelector("table tbody");
   if (!tbody) return;
   const stats = video.statistics || {};
-  const rows = [
+  const rows = geminiAnalysis?.recommendedEdits?.length ? geminiAnalysis.recommendedEdits.map((item) => [
+    item.segment,
+    item.issue,
+    item.recommendation,
+    item.impact
+  ]) : [
     ["Public stats", "Views", wholeNumber(stats.viewCount) || "Unavailable", "Data API"],
     ["Public stats", "Likes", wholeNumber(stats.likeCount) || "Unavailable", "Data API"],
     ["Public stats", "Comments", wholeNumber(stats.commentCount) || "Unavailable", "Data API"],
@@ -585,20 +787,21 @@ function updateTable(video, analytics, retentionPoints) {
 
   tbody.innerHTML = rows.map(([segment, issue, recommendation, impact]) => `
     <tr>
-      <td>${segment}</td>
-      <td>${issue}</td>
-      <td>${recommendation}</td>
-      <td><span class="trend ${impact.includes("Unavailable") || impact.includes("Needs") ? "warn" : "good"}">${impact}</span></td>
+      <td>${escapeHtml(segment)}</td>
+      <td>${escapeHtml(issue)}</td>
+      <td>${escapeHtml(recommendation)}</td>
+      <td><span class="trend ${impact.includes("Unavailable") || impact.includes("Needs") ? "warn" : "good"}">${escapeHtml(impact)}</span></td>
     </tr>
   `).join("");
 }
 
-function updateMetrics(video, analytics) {
+function updateMetrics(video, analytics, geminiAnalysis = null) {
   const stats = video.statistics || {};
-  setMetric(0, compactNumber(stats.viewCount), "Public");
-  setMetric(1, compactNumber(stats.likeCount), "Public");
-  setMetric(2, compactNumber(stats.commentCount), "Public");
-  setMetric(3, analytics ? durationFromSeconds(analytics.averageViewDuration) : "", analytics ? (analytics.periodLabel || "Analytics") : "Unavailable");
+  const labels = geminiAnalysis?.metricLabels || {};
+  setMetric(0, compactNumber(stats.viewCount), labels.views || "Public");
+  setMetric(1, compactNumber(stats.likeCount), labels.likes || "Public");
+  setMetric(2, compactNumber(stats.commentCount), labels.comments || "Public");
+  setMetric(3, analytics ? durationFromSeconds(analytics.averageViewDuration) : "", labels.averageViewDuration || (analytics ? (analytics.periodLabel || "Analytics") : "Unavailable"));
 }
 
 async function loadVideoDetailsWithRetry(videoId, accessToken) {
@@ -648,7 +851,7 @@ async function loadVideoAnalysisWithRetry(videoId) {
     console.warn("Some private video analytics were not available.", error);
   });
 
-  return [video, privateData.analytics, privateData.retentionPoints, privateData.searchTerms];
+  return [video, privateData.analytics, privateData.retentionPoints, privateData.searchTerms, accessToken];
 }
 
 async function analyzeVideoById(videoId) {
@@ -687,19 +890,41 @@ async function analyzeVideoById(videoId) {
     if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
     sessionStorage.removeItem(pendingAnalyzerVideoKey);
     updateLibrarySelection(videoId);
-    const [video, analytics, retentionPoints, searchTerms] = await loadVideoAnalysisWithRetry(videoId);
+    const [video, analytics, retentionPoints, searchTerms, accessToken] = await loadVideoAnalysisWithRetry(videoId);
+    if (requestId !== analysisRequestId) return;
+
+    setStatus(geminiApiKey ? "Asking Gemini to analyze this video..." : "Gemini key missing. Showing YouTube API data only.");
+    const videosForContext = channelVideos.length ? channelVideos : readCachedVideos();
+    let channelProfile = null;
+    if (accessToken) {
+      try {
+        channelProfile = await fetchChannelProfile(accessToken);
+      } catch (error) {
+        console.warn("Could not load channel profile for video analysis.", error);
+      }
+    }
+    const geminiAnalysis = await buildGeminiVideoAnalysis({
+      video,
+      analytics,
+      retentionPoints,
+      searchTerms,
+      channelProfile,
+      videos: videosForContext.length ? videosForContext : [video]
+    });
     if (requestId !== analysisRequestId) return;
 
     recordVideoAnalysis();
     updateLibrarySelection(video.id);
-    updateMetrics(video, analytics);
+    updateMetrics(video, analytics, geminiAnalysis);
     updateSearchTerms(searchTerms);
-    updateTable(video, analytics, retentionPoints);
+    updateTable(video, analytics, retentionPoints, geminiAnalysis);
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     requestAnimationFrame(() => drawActualRetention(retentionPoints, video));
     const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
-    setStatus(analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now.");
+    setStatus(geminiAnalysis
+      ? "Gemini video analysis generated from YouTube data" + period + "."
+      : (analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now."));
     setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
   } catch (error) {
     if (requestId !== analysisRequestId) return;
