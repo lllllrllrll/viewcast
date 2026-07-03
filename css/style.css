@@ -1111,6 +1111,31 @@ canvas {
   justify-self: start;
 }
 
+.chat-quick-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-quick-options button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chat-quick-options button:hover,
+.chat-quick-options button:focus-visible {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(22, 163, 159, 0.14);
+  outline: none;
+}
+
 .chat-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

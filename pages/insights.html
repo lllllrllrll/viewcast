@@ -117,6 +117,11 @@
               <div class="chat-messages" id="chatMessages" aria-live="polite">
                 <div class="chat-message assistant">Generate insights first, then ask for advice about your channel.</div>
               </div>
+              <div class="chat-quick-options" aria-label="Suggested questions">
+                <button type="button" data-chat-prompt="What video should I make next based on my strongest uploads and current YouTube trends?">Next video idea</button>
+                <button type="button" data-chat-prompt="Which current YouTube trend best fits my channel, and how should I package it?">Trend fit</button>
+                <button type="button" data-chat-prompt="What is the biggest weakness in my recent upload strategy, and what should I change?">Strategy fix</button>
+              </div>
               <form class="chat-form" id="insightChatForm">
                 <input id="insightChatInput" type="text" autocomplete="off" placeholder="Ask for channel advice..." aria-label="Ask for channel advice" />
                 <button class="primary-button" type="submit">Ask</button>
@@ -129,6 +134,6 @@
     <script src="../components/sidebar.js"></script>
     <script src="../components/plan-modal.js"></script>
     <script src="../js/script.js"></script>
-    <script type="module" src="../js/insights.js?v=10"></script>
+    <script type="module" src="../js/insights.js?v=11"></script>
   </body>
 </html>

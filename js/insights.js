@@ -1612,9 +1612,13 @@ async function handleGenerateInsights(event) {
 async function handleChatQuestion(event) {
   event.preventDefault();
   const question = chatInput?.value.trim() || "";
+  await sendChatQuestion(question);
+}
+
+async function sendChatQuestion(question) {
   if (!question) return;
   appendChatMessage("user", question);
-  chatInput.value = "";
+  if (chatInput) chatInput.value = "";
   const thinking = appendChatMessage("assistant", "Thinking...", false);
   if (chatInput) chatInput.disabled = true;
 
@@ -1667,6 +1671,9 @@ if (form && firebaseConfigured) {
 
   form.addEventListener("submit", handleGenerateInsights);
   chatForm?.addEventListener("submit", handleChatQuestion);
+  document.querySelectorAll("[data-chat-prompt]").forEach((button) => {
+    button.addEventListener("click", () => sendChatQuestion(button.dataset.chatPrompt || button.textContent.trim()));
+  });
   videoLibrary?.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : event.target?.parentElement;
     const card = target?.closest("[data-video-id]");
