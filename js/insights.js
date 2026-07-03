@@ -900,34 +900,40 @@ function buildNextVideoSuggestions(videos, trendVideos) {
   const performance = uploadPerformanceContext(videos);
   const top = performance.topPerformers[0];
   const second = performance.topPerformers[1];
+  const under = performance.underPerformers[0];
   const medianViews = compactNumber(performance.medianViews);
   const averageViews = compactNumber(performance.averageViews);
   const trend = currentTrendSignal(videos, trendVideos);
+  const trendReference = trendVideos[0]?.snippet?.title || trend;
   const betterFormat = performance.shortAverageViews > performance.videoAverageViews ? "Short" : "video";
   const betterFormatViews = performance.shortAverageViews > performance.videoAverageViews
     ? performance.shortAverageViews
     : performance.videoAverageViews;
+  const category = trendVideos.channelLane?.specificCategory
+    || trendVideos.channelLane?.primaryCategory
+    || trendVideos.channelLane?.label
+    || "your niche";
 
   return [
     {
-      title: top ? `Make a follow-up to ${top.title}` : "Make a performance-backed follow-up",
+      title: `${category}: trend explainer with a twist`,
       body: top
-        ? `This upload led your channel with ${compactNumber(top.views)} views. Keep the same viewer promise, then add a new angle tied to ${trend}.`
-        : `Use the topic that has the clearest repeatable promise, then package it around ${trend}.`,
-      label: "Top"
+        ? `Use the hook pattern from your ${compactNumber(top.views)}-view top upload, but apply it to ${trendReference}. Make the promise about why the trend matters now.`
+        : `Package ${trendReference} as a clear viewer question, then answer it with your channel's usual style instead of copying the trend format.`,
+      label: "Trend"
     },
     {
-      title: `Test a ${betterFormat} around ${trend}`,
-      body: `Your ${betterFormat.toLowerCase()} format averages about ${compactNumber(betterFormatViews)} views. Use that format for a focused trend test and compare it against your ${averageViews} channel average.`,
+      title: `${betterFormat} idea: compare the trend to your lane`,
+      body: `Your ${betterFormat.toLowerCase()} format averages about ${compactNumber(betterFormatViews)} views. Turn ${trend} into a comparison, ranking, test, or myth-check that fits ${category}.`,
       label: "Format",
       tone: "warn"
     },
     {
-      title: second ? `Revive the pattern from ${second.title}` : "Raise the median performer",
+      title: "Avoid the weaker angle, keep the stronger promise",
       body: second
-        ? `It beat the ${medianViews} median with ${compactNumber(second.views)} views. Reuse the structure, but change the topic so it does not feel like a repeat.`
-        : `Aim to beat your ${medianViews} median by borrowing the hook structure from your strongest upload.`,
-      label: "Pattern"
+        ? `Your strong uploads beat the ${medianViews} median when the idea is easy to understand fast. If ${under?.title || "a past upload"} underperformed, avoid that vague angle and make the next concept instantly searchable.`
+        : `Aim above your ${averageViews} average by making the idea specific enough to search and broad enough to connect with ${trend}.`,
+      label: "Angle"
     }
   ];
 }
@@ -1170,10 +1176,18 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
 }
 
 function geminiContext(summary) {
-  const trendTitles = summary.trendVideos
-    .slice(0, 5)
-    .map((video) => video.snippet?.title)
-    .filter(Boolean);
+  const trendReferences = summary.trendVideos
+    .slice(0, 8)
+    .map((video) => ({
+      title: video.snippet?.title || "",
+      publishedAt: video.snippet?.publishedAt || "",
+      views: numberValue(video.statistics?.viewCount) || 0,
+      likes: numberValue(video.statistics?.likeCount) || 0,
+      comments: numberValue(video.statistics?.commentCount) || 0,
+      format: isShort(video) ? "Short" : "Video",
+      category: youtubeCategoryName(video.snippet?.categoryId)
+    }))
+    .filter((video) => video.title);
   const visibleIdeas = summary.geminiInsights?.recommendations || summary.topicIdeas;
   const ideas = visibleIdeas.map((idea) => `${idea.title}: ${idea.body}`);
   return {
@@ -1189,7 +1203,7 @@ function geminiContext(summary) {
     nextVideoLength: summary.geminiInsights?.cards?.nextVideoLength?.value || summary.nextVideoLength,
     nextShortLength: summary.geminiInsights?.cards?.nextShortLength?.value || summary.nextShortLength,
     suggestedIdeas: ideas,
-    trendReferences: trendTitles,
+    trendReferences,
     trendQueries: summary.trendVideos.trendQueries || []
   };
 }
@@ -1226,6 +1240,23 @@ function normalizeRecommendation(item = {}, fallback = {}) {
   };
 }
 
+function isGenericSuggestionTitle(value = "") {
+  return /\b(follow[\s-]?up|part\s*2|extend|post more|make another|do another|continue)\b/i.test(String(value || ""));
+}
+
+function normalizeConceptSuggestion(item = {}, fallback = {}) {
+  const normalized = normalizeRecommendation(item, fallback);
+  if (isGenericSuggestionTitle(normalized.title)) {
+    return normalizeRecommendation(fallback, {
+      title: "Turn a current trend into a new concept",
+      body: normalized.body,
+      label: normalized.label,
+      tone: normalized.tone
+    });
+  }
+  return normalized;
+}
+
 function normalizeGeminiInsights(value, summary) {
   if (!value || typeof value !== "object") return null;
   const cards = value.cards || {};
@@ -1241,7 +1272,7 @@ function normalizeGeminiInsights(value, summary) {
     ? value.recommendations.slice(0, 3).map((item, index) => normalizeRecommendation(item, fallbackIdeas[index]))
     : [];
   const nextVideoSuggestions = Array.isArray(value.nextVideoSuggestions)
-    ? value.nextVideoSuggestions.slice(0, 3).map((item, index) => normalizeRecommendation(item, fallbackSuggestions[index]))
+    ? value.nextVideoSuggestions.slice(0, 3).map((item, index) => normalizeConceptSuggestion(item, fallbackSuggestions[index]))
     : [];
 
   return {
@@ -1285,8 +1316,10 @@ async function buildGeminiPageInsights(summary, videos) {
     "Use only the supplied channel data, Gemini-selected trend queries, and trend references. Do not invent exact analytics.",
     "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
     "Make every visible AI Insights element from your recommendations: metric cards, next video suggestions, action list, and chat intro.",
-    "nextVideoSuggestions must use uploadPerformance across the full upload set: top performers, underperformers, average views, median views, Shorts versus videos, and repeated topic patterns.",
-    "Each nextVideoSuggestions item should be a concrete next upload idea, not generic advice. Mention the performance reason in the body.",
+    "nextVideoSuggestions must compare uploadPerformance across the full upload set against currentYouTubeTrend, trendQueries, and trendReferences.",
+    "Each nextVideoSuggestions item must be a specific new video concept the creator could make next. The title should sound like a strategic video idea, not advice.",
+    "Do not write generic suggestions like add a follow-up, extend the video, post more Shorts, improve the hook, or make another part 2. Instead, propose an angle such as a trend explainer, challenge, ranking, comparison, myth-check, experiment, reaction format, or searchable topic package.",
+    "In each nextVideoSuggestions body, explain why this concept fits: mention the relevant high/low performer pattern and the current trend signal being borrowed.",
     "The topTopicSignal card appears as Current YouTube Trends. It must be based on currentYouTubeTrend, trendQueries, or trendReferences from outside the channel.",
     "Do not copy or closely paraphrase one of the channel's own recent upload titles for topTopicSignal. If the external trend evidence is weak, summarize the trend query/category instead.",
     "JSON shape:",
