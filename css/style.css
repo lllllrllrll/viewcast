@@ -608,6 +608,44 @@ body.settings-dark .plan-indicator {
   font-size: 15px;
 }
 
+.insight-error-panel[hidden] {
+  display: none;
+}
+
+.insight-error-panel {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  border-color: rgba(208, 77, 103, 0.36);
+  background: linear-gradient(180deg, rgba(255, 245, 247, 0.96), rgba(255, 255, 255, 0.94));
+}
+
+.insight-error-content {
+  max-width: 680px;
+  display: grid;
+  gap: 12px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.insight-error-content strong {
+  color: var(--rose);
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.08;
+}
+
+.insight-error-content p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.insight-error-content code {
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .loader-ring {
   width: 34px;
   height: 34px;

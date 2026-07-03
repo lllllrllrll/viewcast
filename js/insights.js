@@ -17,6 +17,7 @@ const videoLibraryStatus = document.getElementById("videoLibraryStatus");
 const refreshVideosButton = document.getElementById("refreshVideos");
 const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
+const insightErrorPanel = document.getElementById("insightErrorPanel");
 const chatMessages = document.getElementById("chatMessages");
 const chatForm = document.getElementById("insightChatForm");
 const chatInput = document.getElementById("insightChatInput");
@@ -1041,8 +1042,13 @@ function setChatSeedMessage(message = "Hi! I'm your ViewCast assistant. To give 
 function showMissingGeminiKeyMessage() {
   setAnalyzerLoading(false);
   setAnalyzerResultsVisible(false);
+  if (insightErrorPanel) insightErrorPanel.hidden = false;
   setStatus("Gemini API key is missing. Add your Gemini API key in js/firebase-config.js before generating AI Insights.");
   setLibraryStatus("AI Insights requires a Gemini API key.");
+}
+
+function hideInsightError() {
+  if (insightErrorPanel) insightErrorPanel.hidden = true;
 }
 
 function appendChatMessage(role, message, addToHistory = true) {
@@ -1450,6 +1456,7 @@ function clearAnalyzerResults() {
   latestChannelSummary = null;
   setAnalyzerLoading(false);
   setAnalyzerResultsVisible(false);
+  hideInsightError();
   document.querySelectorAll(".metric-card").forEach((card) => {
     const valueEl = card.querySelector(".metric-value");
     const trendEl = card.querySelector(".trend");
@@ -1564,6 +1571,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
   const requestId = ++analysisRequestId;
 
   try {
+    hideInsightError();
     setBusy(true);
     setAnalyzerResultsVisible(false);
     setAnalyzerLoading(true);
