@@ -404,25 +404,38 @@ async function fetchChannelVideos(accessToken) {
   return fetchVideosByIds(videoIds, accessToken);
 }
 
-async function fetchTrendingVideos(accessToken, videos) {
+function channelVideoCategoryIds(videos) {
   const categoryCounts = new Map();
   videos.forEach((video) => {
     const categoryId = video.snippet?.categoryId;
     if (!categoryId) return;
     categoryCounts.set(categoryId, (categoryCounts.get(categoryId) || 0) + 1);
   });
-  const categoryId = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
-  if (!categoryId) return [];
+  return [...categoryCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([categoryId]) => categoryId);
+}
+
+async function fetchMostPopularVideosByCategory(accessToken, categoryId, maxResults = 12) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+  url.searchParams.set("part", "snippet,statistics,contentDetails");
+  url.searchParams.set("chart", "mostPopular");
+  url.searchParams.set("regionCode", "US");
+  url.searchParams.set("maxResults", String(maxResults));
+  url.searchParams.set("videoCategoryId", categoryId);
+  const payload = await fetchJson(url, accessToken);
+  return payload.items || [];
+}
+
+async function fetchTrendingVideos(accessToken, videos) {
+  const categoryIds = channelVideoCategoryIds(videos);
+  if (!categoryIds.length) return [];
 
   try {
-    const url = new URL("https://www.googleapis.com/youtube/v3/videos");
-    url.searchParams.set("part", "snippet,statistics,contentDetails");
-    url.searchParams.set("chart", "mostPopular");
-    url.searchParams.set("regionCode", "US");
-    url.searchParams.set("maxResults", "12");
-    url.searchParams.set("videoCategoryId", categoryId);
-    const payload = await fetchJson(url, accessToken);
-    return payload.items || [];
+    const results = await Promise.allSettled(
+      categoryIds.slice(0, 4).map((categoryId) => fetchMostPopularVideosByCategory(accessToken, categoryId, 10))
+    );
+    return results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   } catch (error) {
     console.warn("Current popular videos were not available.", error);
     return [];
@@ -641,10 +654,10 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     fetchGeminiTrendVideos(accessToken, trendPlan)
   ]);
   const merged = [
+    ...(popularResult.status === "fulfilled" ? popularResult.value : []),
     ...(geminiResult.status === "fulfilled" ? geminiResult.value.videos : []),
     ...(laneResult.status === "fulfilled" ? laneResult.value.videos : []),
-    ...(similarResult.status === "fulfilled" ? similarResult.value : []),
-    ...(popularResult.status === "fulfilled" ? popularResult.value : [])
+    ...(similarResult.status === "fulfilled" ? similarResult.value : [])
   ];
   const seen = new Set();
   const trendVideos = merged.filter((video) => {
