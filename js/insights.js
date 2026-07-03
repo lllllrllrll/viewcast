@@ -896,6 +896,42 @@ function buildTopicIdeas(videos, trendVideos) {
   ];
 }
 
+function buildNextVideoSuggestions(videos, trendVideos) {
+  const performance = uploadPerformanceContext(videos);
+  const top = performance.topPerformers[0];
+  const second = performance.topPerformers[1];
+  const medianViews = compactNumber(performance.medianViews);
+  const averageViews = compactNumber(performance.averageViews);
+  const trend = currentTrendSignal(videos, trendVideos);
+  const betterFormat = performance.shortAverageViews > performance.videoAverageViews ? "Short" : "video";
+  const betterFormatViews = performance.shortAverageViews > performance.videoAverageViews
+    ? performance.shortAverageViews
+    : performance.videoAverageViews;
+
+  return [
+    {
+      title: top ? `Make a follow-up to ${top.title}` : "Make a performance-backed follow-up",
+      body: top
+        ? `This upload led your channel with ${compactNumber(top.views)} views. Keep the same viewer promise, then add a new angle tied to ${trend}.`
+        : `Use the topic that has the clearest repeatable promise, then package it around ${trend}.`,
+      label: "Top"
+    },
+    {
+      title: `Test a ${betterFormat} around ${trend}`,
+      body: `Your ${betterFormat.toLowerCase()} format averages about ${compactNumber(betterFormatViews)} views. Use that format for a focused trend test and compare it against your ${averageViews} channel average.`,
+      label: "Format",
+      tone: "warn"
+    },
+    {
+      title: second ? `Revive the pattern from ${second.title}` : "Raise the median performer",
+      body: second
+        ? `It beat the ${medianViews} median with ${compactNumber(second.views)} views. Reuse the structure, but change the topic so it does not feel like a repeat.`
+        : `Aim to beat your ${medianViews} median by borrowing the hook structure from your strongest upload.`,
+      label: "Pattern"
+    }
+  ];
+}
+
 function buildChannelSummary(videos, trendVideos, channelProfile = null) {
   const recent = videos.slice(0, 20);
   const longVideos = videos.filter((video) => !isShort(video));
@@ -922,6 +958,7 @@ function buildChannelSummary(videos, trendVideos, channelProfile = null) {
     currentTrend,
     channelLane,
     channelProfile,
+    nextVideoSuggestions: buildNextVideoSuggestions(videos, trendVideos),
     topicIdeas: buildTopicIdeas(videos, trendVideos),
     trendVideos
   };
@@ -947,8 +984,8 @@ function setMetric(index, value, trend = "", trendClass = "") {
   }
 }
 
-function updateRecommendations(items) {
-  document.querySelectorAll(".activity-item").forEach((item, index) => {
+function updateActivityItems(selector, items) {
+  document.querySelectorAll(selector).forEach((item, index) => {
     const insight = items[index] || {title: " ", body: " ", label: " "};
     const timeEl = item.querySelector("time");
     item.querySelector("b").textContent = insight.title;
@@ -956,6 +993,14 @@ function updateRecommendations(items) {
     timeEl.textContent = insight.label;
     timeEl.className = ["comparison-badge", insight.tone].filter(Boolean).join(" ");
   });
+}
+
+function updateRecommendations(items) {
+  updateActivityItems(".search-terms-panel .activity-item", items);
+}
+
+function updateNextVideoSuggestions(items) {
+  updateActivityItems("#nextVideoSuggestions .activity-item", items);
 }
 
 function setChatSeedMessage(message = "Hi! I'm your ViewCast assistant. To give you the best advice, should we focus on growing your views, increasing your subscribers, or improving your retention today?") {
@@ -1000,6 +1045,34 @@ function channelVideoContext(videos) {
     youtubeCategoryId: video.snippet?.categoryId || "",
     youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId)
   }));
+}
+
+function uploadPerformanceContext(videos) {
+  const mapped = videos.map((video) => ({
+    title: video.snippet?.title || "Untitled video",
+    publishedAt: video.snippet?.publishedAt || "",
+    format: isShort(video) ? "Short" : "Video",
+    duration: durationFromIso(video.contentDetails?.duration),
+    views: numberValue(video.statistics?.viewCount) || 0,
+    likes: numberValue(video.statistics?.likeCount) || 0,
+    comments: numberValue(video.statistics?.commentCount) || 0,
+    youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId)
+  }));
+  const views = mapped.map((video) => video.views).filter(Number.isFinite);
+  const shorts = mapped.filter((video) => video.format === "Short");
+  const longVideos = mapped.filter((video) => video.format !== "Short");
+  const averageViewsFor = (items) => Math.round(average(items.map((video) => video.views)) || 0);
+
+  return {
+    uploadCount: mapped.length,
+    averageViews: Math.round(average(views) || 0),
+    medianViews: Math.round(median(views) || 0),
+    shortAverageViews: averageViewsFor(shorts),
+    videoAverageViews: averageViewsFor(longVideos),
+    topPerformers: [...mapped].sort((a, b) => b.views - a.views).slice(0, 10),
+    underPerformers: [...mapped].sort((a, b) => a.views - b.views).slice(0, 8),
+    recentUploads: mapped.slice(0, 12)
+  };
 }
 
 function normalizeGeminiTrendPlan(value, fallbackLane) {
@@ -1126,6 +1199,7 @@ function geminiPageContext(summary, videos) {
     ...geminiContext(summary),
     averageViews: Math.round(summary.avgViews || 0),
     bestUploadViews: summary.bestViews || 0,
+    uploadPerformance: uploadPerformanceContext(videos),
     recentUploads: channelVideoContext(videos).slice(0, 12)
   };
 }
@@ -1156,6 +1230,7 @@ function normalizeGeminiInsights(value, summary) {
   if (!value || typeof value !== "object") return null;
   const cards = value.cards || {};
   const fallbackIdeas = summary.topicIdeas || [];
+  const fallbackSuggestions = summary.nextVideoSuggestions || fallbackIdeas;
   const trendValue = isOwnUploadRestatement(cards.topTopicSignal?.value, summary.recent)
     ? summary.currentTrend
     : cards.topTopicSignal?.value;
@@ -1164,6 +1239,9 @@ function normalizeGeminiInsights(value, summary) {
     : cards.topTopicSignal?.detail;
   const recommendations = Array.isArray(value.recommendations)
     ? value.recommendations.slice(0, 3).map((item, index) => normalizeRecommendation(item, fallbackIdeas[index]))
+    : [];
+  const nextVideoSuggestions = Array.isArray(value.nextVideoSuggestions)
+    ? value.nextVideoSuggestions.slice(0, 3).map((item, index) => normalizeRecommendation(item, fallbackSuggestions[index]))
     : [];
 
   return {
@@ -1189,6 +1267,7 @@ function normalizeGeminiInsights(value, summary) {
         tone: cards.topTopicSignal?.tone || "good"
       }
     },
+    nextVideoSuggestions: nextVideoSuggestions.length ? nextVideoSuggestions : fallbackSuggestions.slice(0, 3),
     recommendations: recommendations.length ? recommendations : fallbackIdeas.slice(0, 3),
     chatIntro: String(value.chatIntro || compactAdviceSummary(summary)).slice(0, 360)
   };
@@ -1205,11 +1284,13 @@ async function buildGeminiPageInsights(summary, videos) {
     "Use the channel profile, repeated upload patterns, descriptions, tags, and category names before relying on a single title. Keep the classification consistent across every card.",
     "Use only the supplied channel data, Gemini-selected trend queries, and trend references. Do not invent exact analytics.",
     "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
-    "Make every visible AI Insights element from your recommendations: metric cards, action list, and chat intro.",
+    "Make every visible AI Insights element from your recommendations: metric cards, next video suggestions, action list, and chat intro.",
+    "nextVideoSuggestions must use uploadPerformance across the full upload set: top performers, underperformers, average views, median views, Shorts versus videos, and repeated topic patterns.",
+    "Each nextVideoSuggestions item should be a concrete next upload idea, not generic advice. Mention the performance reason in the body.",
     "The topTopicSignal card appears as Current YouTube Trends. It must be based on currentYouTubeTrend, trendQueries, or trendReferences from outside the channel.",
     "Do not copy or closely paraphrase one of the channel's own recent upload titles for topTopicSignal. If the external trend evidence is weak, summarize the trend query/category instead.",
     "JSON shape:",
-    `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"recommendations":[{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
+    `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
     "Channel data:",
     JSON.stringify(geminiPageContext(summary, videos), null, 2)
@@ -1352,6 +1433,7 @@ function renderChannelInsights(summary) {
     cards.topTopicSignal?.detail || "Current YouTube trend",
     cards.topTopicSignal?.tone || bestTone
   );
+  updateNextVideoSuggestions(geminiInsights?.nextVideoSuggestions || summary.nextVideoSuggestions);
   updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
   setChatSeedMessage(geminiInsights?.chatIntro || compactAdviceSummary(summary));
 }
