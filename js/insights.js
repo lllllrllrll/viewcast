@@ -36,7 +36,13 @@ let latestChannelSummary = null;
 let chatHistory = [];
 
 function setStatus(message) {
-  const status = document.getElementById("videoAnalysisStatus");
+  let status = document.getElementById("videoAnalysisStatus");
+  if (!status && form) {
+    status = document.createElement("span");
+    status.id = "videoAnalysisStatus";
+    status.className = "analysis-status";
+    form.append(status);
+  }
   if (status) status.textContent = message || "";
 }
 
