@@ -1043,8 +1043,8 @@ function showMissingGeminiKeyMessage() {
   setAnalyzerLoading(false);
   setAnalyzerResultsVisible(false);
   if (insightErrorPanel) insightErrorPanel.hidden = false;
-  setStatus("Gemini API key is missing. Add your Gemini API key in js/firebase-config.js before generating AI Insights.");
-  setLibraryStatus("AI Insights requires a Gemini API key.");
+  setStatus("An error has occurred. AI Insights could not be generated right now.");
+  setLibraryStatus("AI Insights could not be generated right now.");
 }
 
 function hideInsightError() {
@@ -1400,7 +1400,7 @@ async function buildGeminiPageInsights(summary, videos) {
 }
 
 async function buildGeminiChatReply(question, summary) {
-  if (!geminiApiKey) return "Add your Gemini API key in js/firebase-config.js to enable the AI assistant.";
+  if (!geminiApiKey) return "An error has occurred. The AI assistant is unavailable right now.";
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const systemInstruction = [
