@@ -1038,6 +1038,13 @@ function setChatSeedMessage(message = "Hi! I'm your ViewCast assistant. To give 
   appendChatMessage("assistant", message);
 }
 
+function showMissingGeminiKeyMessage() {
+  setAnalyzerLoading(false);
+  setAnalyzerResultsVisible(false);
+  setStatus("Gemini API key is missing. Add your Gemini API key in js/firebase-config.js before generating AI Insights.");
+  setLibraryStatus("AI Insights requires a Gemini API key.");
+}
+
 function appendChatMessage(role, message, addToHistory = true) {
   if (!chatMessages) return;
   const bubble = document.createElement("div");
@@ -1549,6 +1556,10 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     window.location.href = "channel.html?link=required";
     return;
   }
+  if (!geminiApiKey) {
+    showMissingGeminiKeyMessage();
+    return;
+  }
 
   const requestId = ++analysisRequestId;
 
@@ -1577,10 +1588,10 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
       }
       if (requestId !== analysisRequestId) return;
     }
-    setStatus(geminiApiKey ? "Asking Gemini to classify your channel..." : "Classifying your channel locally...");
+    setStatus("Asking Gemini to classify your channel...");
     const trendPlan = await buildGeminiTrendPlan(videos, channelProfile);
     if (requestId !== analysisRequestId) return;
-    setStatus(geminiApiKey ? "Searching trends chosen by Gemini..." : "Searching related trend signals...");
+    setStatus("Searching trends chosen by Gemini...");
     const trendVideos = accessToken ? await fetchTrendReferenceVideos(accessToken, videos, trendPlan) : [];
     if (requestId !== analysisRequestId) return;
 
@@ -1588,15 +1599,14 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
       ? [videos.find((video) => video.id === focusVideoId), ...videos.filter((video) => video.id !== focusVideoId)].filter(Boolean)
       : videos;
     const summary = buildChannelSummary(orderedVideos, trendVideos, channelProfile);
-    setStatus(geminiApiKey ? "Asking Gemini for AI insights..." : "Gemini key missing. Using local insight fallback.");
+    setStatus("Asking Gemini for AI insights...");
     summary.geminiInsights = await buildGeminiPageInsights(summary, orderedVideos);
+    if (!summary.geminiInsights) throw new Error("Gemini could not generate AI Insights. Check your Gemini API key and try again.");
     if (requestId !== analysisRequestId) return;
     renderChannelInsights(summary);
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
-    setStatus(summary.geminiInsights
-      ? "Gemini AI insights generated from your uploads and trend signals."
-      : "Local insight fallback generated from your uploads and trend signals.");
+    setStatus("Gemini AI insights generated from your uploads and trend signals.");
     setLibraryStatus(focusVideoId ? "Insights weighted toward the selected upload." : "Channel-level insights are ready.");
   } catch (error) {
     if (requestId !== analysisRequestId) return;
@@ -1677,6 +1687,10 @@ if (form && firebaseConfigured) {
       setLibraryStatus("Showing saved uploads. Generate insights or refresh for current data.");
     } else {
       setLibraryStatus("Loading uploads for channel insights...");
+    }
+    if (!geminiApiKey) {
+      showMissingGeminiKeyMessage();
+      return;
     }
     loadVideoLibrary({allowPrompt: false, generateAfterLoad: true});
   });
