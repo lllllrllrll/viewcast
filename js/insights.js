@@ -424,7 +424,11 @@ async function fetchMostPopularVideosByCategory(accessToken, categoryId, maxResu
   url.searchParams.set("maxResults", String(maxResults));
   url.searchParams.set("videoCategoryId", categoryId);
   const payload = await fetchJson(url, accessToken);
-  return payload.items || [];
+  return (payload.items || []).map((video) => ({
+    ...video,
+    trendSource: "US most popular",
+    trendCategoryId: categoryId
+  }));
 }
 
 async function fetchTrendingVideos(accessToken, videos) {
@@ -604,7 +608,10 @@ async function fetchLaneTrendVideos(accessToken, videos) {
     queries.slice(0, 3).map((query) => searchVideosByQuery(accessToken, query, 6))
   );
   const videosByQuery = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
-  return {lane, videos: videosByQuery};
+  return {
+    lane,
+    videos: videosByQuery.map((video) => ({...video, trendSource: "Category trend search"}))
+  };
 }
 
 async function fetchGeminiTrendVideos(accessToken, trendPlan) {
@@ -615,6 +622,7 @@ async function fetchGeminiTrendVideos(accessToken, trendPlan) {
   return {
     lane: trendPlan.lane,
     videos: results.flatMap((result) => result.status === "fulfilled" ? result.value : [])
+      .map((video) => ({...video, trendSource: "Gemini trend search"}))
   };
 }
 
@@ -638,7 +646,8 @@ async function fetchSimilarTrendVideos(accessToken, videos) {
     const ids = (payload.items || [])
       .map((item) => item.id?.videoId)
       .filter(Boolean);
-    return ids.length ? fetchVideosByIds(ids, accessToken) : [];
+    const foundVideos = ids.length ? await fetchVideosByIds(ids, accessToken) : [];
+    return foundVideos.map((video) => ({...video, trendSource: "Similar upload search"}));
   } catch (error) {
     console.warn("Similar trend videos were not available.", error);
     return [];
@@ -654,10 +663,10 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     fetchGeminiTrendVideos(accessToken, trendPlan)
   ]);
   const merged = [
-    ...(popularResult.status === "fulfilled" ? popularResult.value : []),
     ...(geminiResult.status === "fulfilled" ? geminiResult.value.videos : []),
     ...(laneResult.status === "fulfilled" ? laneResult.value.videos : []),
-    ...(similarResult.status === "fulfilled" ? similarResult.value : [])
+    ...(similarResult.status === "fulfilled" ? similarResult.value : []),
+    ...(popularResult.status === "fulfilled" ? popularResult.value : [])
   ];
   const seen = new Set();
   const trendVideos = merged.filter((video) => {
@@ -1198,7 +1207,8 @@ function geminiContext(summary) {
       likes: numberValue(video.statistics?.likeCount) || 0,
       comments: numberValue(video.statistics?.commentCount) || 0,
       format: isShort(video) ? "Short" : "Video",
-      category: youtubeCategoryName(video.snippet?.categoryId)
+      category: youtubeCategoryName(video.snippet?.categoryId),
+      source: video.trendSource || "Trend reference"
     }))
     .filter((video) => video.title);
   const visibleIdeas = summary.geminiInsights?.recommendations || summary.topicIdeas;
@@ -1330,6 +1340,8 @@ async function buildGeminiPageInsights(summary, videos) {
     "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
     "Make every visible AI Insights element from your recommendations: metric cards, next video suggestions, action list, and chat intro.",
     "nextVideoSuggestions must compare uploadPerformance across the full upload set against currentYouTubeTrend, trendQueries, and trendReferences.",
+    "Trend references can come from category-specific searches, similar upload searches, Gemini trend searches, or US most popular category videos. Prefer the specific search references for concrete advice; use US most popular only as broad category context when it fits.",
+    "If US most popular category data is unavailable, empty, or too broad, keep the advice grounded in trendQueries and the specific search references.",
     "Each nextVideoSuggestions item must be a specific new video concept the creator could make next. The title should sound like a strategic video idea, not advice.",
     "Do not write generic suggestions like add a follow-up, extend the video, post more Shorts, improve the hook, or make another part 2. Instead, propose an angle such as a trend explainer, challenge, ranking, comparison, myth-check, experiment, reaction format, or searchable topic package.",
     "In each nextVideoSuggestions body, explain why this concept fits: mention the relevant high/low performer pattern and the current trend signal being borrowed.",
