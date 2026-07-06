@@ -1098,6 +1098,63 @@ canvas {
   font-weight: 700;
 }
 
+body.insights-page .metric-card {
+  align-content: start;
+  min-height: auto;
+  overflow: visible;
+}
+
+body.insights-page .metric-value {
+  font-size: clamp(20px, 2vw, 30px);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+body.insights-page .trend {
+  max-width: 58%;
+  line-height: 1.25;
+  text-align: right;
+  white-space: normal;
+}
+
+body.insights-page .panel.large,
+body.insights-page .panel.side {
+  min-height: auto;
+}
+
+body.insights-page .activity {
+  gap: 18px;
+}
+
+body.insights-page .activity-item,
+body.insights-page .search-terms-panel .activity-item {
+  grid-template-columns: 10px minmax(0, 1fr);
+}
+
+body.insights-page .activity-item b {
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+body.insights-page .search-terms-panel .activity-item b {
+  font-size: 17px;
+}
+
+body.insights-page .activity-item span {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+body.insights-page .activity-item time {
+  grid-column: 2;
+  justify-self: start;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .comparison-badge.good {
   color: var(--green);
 }
