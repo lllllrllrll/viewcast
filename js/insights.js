@@ -1286,9 +1286,9 @@ function safeJsonParse(value) {
 
 function normalizeRecommendation(item = {}, fallback = {}) {
   return {
-    title: String(item.title || fallback.title || "Make a direct follow-up").slice(0, 80),
-    body: String(item.body || fallback.body || "Use your strongest topic and connect it to a timely viewer problem.").slice(0, 220),
-    label: String(item.label || fallback.label || "Gemini").slice(0, 20),
+    title: String(item.title || fallback.title || "Make a direct follow-up").slice(0, 160),
+    body: String(item.body || fallback.body || "Use your strongest topic and connect it to a timely viewer problem.").slice(0, 900),
+    label: String(item.label || fallback.label || "Gemini").slice(0, 36),
     tone: ["good", "warn", "bad"].includes(item.tone) ? item.tone : (fallback.tone || "good")
   };
 }
@@ -1484,6 +1484,8 @@ function clearAnalyzerResults() {
     }
   });
   document.querySelectorAll(".activity-item").forEach((item) => {
+    item.classList.remove("is-collapsible", "is-expanded");
+    item.querySelector(".read-more-button")?.remove();
     item.querySelector("b").textContent = " ";
     item.querySelector("span").textContent = " ";
     const timeEl = item.querySelector("time");
