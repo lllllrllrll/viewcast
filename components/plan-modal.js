@@ -43,7 +43,7 @@
               <li>API access for reporting</li>
               <li>Priority AI support</li>
             </ul>
-            <button class="primary-button" data-plan-choice="premium" style="width: 100%; background: #2c3e50;">Choose Premium</button>
+            <button class="primary-button" data-plan-choice="premium" style="width: 100%;">Choose Premium</button>
           </div>
         </div>
         <p id="modalStatus" style="text-align: center; padding: 0 32px 24px; color: var(--rose); font-size: 13px; font-weight: 600;" hidden></p>
@@ -97,9 +97,6 @@
         if (isCurrent) {
           btn.style.background = "var(--line)";
           btn.style.color = "var(--muted)";
-        } else if (planKey === "premium") {
-          btn.style.background = "#2c3e50";
-          btn.style.color = "white";
         } else {
           btn.style.background = "var(--teal)";
           btn.style.color = "white";

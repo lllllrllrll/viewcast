@@ -125,9 +125,6 @@
         if (isCurrent) {
           button.style.background = "var(--line)";
           button.style.color = "var(--muted)";
-        } else if (button.dataset.planChoice === "premium") {
-          button.style.background = "#2c3e50";
-          button.style.color = "";
         } else {
           button.style.background = "";
           button.style.color = "";
