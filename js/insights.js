@@ -1017,10 +1017,27 @@ function updateActivityItems(selector, items) {
   document.querySelectorAll(selector).forEach((item, index) => {
     const insight = items[index] || {title: " ", body: " ", label: " "};
     const timeEl = item.querySelector("time");
+    const bodyEl = item.querySelector("span");
+    const contentEl = item.querySelector("div");
+    const existingToggle = item.querySelector(".read-more-button");
+    if (existingToggle) existingToggle.remove();
+
     item.querySelector("b").textContent = insight.title;
-    item.querySelector("span").textContent = insight.body;
+    bodyEl.textContent = insight.body;
     timeEl.textContent = insight.label;
     timeEl.className = ["comparison-badge", insight.tone].filter(Boolean).join(" ");
+
+    const hasExtraInfo = `${insight.title || ""} ${insight.body || ""}`.trim().length > 180;
+    item.classList.toggle("is-collapsible", hasExtraInfo);
+    item.classList.remove("is-expanded");
+    if (hasExtraInfo && contentEl) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "read-more-button";
+      toggle.textContent = "Read more";
+      toggle.setAttribute("aria-expanded", "false");
+      contentEl.append(toggle);
+    }
   });
 }
 
@@ -1672,6 +1689,16 @@ async function sendChatQuestion(question) {
   }
 }
 
+function handleReadMoreClick(event) {
+  const button = event.target instanceof Element ? event.target.closest(".read-more-button") : null;
+  if (!button) return;
+  const item = button.closest(".activity-item");
+  if (!item) return;
+  const isExpanded = item.classList.toggle("is-expanded");
+  button.textContent = isExpanded ? "Show less" : "Read more";
+  button.setAttribute("aria-expanded", String(isExpanded));
+}
+
 clearAnalyzerResults();
 
 if (form && firebaseConfigured) {
@@ -1708,6 +1735,7 @@ if (form && firebaseConfigured) {
   document.querySelectorAll("[data-chat-prompt]").forEach((button) => {
     button.addEventListener("click", () => sendChatQuestion(button.dataset.chatPrompt || button.textContent.trim()));
   });
+  analyzerDashboard?.addEventListener("click", handleReadMoreClick);
   videoLibrary?.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : event.target?.parentElement;
     const card = target?.closest("[data-video-id]");

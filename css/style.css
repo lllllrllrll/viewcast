@@ -1147,6 +1147,39 @@ body.insights-page .activity-item span {
   overflow-wrap: anywhere;
 }
 
+body.insights-page .activity-item.is-collapsible span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+body.insights-page .activity-item.is-expanded span {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+body.insights-page .read-more-button {
+  justify-self: start;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--teal);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+body.insights-page .read-more-button:hover,
+body.insights-page .read-more-button:focus-visible {
+  color: #167b7d;
+  text-decoration: underline;
+  outline: none;
+}
+
 body.insights-page .activity-item time {
   grid-column: 2;
   justify-self: start;
