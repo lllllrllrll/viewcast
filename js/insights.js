@@ -1027,10 +1027,9 @@ function updateActivityItems(selector, items) {
     timeEl.textContent = insight.label;
     timeEl.className = ["comparison-badge", insight.tone].filter(Boolean).join(" ");
 
-    const hasExtraInfo = `${insight.title || ""} ${insight.body || ""}`.trim().length > 180;
-    item.classList.toggle("is-collapsible", hasExtraInfo);
     item.classList.remove("is-expanded");
-    if (hasExtraInfo && contentEl) {
+    item.classList.add("is-collapsible");
+    if (contentEl) {
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "read-more-button";
@@ -1038,7 +1037,19 @@ function updateActivityItems(selector, items) {
       toggle.setAttribute("aria-expanded", "false");
       contentEl.append(toggle);
     }
+
+    requestAnimationFrame(() => updateReadMoreVisibility(item));
   });
+}
+
+function updateReadMoreVisibility(item) {
+  const bodyEl = item.querySelector("span");
+  const toggle = item.querySelector(".read-more-button");
+  if (!bodyEl || !toggle || item.classList.contains("is-expanded")) return;
+
+  const isOverflowing = bodyEl.scrollHeight > bodyEl.clientHeight + 1;
+  item.classList.toggle("is-collapsible", isOverflowing);
+  toggle.hidden = !isOverflowing;
 }
 
 function updateRecommendations(items) {
