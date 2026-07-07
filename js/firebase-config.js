@@ -16,7 +16,7 @@ export const firebaseConfig = {
 export const googleOAuthClientId = "351557961377-ocbt4u5dm00n0mqfjvf808rpakc0b5bt.apps.googleusercontent.com";
 
 export const geminiApiKey = "AQ.Ab8RN6If1zAl5KP9aboyoc97R7atYUdpg9yKG1Y5JK3wcA1_XQ";
-export const geminiModel = "gemini-3.5-flash";
+export const geminiModel = "gemini-2.5-flash";
 
 export const firebaseConfigured = Boolean(
   firebaseConfig.apiKey &&
