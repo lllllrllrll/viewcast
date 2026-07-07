@@ -37,13 +37,16 @@ let chatHistory = [];
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
-  if (!status && form) {
-    status = document.createElement("span");
+  if (!status && analyzerLoading) {
+    status = document.createElement("p");
     status.id = "videoAnalysisStatus";
     status.className = "analysis-status";
-    form.append(status);
+    analyzerLoading.querySelector(".analyzer-loader")?.append(status);
   }
-  if (status) status.textContent = message || "";
+  if (status) {
+    status.textContent = message || "";
+    status.hidden = !message;
+  }
 }
 
 function setBusy(isBusy, label = "Insights Ready") {
@@ -1644,7 +1647,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     renderChannelInsights(summary);
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
-    setStatus("Gemini AI insights generated from your uploads and trend signals.");
+    setStatus("");
     setLibraryStatus(focusVideoId ? "Insights weighted toward the selected upload." : "Channel-level insights are ready.");
   } catch (error) {
     if (requestId !== analysisRequestId) return;
