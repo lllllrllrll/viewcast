@@ -1078,6 +1078,14 @@ function showMissingGeminiKeyMessage() {
   setLibraryStatus("AI Insights could not be generated right now.");
 }
 
+function showInsightGenerationError() {
+  setAnalyzerLoading(false);
+  setAnalyzerResultsVisible(false);
+  if (insightErrorPanel) insightErrorPanel.hidden = false;
+  setStatus("An error has occurred. AI Insights could not be generated right now.");
+  setLibraryStatus("AI Insights could not be generated right now.");
+}
+
 function hideInsightError() {
   if (insightErrorPanel) insightErrorPanel.hidden = true;
 }
@@ -1642,7 +1650,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     const summary = buildChannelSummary(orderedVideos, trendVideos, channelProfile);
     setStatus("Asking Gemini for AI insights...");
     summary.geminiInsights = await buildGeminiPageInsights(summary, orderedVideos);
-    if (!summary.geminiInsights) throw new Error("Gemini could not generate AI Insights. Check your Gemini API key and try again.");
+    if (!summary.geminiInsights) throw new Error("AI_INSIGHTS_GENERATION_FAILED");
     if (requestId !== analysisRequestId) return;
     renderChannelInsights(summary);
     setAnalyzerLoading(false);
@@ -1658,7 +1666,11 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
       return;
     }
     console.error("Could not generate channel insights.", error);
-    setStatus(error.message || "Could not generate channel insights.");
+    if (error.message === "AI_INSIGHTS_GENERATION_FAILED") {
+      showInsightGenerationError();
+    } else {
+      setStatus(error.message || "Could not generate channel insights.");
+    }
   } finally {
     if (requestId === analysisRequestId) {
       setAnalyzerLoading(false);
