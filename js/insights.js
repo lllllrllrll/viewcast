@@ -25,6 +25,8 @@ const chatInput = document.getElementById("insightChatInput");
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
+const insightsStorageKeyPrefix = "viewcastAiInsights:";
+const insightsCacheMaxAge = 15 * 60 * 1000;
 
 let currentUser = null;
 let auth = null;
@@ -190,6 +192,48 @@ function saveCachedVideos(videos) {
   if (!key) return;
   localStorage.setItem(key, JSON.stringify({
     videos,
+    savedAt: Date.now()
+  }));
+}
+
+function insightsStorageKey(focusVideoId = "") {
+  return currentUser ? insightsStorageKeyPrefix + currentUser.uid + ":" + (focusVideoId || "channel") : "";
+}
+
+function insightsFingerprint(videos, focusVideoId = "") {
+  return JSON.stringify({
+    focusVideoId,
+    videos: videos.slice(0, 40).map((video) => ({
+      id: video.id,
+      publishedAt: video.snippet?.publishedAt || "",
+      title: video.snippet?.title || "",
+      views: video.statistics?.viewCount || "",
+      likes: video.statistics?.likeCount || "",
+      comments: video.statistics?.commentCount || ""
+    }))
+  });
+}
+
+function readCachedInsights(videos, focusVideoId = "") {
+  const key = insightsStorageKey(focusVideoId);
+  if (!key) return null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    if (!saved?.summary || saved.fingerprint !== insightsFingerprint(videos, focusVideoId)) return null;
+    if (Date.now() - saved.savedAt > insightsCacheMaxAge) return null;
+    return saved.summary;
+  } catch (error) {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function saveCachedInsights(summary, videos, focusVideoId = "") {
+  const key = insightsStorageKey(focusVideoId);
+  if (!key || !summary) return;
+  localStorage.setItem(key, JSON.stringify({
+    fingerprint: insightsFingerprint(videos, focusVideoId),
+    summary,
     savedAt: Date.now()
   }));
 }
@@ -1428,6 +1472,7 @@ async function buildGeminiPageInsights(summary, videos) {
     });
 
     const payload = await response.json().catch(() => ({}));
+    if (response.status === 429) throw new Error("AI_INSIGHTS_RATE_LIMITED");
     if (!response.ok) throw new Error(payload.error?.message || "Gemini could not generate page insights.");
     const text = payload.candidates?.[0]?.content?.parts
       ?.map((part) => part.text || "")
@@ -1436,6 +1481,7 @@ async function buildGeminiPageInsights(summary, videos) {
     return normalizeGeminiInsights(safeJsonParse(text), summary);
   } catch (error) {
     console.warn("Gemini page insights failed.", error);
+    if (error.message === "AI_INSIGHTS_RATE_LIMITED") throw error;
     return null;
   }
 }
@@ -1629,6 +1675,16 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     if (!videos.length) throw new Error("Load your channel uploads before generating insights.");
 
     updateLibrarySelection(focusVideoId);
+    const cachedSummary = readCachedInsights(videos, focusVideoId);
+    if (cachedSummary) {
+      renderChannelInsights(cachedSummary);
+      setAnalyzerLoading(false);
+      setAnalyzerResultsVisible(true);
+      setStatus("");
+      setLibraryStatus("Showing recently generated AI insights.");
+      return;
+    }
+
     const accessToken = readCachedAccessToken();
     let channelProfile = null;
     if (accessToken) {
@@ -1656,6 +1712,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     if (!summary.geminiInsights) throw new Error("AI_INSIGHTS_GENERATION_FAILED");
     if (requestId !== analysisRequestId) return;
     renderChannelInsights(summary);
+    saveCachedInsights(summary, videos, focusVideoId);
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     setStatus("");
@@ -1669,7 +1726,10 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
       return;
     }
     console.error("Could not generate channel insights.", error);
-    if (error.message === "AI_INSIGHTS_GENERATION_FAILED") {
+    if (error.message === "AI_INSIGHTS_RATE_LIMITED") {
+      showInsightGenerationError();
+      setLibraryStatus("AI Insights usage limit reached. Try again in about a minute.");
+    } else if (error.message === "AI_INSIGHTS_GENERATION_FAILED") {
       showInsightGenerationError();
     } else {
       setStatus(error.message || "Could not generate channel insights.");
