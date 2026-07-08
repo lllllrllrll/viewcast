@@ -708,10 +708,11 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
   ].join("\n");
 
   try {
-    const response = await fetch(`${endpoint}?key=${geminiApiKey}`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiApiKey
       },
       body: JSON.stringify({
         contents: [

@@ -1213,10 +1213,11 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
   ].join("\n");
 
   try {
-    const response = await fetch(`${endpoint}?key=${geminiApiKey}`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiApiKey
       },
       body: JSON.stringify({
         contents: [
@@ -1407,10 +1408,11 @@ async function buildGeminiPageInsights(summary, videos) {
   ].join("\n");
 
   try {
-    const response = await fetch(`${endpoint}?key=${geminiApiKey}`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiApiKey
       },
       body: JSON.stringify({
         contents: [
@@ -1453,10 +1455,11 @@ async function buildGeminiChatReply(question, summary) {
   ].join("\n");
 
   try {
-    const response = await fetch(`${endpoint}?key=${geminiApiKey}`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiApiKey
       },
       body: JSON.stringify({
         contents: chatHistory,
