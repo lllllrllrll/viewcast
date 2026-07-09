@@ -23,6 +23,8 @@ const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
+const videoAnalysisStorageKeyPrefix = "viewcastGeminiVideoAnalysis:";
+const videoAnalysisCacheMaxAge = 15 * 60 * 1000;
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 let currentUser = null;
 let auth = null;
@@ -192,6 +194,48 @@ function saveCachedVideos(videos) {
   if (!key) return;
   localStorage.setItem(key, JSON.stringify({
     videos,
+    savedAt: Date.now()
+  }));
+}
+
+function videoAnalysisStorageKey(videoId = "") {
+  return currentUser && videoId ? videoAnalysisStorageKeyPrefix + currentUser.uid + ":" + videoId : "";
+}
+
+function videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms) {
+  return JSON.stringify({
+    id: video.id || "",
+    views: video.statistics?.viewCount || "",
+    likes: video.statistics?.likeCount || "",
+    comments: video.statistics?.commentCount || "",
+    period: analytics?.periodLabel || "",
+    averageViewDuration: analytics?.averageViewDuration || "",
+    averageViewPercentage: analytics?.averageViewPercentage || "",
+    retention: retentionPoints.slice(0, 12).map((point) => [point.position, point.ratio]),
+    searchTerms: searchTerms.slice(0, 5).map((term) => [term.term, term.views])
+  });
+}
+
+function readCachedGeminiVideoAnalysis(video, analytics, retentionPoints, searchTerms) {
+  const key = videoAnalysisStorageKey(video.id);
+  if (!key) return null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    if (!saved?.analysis || saved.fingerprint !== videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms)) return null;
+    if (Date.now() - saved.savedAt > videoAnalysisCacheMaxAge) return null;
+    return saved.analysis;
+  } catch (error) {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function saveCachedGeminiVideoAnalysis(video, analytics, retentionPoints, searchTerms, analysis) {
+  const key = videoAnalysisStorageKey(video.id);
+  if (!key || !analysis) return;
+  localStorage.setItem(key, JSON.stringify({
+    fingerprint: videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms),
+    analysis,
     savedAt: Date.now()
   }));
 }
@@ -605,11 +649,9 @@ function safeJsonParse(value) {
 }
 
 function channelVideoContext(videos) {
-  return videos.slice(0, 30).map((video) => ({
+  return videos.slice(0, 10).map((video) => ({
     id: video.id || "",
     title: video.snippet?.title || "Untitled video",
-    description: shortText(video.snippet?.description || "", 260),
-    tags: (video.snippet?.tags || []).slice(0, 8),
     publishedAt: video.snippet?.publishedAt || "",
     views: numberValue(video.statistics?.viewCount) || 0,
     likes: numberValue(video.statistics?.likeCount) || 0,
@@ -625,8 +667,8 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
   const views = videos.map((item) => numberValue(item.statistics?.viewCount)).filter((value) => value !== null);
   const averageViews = views.length ? Math.round(views.reduce((sum, value) => sum + value, 0) / views.length) : 0;
   const retentionSamples = retentionPoints
-    .filter((_, index) => index % Math.max(1, Math.floor(retentionPoints.length / 8)) === 0)
-    .slice(0, 10)
+    .filter((_, index) => index % Math.max(1, Math.floor(retentionPoints.length / 6)) === 0)
+    .slice(0, 7)
     .map((point) => ({
       time: durationSeconds ? durationFromSeconds(point.position * durationSeconds) : `${Math.round(point.position * 100)}%`,
       retentionPercent: Math.round(point.ratio * 100)
@@ -637,8 +679,8 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
     selectedVideo: {
       id: video.id || "",
       title: video.snippet?.title || "Untitled video",
-      description: shortText(video.snippet?.description || "", 700),
-      tags: (video.snippet?.tags || []).slice(0, 12),
+      description: shortText(video.snippet?.description || "", 220),
+      tags: (video.snippet?.tags || []).slice(0, 6),
       publishedAt: video.snippet?.publishedAt || "",
       duration: durationFromIso(video.contentDetails?.duration),
       youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId),
@@ -654,7 +696,7 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
         estimatedMinutesWatched: Math.round(analytics.estimatedMinutesWatched || 0)
       } : null,
       retentionSamples,
-      youtubeSearchTerms: searchTerms.map((term) => ({
+      youtubeSearchTerms: searchTerms.slice(0, 5).map((term) => ({
         term: term.term,
         views: term.views,
         period: term.periodLabel
@@ -695,11 +737,10 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const prompt = [
-    "You are ViewCast's Gemini AI video analyst.",
-    "Analyze the selected YouTube video against the creator's channel profile, recent uploads, private analytics, retention samples, and YouTube search terms.",
-    "Use only the supplied data. Do not invent views, retention, search terms, or exact private analytics.",
-    "Metric labels should be short comparisons such as Above avg, Needs lift, Strong, Watch drop, or Unavailable.",
-    "Recommended edits should be practical next actions for the video: title/thumbnail promise, intro pacing, retention drops, search intent, pinned comment, chapters, cards, follow-up upload, or Shorts cutdowns.",
+    "You are ViewCast's YouTube video analyst. Return compact JSON only.",
+    "Use only supplied selected-video data, private analytics, retention samples, search terms, and compact channel comparison.",
+    "Metric labels must be short: Above avg, Needs lift, Strong, Watch drop, or Unavailable.",
+    "Recommended edits should be practical: title/thumbnail promise, intro pacing, retention drops, search intent, pinned comment, chapters, cards, follow-up upload, or Shorts cutdowns.",
     "Return JSON only with this shape:",
     `{"metricLabels":{"views":"","likes":"","comments":"","averageViewDuration":""},"recommendedEdits":[{"segment":"","issue":"","recommendation":"","impact":""}]}`,
     "",
@@ -722,7 +763,8 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
           }
         ],
         generationConfig: {
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          maxOutputTokens: 650
         }
       })
     });
@@ -894,24 +936,31 @@ async function analyzeVideoById(videoId) {
     const [video, analytics, retentionPoints, searchTerms, accessToken] = await loadVideoAnalysisWithRetry(videoId);
     if (requestId !== analysisRequestId) return;
 
-    setStatus(geminiApiKey ? "Asking Gemini to analyze this video..." : "Gemini key missing. Showing YouTube API data only.");
+    const cachedGeminiAnalysis = readCachedGeminiVideoAnalysis(video, analytics, retentionPoints, searchTerms);
+    let geminiAnalysis = cachedGeminiAnalysis;
+    setStatus(cachedGeminiAnalysis
+      ? "Using recently generated Gemini analysis..."
+      : geminiApiKey ? "Asking Gemini to analyze this video..." : "Gemini key missing. Showing YouTube API data only.");
     const videosForContext = channelVideos.length ? channelVideos : readCachedVideos();
     let channelProfile = null;
-    if (accessToken) {
+    if (!cachedGeminiAnalysis && accessToken) {
       try {
         channelProfile = await fetchChannelProfile(accessToken);
       } catch (error) {
         console.warn("Could not load channel profile for video analysis.", error);
       }
     }
-    const geminiAnalysis = await buildGeminiVideoAnalysis({
-      video,
-      analytics,
-      retentionPoints,
-      searchTerms,
-      channelProfile,
-      videos: videosForContext.length ? videosForContext : [video]
-    });
+    if (!cachedGeminiAnalysis) {
+      geminiAnalysis = await buildGeminiVideoAnalysis({
+        video,
+        analytics,
+        retentionPoints,
+        searchTerms,
+        channelProfile,
+        videos: videosForContext.length ? videosForContext : [video]
+      });
+      saveCachedGeminiVideoAnalysis(video, analytics, retentionPoints, searchTerms, geminiAnalysis);
+    }
     if (requestId !== analysisRequestId) return;
 
     recordVideoAnalysis();

@@ -704,14 +704,12 @@ async function fetchSimilarTrendVideos(accessToken, videos) {
 
 async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) {
   const lane = detectChannelLane(videos);
-  const [popularResult, similarResult, laneResult, geminiResult] = await Promise.allSettled([
+  const [popularResult, similarResult, laneResult] = await Promise.allSettled([
     fetchTrendingVideos(accessToken, videos),
     fetchSimilarTrendVideos(accessToken, videos),
-    fetchLaneTrendVideos(accessToken, videos),
-    fetchGeminiTrendVideos(accessToken, trendPlan)
+    fetchLaneTrendVideos(accessToken, videos)
   ]);
   const merged = [
-    ...(geminiResult.status === "fulfilled" ? geminiResult.value.videos : []),
     ...(laneResult.status === "fulfilled" ? laneResult.value.videos : []),
     ...(similarResult.status === "fulfilled" ? similarResult.value : []),
     ...(popularResult.status === "fulfilled" ? popularResult.value : [])
@@ -722,9 +720,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     seen.add(video.id);
     return true;
   });
-  trendVideos.channelLane = geminiResult.status === "fulfilled" && geminiResult.value.lane
-    ? geminiResult.value.lane
-    : laneResult.status === "fulfilled" ? laneResult.value.lane : lane;
+  trendVideos.channelLane = trendPlan?.lane || (laneResult.status === "fulfilled" ? laneResult.value.lane : lane);
   trendVideos.trendQueries = trendPlan?.queries || trendQueriesForLane(trendVideos.channelLane);
   return trendVideos;
 }
@@ -1156,10 +1152,10 @@ function compactAdviceSummary(summary) {
 }
 
 function channelVideoContext(videos) {
-  return videos.slice(0, 30).map((video) => ({
+  return videos.slice(0, 12).map((video) => ({
     title: video.snippet?.title || "Untitled video",
-    description: shortText(video.snippet?.description || "", 320),
-    tags: (video.snippet?.tags || []).slice(0, 10),
+    description: shortText(video.snippet?.description || "", 90),
+    tags: (video.snippet?.tags || []).slice(0, 4),
     publishedAt: video.snippet?.publishedAt || "",
     views: numberValue(video.statistics?.viewCount) || 0,
     likes: numberValue(video.statistics?.likeCount) || 0,
@@ -1193,9 +1189,18 @@ function uploadPerformanceContext(videos) {
     medianViews: Math.round(median(views) || 0),
     shortAverageViews: averageViewsFor(shorts),
     videoAverageViews: averageViewsFor(longVideos),
-    topPerformers: [...mapped].sort((a, b) => b.views - a.views).slice(0, 10),
-    underPerformers: [...mapped].sort((a, b) => a.views - b.views).slice(0, 8),
-    recentUploads: mapped.slice(0, 12)
+    topPerformers: [...mapped].sort((a, b) => b.views - a.views).slice(0, 5),
+    underPerformers: [...mapped].sort((a, b) => a.views - b.views).slice(0, 4),
+    recentUploads: mapped.slice(0, 6)
+  };
+}
+
+function compactChannelProfile(profile = {}) {
+  return {
+    title: profile.title || profile.snippet?.title || "",
+    description: shortText(profile.description || profile.snippet?.description || "", 180),
+    subscriberCount: profile.subscriberCount || profile.statistics?.subscriberCount || "",
+    videoCount: profile.videoCount || profile.statistics?.videoCount || ""
   };
 }
 
@@ -1296,7 +1301,7 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
 
 function geminiContext(summary) {
   const trendReferences = summary.trendVideos
-    .slice(0, 8)
+    .slice(0, 5)
     .map((video) => ({
       title: video.snippet?.title || "",
       publishedAt: video.snippet?.publishedAt || "",
@@ -1309,9 +1314,9 @@ function geminiContext(summary) {
     }))
     .filter((video) => video.title);
   const visibleIdeas = summary.geminiInsights?.recommendations || summary.topicIdeas;
-  const ideas = visibleIdeas.map((idea) => `${idea.title}: ${idea.body}`);
+  const ideas = visibleIdeas.slice(0, 3).map((idea) => `${idea.title}: ${shortText(idea.body, 120)}`);
   return {
-    channelProfile: summary.channelProfile || {},
+    channelProfile: compactChannelProfile(summary.channelProfile || {}),
     channelCategory: summary.channelLane?.label || "General creator channel",
     primaryCategory: summary.channelLane?.primaryCategory || summary.channelLane?.label || "General",
     specificCategory: summary.channelLane?.specificCategory || summary.channelLane?.seed || "",
@@ -1333,8 +1338,7 @@ function geminiPageContext(summary, videos) {
     ...geminiContext(summary),
     averageViews: Math.round(summary.avgViews || 0),
     bestUploadViews: summary.bestViews || 0,
-    uploadPerformance: uploadPerformanceContext(videos),
-    recentUploads: channelVideoContext(videos).slice(0, 12)
+    uploadPerformance: uploadPerformanceContext(videos)
   };
 }
 
@@ -1429,21 +1433,12 @@ async function buildGeminiPageInsights(summary, videos) {
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const prompt = [
-    "You are ViewCast's Gemini AI analyst for a YouTube channel dashboard.",
-    "Gemini should decide the channel category, trend interpretation, topic lane, upload advice, and recommendations from the supplied YouTube channel profile and upload data.",
-    "All insight cards and recommendations must be based on the category classification. For example, Music channels need music-specific ideas; Gaming channels need gaming ideas; Roblox channels need Roblox-specific ideas.",
-    "Use the channel profile, repeated upload patterns, descriptions, tags, and category names before relying on a single title. Keep the classification consistent across every card.",
-    "Use only the supplied channel data, Gemini-selected trend queries, and trend references. Do not invent exact analytics.",
-    "Return JSON only. Use standard 12-hour time such as 'Tue 6 PM', never military time.",
-    "Make every visible AI Insights element from your recommendations: metric cards, next video suggestions, action list, and chat intro.",
-    "nextVideoSuggestions must compare uploadPerformance across the full upload set against currentYouTubeTrend, trendQueries, and trendReferences.",
-    "Trend references can come from category-specific searches, similar upload searches, Gemini trend searches, or US most popular category videos. Prefer the specific search references for concrete advice; use US most popular only as broad category context when it fits.",
-    "If US most popular category data is unavailable, empty, or too broad, keep the advice grounded in trendQueries and the specific search references.",
-    "Each nextVideoSuggestions item must be a specific new video concept the creator could make next. The title should sound like a strategic video idea, not advice.",
-    "Do not write generic suggestions like add a follow-up, extend the video, post more Shorts, improve the hook, or make another part 2. Instead, propose an angle such as a trend explainer, challenge, ranking, comparison, myth-check, experiment, reaction format, or searchable topic package.",
-    "In each nextVideoSuggestions body, explain why this concept fits: mention the relevant high/low performer pattern and the current trend signal being borrowed.",
-    "The topTopicSignal card appears as Current YouTube Trends. It must be based on currentYouTubeTrend, trendQueries, or trendReferences from outside the channel.",
-    "Do not copy or closely paraphrase one of the channel's own recent upload titles for topTopicSignal. If the external trend evidence is weak, summarize the trend query/category instead.",
+    "You are ViewCast's YouTube strategist. Return compact JSON only.",
+    "Use only supplied channel stats, trend references, and upload patterns. Do not invent analytics.",
+    "Classify the channel niche from repeated upload patterns, then make every card and suggestion match that niche.",
+    "Use 12-hour time like 'Tue 6 PM'. Avoid generic advice such as make a follow-up, post more, extend the video, or improve the hook.",
+    "nextVideoSuggestions must be specific new video concepts tied to a high/low performer pattern and an external trend signal.",
+    "topTopicSignal must summarize external YouTube trends, not restate this channel's own titles.",
     "JSON shape:",
     `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
@@ -1466,7 +1461,8 @@ async function buildGeminiPageInsights(summary, videos) {
           }
         ],
         generationConfig: {
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          maxOutputTokens: 900
         }
       })
     });
@@ -1508,9 +1504,12 @@ async function buildGeminiChatReply(question, summary) {
         "x-goog-api-key": geminiApiKey
       },
       body: JSON.stringify({
-        contents: chatHistory,
+        contents: chatHistory.slice(-6),
         system_instruction: {
           parts: [{ text: systemInstruction }]
+        },
+        generationConfig: {
+          maxOutputTokens: 420
         }
       })
     });
@@ -1696,8 +1695,12 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
       }
       if (requestId !== analysisRequestId) return;
     }
-    setStatus("Asking Gemini to classify your channel...");
-    const trendPlan = await buildGeminiTrendPlan(videos, channelProfile);
+    setStatus("Classifying your channel...");
+    const trendLane = detectChannelLane(videos);
+    const trendPlan = {
+      lane: trendLane,
+      queries: trendQueriesForLane(trendLane)
+    };
     if (requestId !== analysisRequestId) return;
     setStatus("Searching trends chosen by Gemini...");
     const trendVideos = accessToken ? await fetchTrendReferenceVideos(accessToken, videos, trendPlan) : [];
