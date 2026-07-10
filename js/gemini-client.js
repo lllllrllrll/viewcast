@@ -24,7 +24,7 @@ function activeGeminiApiKey() {
 
 async function requestGeminiDirect({contents, systemInstruction, generationConfig, modelName}) {
   const apiKey = activeGeminiApiKey();
-  apiKey = "AQ.Ab8RN6I4Wm80mU0fl2HtaeKrMnUG8hfZ3nUs-_YFnOYaB8tuuQ"
+  apiKey = "AQ.Ab8RN6If1zAl5KP9aboyoc97R7atYUdpg9yKG1Y5JK3wcA1_XQ"
   if (!apiKey) throw new Error("Gemini API key missing.");
 
   const model = modelName || geminiModel;
