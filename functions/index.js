@@ -3,6 +3,7 @@ const {setGlobalOptions} = require("firebase-functions");
 const {GoogleGenerativeAI} = require("@google/generative-ai");
 
 setGlobalOptions({maxInstances: 10});
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
 /**
  * Generic helper to make YouTube API calls securely.
@@ -128,7 +129,7 @@ exports.generateChannelAdvice = onCall({
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName || "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: modelName || DEFAULT_GEMINI_MODEL });
 
     const systemInstruction = `You are ViewCast's YouTube assistant. Give concise (2-4 sentences), practical advice based on this context: ${JSON.stringify(context || {})}`;
 
@@ -146,4 +147,62 @@ exports.generateChannelAdvice = onCall({
   } catch (error) {
     throw new HttpsError("internal", error.message);
   }
+});
+
+/**
+ * Secure Gemini content generation for the browser app.
+ */
+exports.generateGeminiContent = onCall({
+  secrets: ["GEMINI_API_KEY"],
+  enforceAppCheck: false,
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new HttpsError("failed-precondition", "Gemini API key missing.");
+
+  const {
+    contents,
+    systemInstruction,
+    generationConfig,
+    modelName = DEFAULT_GEMINI_MODEL,
+  } = request.data || {};
+
+  if (!Array.isArray(contents) || !contents.length) {
+    throw new HttpsError("invalid-argument", "Gemini contents are required.");
+  }
+
+  const body = {
+    contents,
+    generationConfig: generationConfig || {},
+  };
+  if (systemInstruction) {
+    body.system_instruction = typeof systemInstruction === "string"
+      ? {parts: [{text: systemInstruction}]}
+      : systemInstruction;
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message = data.error?.message || "Gemini request failed.";
+    if (response.status === 403) {
+      throw new HttpsError("failed-precondition", `Gemini API key rejected: ${message}`);
+    }
+    if (response.status === 429) {
+      throw new HttpsError("resource-exhausted", message);
+    }
+    throw new HttpsError("internal", message);
+  }
+
+  return data;
 });

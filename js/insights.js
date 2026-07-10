@@ -3,7 +3,8 @@ import {
   getAuth,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import { firebaseConfig, firebaseConfigured, geminiApiKey, geminiModel, googleOAuthClientId } from "./firebase-config.js";
+import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
+import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -1234,14 +1235,13 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
 
 async function buildGeminiTrendPlan(videos, channelProfile = null) {
   const fallbackLane = detectChannelLane(videos);
-  if (!geminiApiKey) {
+  if (!isGeminiAvailable()) {
     return {
       lane: fallbackLane,
       queries: trendQueriesForLane(fallbackLane)
     };
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const prompt = [
     "You are classifying a YouTube channel for ViewCast.",
     "Use the channel profile first, then repeated patterns across uploads, descriptions, tags, YouTube category names, formats, dates, and performance.",
@@ -1262,26 +1262,17 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
   ].join("\n");
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": geminiApiKey
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: "application/json"
+    const payload = await requestGeminiContent({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }]
         }
-      })
+      ],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
     });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error?.message || "Gemini could not classify the channel.");
     const text = payload.candidates?.[0]?.content?.parts
       ?.map((part) => part.text || "")
       .join("")
@@ -1429,9 +1420,8 @@ function normalizeGeminiInsights(value, summary) {
 }
 
 async function buildGeminiPageInsights(summary, videos) {
-  if (!geminiApiKey) return null;
+  if (!isGeminiAvailable()) return null;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const prompt = [
     "You are ViewCast's YouTube strategist. Return compact JSON only.",
     "Use only supplied channel stats, trend references, and upload patterns. Do not invent analytics.",
@@ -1447,29 +1437,19 @@ async function buildGeminiPageInsights(summary, videos) {
   ].join("\n");
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": geminiApiKey
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 900
+    const payload = await requestGeminiContent({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }]
         }
-      })
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        maxOutputTokens: 900
+      }
     });
 
-    const payload = await response.json().catch(() => ({}));
-    if (response.status === 429) throw new Error("AI_INSIGHTS_RATE_LIMITED");
-    if (!response.ok) throw new Error(payload.error?.message || "Gemini could not generate page insights.");
     const text = payload.candidates?.[0]?.content?.parts
       ?.map((part) => part.text || "")
       .join("")
@@ -1477,15 +1457,16 @@ async function buildGeminiPageInsights(summary, videos) {
     return normalizeGeminiInsights(safeJsonParse(text), summary);
   } catch (error) {
     console.warn("Gemini page insights failed.", error);
-    if (error.message === "AI_INSIGHTS_RATE_LIMITED") throw error;
+    if (error.message === "AI_INSIGHTS_RATE_LIMITED" || error.code === "functions/resource-exhausted") {
+      throw new Error("AI_INSIGHTS_RATE_LIMITED");
+    }
     return null;
   }
 }
 
 async function buildGeminiChatReply(question, summary) {
-  if (!geminiApiKey) return "An error has occurred. The AI assistant is unavailable right now.";
+  if (!isGeminiAvailable()) return "An error has occurred. The AI assistant is unavailable right now.";
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const systemInstruction = [
     "You are ViewCast's YouTube channel advice assistant.",
     "Give concise, practical creator advice. Do not invent analytics beyond the provided context.",
@@ -1497,32 +1478,13 @@ async function buildGeminiChatReply(question, summary) {
   ].join("\n");
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": geminiApiKey
-      },
-      body: JSON.stringify({
-        contents: chatHistory.slice(-6),
-        system_instruction: {
-          parts: [{ text: systemInstruction }]
-        },
-        generationConfig: {
-          maxOutputTokens: 420
-        }
-      })
+    const text = await requestGeminiText({
+      contents: chatHistory.slice(-6),
+      systemInstruction,
+      generationConfig: {
+        maxOutputTokens: 420
+      }
     });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(payload.error?.message || "Gemini could not answer right now.");
-    }
-
-    const text = payload.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || "")
-      .join("")
-      .trim();
 
     return text || "I couldn't generate a response. Please try again.";
   } catch (error) {
@@ -1652,7 +1614,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     window.location.href = "channel.html?link=required";
     return;
   }
-  if (!geminiApiKey) {
+  if (!isGeminiAvailable()) {
     showMissingGeminiKeyMessage();
     return;
   }
@@ -1696,11 +1658,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
       if (requestId !== analysisRequestId) return;
     }
     setStatus("Classifying your channel...");
-    const trendLane = detectChannelLane(videos);
-    const trendPlan = {
-      lane: trendLane,
-      queries: trendQueriesForLane(trendLane)
-    };
+    const trendPlan = await buildGeminiTrendPlan(videos, channelProfile);
     if (requestId !== analysisRequestId) return;
     setStatus("Searching trends chosen by Gemini...");
     const trendVideos = accessToken ? await fetchTrendReferenceVideos(accessToken, videos, trendPlan) : [];
@@ -1817,7 +1775,7 @@ if (form && firebaseConfigured) {
     } else {
       setLibraryStatus("Loading uploads for channel insights...");
     }
-    if (!geminiApiKey) {
+    if (!isGeminiAvailable()) {
       showMissingGeminiKeyMessage();
       return;
     }

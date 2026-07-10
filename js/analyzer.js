@@ -6,7 +6,8 @@ import {
   onAuthStateChanged,
   reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import { firebaseConfig, firebaseConfigured, geminiApiKey, geminiModel } from "./firebase-config.js";
+import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
+import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -733,9 +734,8 @@ function normalizeGeminiVideoAnalysis(value) {
 }
 
 async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, searchTerms, channelProfile, videos}) {
-  if (!geminiApiKey) return null;
+  if (!isGeminiAvailable()) return null;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
   const prompt = [
     "You are ViewCast's YouTube video analyst. Return compact JSON only.",
     "Use only supplied selected-video data, private analytics, retention samples, search terms, and compact channel comparison.",
@@ -749,28 +749,18 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
   ].join("\n");
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": geminiApiKey
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 650
+    const payload = await requestGeminiContent({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }]
         }
-      })
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        maxOutputTokens: 650
+      }
     });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error?.message || "Gemini could not analyze this video.");
     const text = payload.candidates?.[0]?.content?.parts
       ?.map((part) => part.text || "")
       .join("")
@@ -940,7 +930,7 @@ async function analyzeVideoById(videoId) {
     let geminiAnalysis = cachedGeminiAnalysis;
     setStatus(cachedGeminiAnalysis
       ? "Using recently generated Gemini analysis..."
-      : geminiApiKey ? "Asking Gemini to analyze this video..." : "Gemini key missing. Showing YouTube API data only.");
+      : isGeminiAvailable() ? "Asking Gemini to analyze this video..." : "AI service unavailable. Showing YouTube API data only.");
     const videosForContext = channelVideos.length ? channelVideos : readCachedVideos();
     let channelProfile = null;
     if (!cachedGeminiAnalysis && accessToken) {
