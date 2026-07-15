@@ -1,32 +1,104 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
-
-const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
+const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {defineSecret} = require("firebase-functions/params");
+const {GoogleGenerativeAI} = require("@google/generative-ai");
 const logger = require("firebase-functions/logger");
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+// Define the secret for the Gemini API Key
+// Set using: firebase functions:secrets:set GEMINI_API_KEY
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+// Allowed models to prevent abuse with expensive models
+const ALLOWED_MODELS = [
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+  "gemini-2.0-flash-exp",
+];
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+/**
+ * Callable function to generate content using Gemini API.
+ * This function is secure because it:
+ * 1. Uses Firebase Authentication to verify the caller.
+ * 2. Uses Google Cloud Secret Manager to store the API key safely.
+ * 3. Never exposes the API key to the client.
+ */
+exports.generateGeminiContent = onCall(
+    {
+      secrets: [geminiApiKey],
+      maxInstances: 10,
+      region: "us-central1",
+    },
+    async (request) => {
+      // 1. Authentication check
+      if (!request.auth) {
+        logger.warn("Unauthenticated request to generateGeminiContent");
+        throw new HttpsError(
+            "unauthenticated",
+            "The function must be called while authenticated.",
+        );
+      }
+
+      const {
+        contents,
+        systemInstruction,
+        generationConfig,
+        modelName,
+      } = request.data;
+
+      // 2. Input validation
+      if (!contents || !Array.isArray(contents)) {
+        throw new HttpsError(
+            "invalid-argument",
+            "The function must be called with a 'contents' array.",
+        );
+      }
+
+      // 3. Model restriction
+      const selectedModel = modelName || "gemini-1.5-flash";
+      if (!ALLOWED_MODELS.includes(selectedModel)) {
+        throw new HttpsError(
+            "invalid-argument",
+            `Model '${selectedModel}' is not allowed.`,
+        );
+      }
+
+      try {
+        const apiKey = geminiApiKey.value();
+        if (!apiKey) {
+          logger.error("GEMINI_API_KEY secret is not set.");
+          throw new HttpsError(
+              "failed-precondition",
+              "API configuration missing.",
+          );
+        }
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: selectedModel,
+          systemInstruction: systemInstruction,
+        });
+
+        // 4. Call Gemini API
+        const result = await model.generateContent({
+          contents,
+          generationConfig,
+        });
+
+        const response = await result.response;
+
+        // 5. Return the response object.
+        return {
+          candidates: response.candidates,
+          usageMetadata: response.usageMetadata,
+        };
+      } catch (error) {
+        logger.error("Gemini API error:", error);
+
+        // Provide a safe error message to the client
+        throw new HttpsError(
+            "internal",
+            "An error occurred while communicating with the Gemini API.",
+            error.message,
+        );
+      }
+    },
+);

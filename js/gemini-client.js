@@ -24,7 +24,6 @@ function activeGeminiApiKey() {
 
 async function requestGeminiDirect({contents, systemInstruction, generationConfig, modelName}) {
   const apiKey = activeGeminiApiKey();
-  apiKey = "AQ.Ab8RN6IFJEavrjY-fogOzByIS6jd8_b0vMTvgJnsw3-W4VzyXg"
   if (!apiKey) throw new Error("Gemini API key missing.");
 
   const model = modelName || geminiModel;
@@ -74,6 +73,8 @@ export function isGeminiAvailable() {
 }
 
 export async function requestGeminiContent(options) {
+  // Use Firebase Functions by default for security.
+  // Only use direct calls if a test key is explicitly provided in storage or config.
   return activeGeminiApiKey()
     ? requestGeminiDirect(options)
     : requestGeminiFunction(options);
