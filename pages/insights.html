@@ -17,6 +17,10 @@
             <p>Get channel-level recommendations for upload timing, format length, and topic ideas based on your uploads and current YouTube trend signals.</p>
           </div>
           <div class="actions">
+            <button class="primary-button refresh-insights-button" id="refreshInsights" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path></svg>
+              <span>Refresh Insights</span>
+            </button>
             <form class="channel-link-form" id="videoAnalysisForm" hidden>
             </form>
           </div>
@@ -142,6 +146,6 @@
     <script src="../components/sidebar.js"></script>
     <script src="../components/plan-modal.js"></script>
     <script src="../js/script.js"></script>
-    <script type="module" src="../js/insights.js?v=17"></script>
+    <script type="module" src="../js/insights.js?v=18"></script>
   </body>
 </html>

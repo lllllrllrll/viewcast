@@ -16,6 +16,7 @@ const submitButton = form?.querySelector('button[type="submit"]');
 const videoLibrary = document.getElementById("videoLibrary");
 const videoLibraryStatus = document.getElementById("videoLibraryStatus");
 const refreshVideosButton = document.getElementById("refreshVideos");
+const refreshInsightsButton = document.getElementById("refreshInsights");
 const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
 const insightErrorPanel = document.getElementById("insightErrorPanel");
@@ -56,6 +57,13 @@ function setBusy(isBusy, label = "Insights Ready") {
   if (!submitButton) return;
   submitButton.disabled = isBusy;
   submitButton.textContent = isBusy ? "Analyzing..." : label;
+}
+
+function setRefreshInsightsBusy(isBusy) {
+  if (!refreshInsightsButton) return;
+  refreshInsightsButton.disabled = isBusy;
+  const label = refreshInsightsButton.querySelector("span");
+  if (label) label.textContent = isBusy ? "Refreshing..." : "Refresh Insights";
 }
 
 function numberValue(value) {
@@ -1608,7 +1616,7 @@ async function loadVideoLibrary({allowPrompt = false, generateAfterLoad = false}
   }
 }
 
-async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} = {}) {
+async function generateChannelInsights({allowPrompt = true, focusVideoId = "", forceRefresh = false} = {}) {
   const connection = localStorage.getItem(connectionStorageKey);
   if (!connection) {
     window.location.href = "channel.html?link=required";
@@ -1636,7 +1644,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     if (!videos.length) throw new Error("Load your channel uploads before generating insights.");
 
     updateLibrarySelection(focusVideoId);
-    const cachedSummary = readCachedInsights(videos, focusVideoId);
+    const cachedSummary = forceRefresh ? null : readCachedInsights(videos, focusVideoId);
     if (cachedSummary) {
       renderChannelInsights(cachedSummary);
       setAnalyzerLoading(false);
@@ -1677,7 +1685,9 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     setStatus("");
-    setLibraryStatus(focusVideoId ? "Insights weighted toward the selected upload." : "Channel-level insights are ready.");
+    setLibraryStatus(forceRefresh
+      ? (focusVideoId ? "Selected-upload insights refreshed." : "Channel-level insights refreshed.")
+      : (focusVideoId ? "Insights weighted toward the selected upload." : "Channel-level insights are ready."));
   } catch (error) {
     if (requestId !== analysisRequestId) return;
     setAnalyzerLoading(false);
@@ -1699,6 +1709,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
     if (requestId === analysisRequestId) {
       setAnalyzerLoading(false);
       setBusy(false);
+      setRefreshInsightsBusy(false);
     }
   }
 }
@@ -1706,6 +1717,19 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = ""} =
 async function handleGenerateInsights(event) {
   event.preventDefault();
   await generateChannelInsights({allowPrompt: true});
+}
+
+async function handleRefreshInsights() {
+  setRefreshInsightsBusy(true);
+  try {
+    await generateChannelInsights({
+      allowPrompt: true,
+      focusVideoId: selectedVideoId,
+      forceRefresh: true
+    });
+  } finally {
+    setRefreshInsightsBusy(false);
+  }
 }
 
 async function handleChatQuestion(event) {
@@ -1783,6 +1807,7 @@ if (form && firebaseConfigured) {
   });
 
   form.addEventListener("submit", handleGenerateInsights);
+  refreshInsightsButton?.addEventListener("click", handleRefreshInsights);
   chatForm?.addEventListener("submit", handleChatQuestion);
   document.querySelectorAll("[data-chat-prompt]").forEach((button) => {
     button.addEventListener("click", () => sendChatQuestion(button.dataset.chatPrompt || button.textContent.trim()));
