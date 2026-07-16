@@ -16,8 +16,9 @@ export const firebaseConfig = {
 export const googleOAuthClientId = "351557961377-ocbt4u5dm00n0mqfjvf808rpakc0b5bt.apps.googleusercontent.com";
 
 // Gemini is called through Firebase Functions using the GEMINI_API_KEY secret.
-// Leave this empty unless you intentionally want direct browser calls for local debugging.
-export const geminiApiKey = "";
+// PASTE YOUR KEY BELOW FOR TESTING.
+// Comment it out (set to "") when you want to switch back to secure Firebase Functions.
+export const geminiApiKey = "AQ.Ab8RN6K_L3utjtjFPSdD9AAWnax3a1o9809XnZ-QlG5SAZDVkg";
 export const geminiModel = "gemini-2.5-flash";
 
 export const firebaseConfigured = Boolean(
