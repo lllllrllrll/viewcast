@@ -12,7 +12,7 @@ const ALLOWED_MODELS = [
   "gemini-3.1-flash-lite",
   "gemini-3.5-flash",
 ];
-const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 /**
  * Callable function to generate content using Gemini API.
