@@ -19,7 +19,7 @@ export const googleOAuthClientId = "351557961377-ocbt4u5dm00n0mqfjvf808rpakc0b5b
 // PASTE YOUR KEY BELOW FOR TESTING.
 // Comment it out (set to "") when you want to switch back to secure Firebase Functions.
 export const geminiApiKey = "";
-export const geminiModel = "gemini-3.5-flash";
+export const geminiModel = "gemini-1.5-flash";
 
 export const firebaseConfigured = Boolean(
   firebaseConfig.apiKey &&

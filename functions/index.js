@@ -9,12 +9,16 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 // Allowed models to prevent abuse with expensive models
 const ALLOWED_MODELS = [
-  "gemini-3.5-flash",
-  "gemini-3.1-flash-lite",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-exp",
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash",
 ];
-const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-1.5-flash";
 
 /**
  * Callable function to generate content using Gemini API.
@@ -28,6 +32,7 @@ exports.generateGeminiContent = onCall(
       secrets: [geminiApiKey],
       maxInstances: 10,
       region: "us-central1",
+      timeoutSeconds: 120, // Increased to prevent 504 timeouts
     },
     async (request) => {
       // 1. Authentication check
@@ -95,7 +100,22 @@ exports.generateGeminiContent = onCall(
       } catch (error) {
         logger.error("Gemini API error:", error);
 
-        // Provide a safe error message to the client
+        // Handle specific Gemini errors
+        if (error.status === 503) {
+          throw new HttpsError(
+              "unavailable",
+              "The AI model is overloaded. Please try again in a few seconds.",
+              error.message,
+          );
+        }
+        if (error.status === 404) {
+          throw new HttpsError(
+              "not-found",
+              `The model '${selectedModel}' was not found or is deprecated.`,
+              error.message,
+          );
+        }
+
         throw new HttpsError(
             "internal",
             "An error occurred while communicating with the Gemini API.",
