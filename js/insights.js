@@ -1386,6 +1386,33 @@ function normalizeConceptSuggestion(item = {}, fallback = {}) {
   return normalized;
 }
 
+function filledInsightItems(items, fallbacks, normalizer) {
+  const normalizedItems = Array.isArray(items)
+    ? items.slice(0, 3).map((item, index) => normalizer(item, fallbacks[index]))
+    : [];
+  const seen = new Set(normalizedItems.map((item) => item.title.toLowerCase()));
+
+  fallbacks.slice(0, 3).forEach((fallback) => {
+    if (normalizedItems.length >= 3) return;
+    const normalizedFallback = normalizer(fallback, fallback);
+    const key = normalizedFallback.title.toLowerCase();
+    if (seen.has(key)) return;
+    normalizedItems.push(normalizedFallback);
+    seen.add(key);
+  });
+
+  while (normalizedItems.length < 3) {
+    normalizedItems.push(normalizer({}, {
+      title: "Turn the strongest pattern into a clearer next step",
+      body: "Use your highest-performing recent upload as the packaging reference, then make the next idea more specific, timely, and easy to understand in the first few seconds.",
+      label: "Action",
+      tone: "good"
+    }));
+  }
+
+  return normalizedItems.slice(0, 3);
+}
+
 function normalizeGeminiInsights(value, summary) {
   if (!value || typeof value !== "object") return null;
   const cards = value.cards || {};
@@ -1397,12 +1424,8 @@ function normalizeGeminiInsights(value, summary) {
   const trendDetail = isOwnUploadRestatement(cards.topTopicSignal?.detail, summary.recent)
     ? summary.channelLane?.label
     : cards.topTopicSignal?.detail;
-  const recommendations = Array.isArray(value.recommendations)
-    ? value.recommendations.slice(0, 3).map((item, index) => normalizeRecommendation(item, fallbackIdeas[index]))
-    : [];
-  const nextVideoSuggestions = Array.isArray(value.nextVideoSuggestions)
-    ? value.nextVideoSuggestions.slice(0, 3).map((item, index) => normalizeConceptSuggestion(item, fallbackSuggestions[index]))
-    : [];
+  const recommendations = filledInsightItems(value.recommendations, fallbackIdeas, normalizeRecommendation);
+  const nextVideoSuggestions = filledInsightItems(value.nextVideoSuggestions, fallbackSuggestions, normalizeConceptSuggestion);
 
   return {
     cards: {
@@ -1427,8 +1450,8 @@ function normalizeGeminiInsights(value, summary) {
         tone: cards.topTopicSignal?.tone || "good"
       }
     },
-    nextVideoSuggestions: nextVideoSuggestions.length ? nextVideoSuggestions : fallbackSuggestions.slice(0, 3),
-    recommendations: recommendations.length ? recommendations : fallbackIdeas.slice(0, 3),
+    nextVideoSuggestions,
+    recommendations,
     chatIntro: String(value.chatIntro || compactAdviceSummary(summary)).slice(0, 360)
   };
 }
@@ -1441,10 +1464,12 @@ async function buildGeminiPageInsights(summary, videos) {
     "Use only supplied channel stats, trend references, and upload patterns. Do not invent analytics.",
     "Classify the channel niche from repeated upload patterns, then make every card and suggestion match that niche.",
     "Use 12-hour time like 'Tue 6 PM'. Avoid generic advice such as make a follow-up, post more, extend the video, or improve the hook.",
+    "Return exactly 3 nextVideoSuggestions and exactly 3 recommendations. Every item needs a non-empty title, body, label, and tone.",
     "nextVideoSuggestions must be specific new video concepts tied to a high/low performer pattern and an external trend signal.",
+    "recommendations must be 3 important strategic tips the creator can act on now, such as packaging, upload timing, format length, niche/trend fit, Shorts strategy, or weak-angle avoidance.",
     "topTopicSignal must summarize external YouTube trends, not restate this channel's own titles.",
     "JSON shape:",
-    `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
+    `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
     "Channel data:",
     JSON.stringify(geminiPageContext(summary, videos), null, 2)
@@ -1544,7 +1569,9 @@ function clearAnalyzerResults() {
 function renderChannelInsights(summary) {
   latestChannelSummary = summary;
   const bestTone = toneForRatio(summary.bestViews, summary.avgViews);
-  const geminiInsights = summary.geminiInsights;
+  const geminiInsights = summary.geminiInsights
+    ? normalizeGeminiInsights(summary.geminiInsights, summary)
+    : null;
   const cards = geminiInsights?.cards || {};
   setMetric(
     0,
