@@ -618,22 +618,46 @@ function drawActualRetention(points, video) {
   drawLineChart("retentionChart", actual, actual, labels, {ySuffix: "%"});
 }
 
-function updateSearchTerms(searchTerms) {
-  const items = document.querySelectorAll(".activity-item");
-  const rows = searchTerms.length ? searchTerms : [
-    {
-      term: "Search terms unavailable",
-      views: null,
-      periodLabel: "API"
-    }
-  ];
+function retentionDipContext(retentionPoints, video, maxDips = 4) {
+  const durationSeconds = secondsFromIso(video?.contentDetails?.duration) || 0;
+  if (!retentionPoints.length) return [];
 
-  items.forEach((item, index) => {
-    const row = rows[index] || {term: " ", views: null, periodLabel: " "};
-    item.querySelector("b").textContent = row.term;
-    item.querySelector("span").textContent = row.views === null ? "YouTube Analytics did not return search phrase data." : wholeNumber(row.views) + " views from search";
-    item.querySelector("time").textContent = row.periodLabel || " ";
-  });
+  return retentionPoints
+    .slice(1)
+    .map((point, index) => {
+      const previous = retentionPoints[index];
+      const drop = previous.ratio - point.ratio;
+      return {
+        time: durationSeconds ? durationFromSeconds(point.position * durationSeconds) : `${Math.round(point.position * 100)}%`,
+        fromPercent: Math.round(previous.ratio * 100),
+        toPercent: Math.round(point.ratio * 100),
+        dropPoints: Math.round(drop * 100)
+      };
+    })
+    .filter((dip) => dip.dropPoints >= 4)
+    .sort((a, b) => b.dropPoints - a.dropPoints)
+    .slice(0, maxDips);
+}
+
+function updateSearchTerms(searchTerms) {
+  const panel = document.querySelector(".search-terms-panel");
+  const activity = panel?.querySelector(".activity");
+  if (!activity) return;
+
+  activity.innerHTML = "";
+  panel.hidden = !searchTerms.length;
+  if (!searchTerms.length) return;
+
+  activity.innerHTML = searchTerms.slice(0, 3).map((row) => `
+    <div class="activity-item">
+      <i class="dot"></i>
+      <div>
+        <b>${escapeHtml(row.term)}</b>
+        <span>${escapeHtml(wholeNumber(row.views) + " views from search")}</span>
+      </div>
+      <time>${escapeHtml(row.periodLabel || " ")}</time>
+    </div>
+  `).join("");
 }
 
 function safeJsonParse(value) {
@@ -674,6 +698,7 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
       time: durationSeconds ? durationFromSeconds(point.position * durationSeconds) : `${Math.round(point.position * 100)}%`,
       retentionPercent: Math.round(point.ratio * 100)
     }));
+  const retentionDips = retentionDipContext(retentionPoints, video);
 
   return {
     channelProfile: channelProfile || {},
@@ -697,6 +722,7 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
         estimatedMinutesWatched: Math.round(analytics.estimatedMinutesWatched || 0)
       } : null,
       retentionSamples,
+      retentionDips,
       youtubeSearchTerms: searchTerms.slice(0, 5).map((term) => ({
         term: term.term,
         views: term.views,
@@ -733,6 +759,23 @@ function normalizeGeminiVideoAnalysis(value) {
   };
 }
 
+function retentionEditSuggestions(retentionPoints, video) {
+  const dips = retentionDipContext(retentionPoints, video, 5);
+  if (!dips.length) return [];
+
+  return dips.map((dip, index) => {
+    const isIntro = index === 0 && /^0:0|^0:1|^0:2/.test(dip.time);
+    return [
+      dip.time,
+      `${dip.dropPoints} point retention drop`,
+      isIntro
+        ? "Tighten the opening: state the payoff sooner, cut setup, and show the strongest visual or result before the drop."
+        : "Review this moment for repetition, slow setup, or a promise mismatch. Cut dead air, add a pattern interrupt, or move the next payoff before this timestamp.",
+      "Retention dip"
+    ];
+  });
+}
+
 async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, searchTerms, channelProfile, videos}) {
   if (!isGeminiAvailable()) return null;
 
@@ -740,7 +783,9 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
     "You are ViewCast's YouTube video analyst. Return compact JSON only.",
     "Use only supplied selected-video data, private analytics, retention samples, search terms, and compact channel comparison.",
     "Metric labels must be short: Above avg, Needs lift, Strong, Watch drop, or Unavailable.",
-    "Recommended edits should be practical: title/thumbnail promise, intro pacing, retention drops, search intent, pinned comment, chapters, cards, follow-up upload, or Shorts cutdowns.",
+    "Recommended edits must prioritize retentionDips when present. Each suggestion should name the dip time or segment, explain the likely viewer friction, and give a concrete edit the creator can make.",
+    "Use practical fixes: shorten/rewrite the intro, move payoff earlier, cut repetition, add pattern interrupts, add chapter/card/pinned-comment recovery, tighten title-thumbnail promise, or make a follow-up/Shorts cutdown.",
+    "If retentionDips is empty, say retention data is unavailable and base edits on public stats/search intent only.",
     "Return JSON only with this shape:",
     `{"metricLabels":{"views":"","likes":"","comments":"","averageViewDuration":""},"recommendedEdits":[{"segment":"","issue":"","recommendation":"","impact":""}]}`,
     "",
@@ -805,12 +850,15 @@ function updateTable(video, analytics, retentionPoints, geminiAnalysis = null) {
   const tbody = document.querySelector("table tbody");
   if (!tbody) return;
   const stats = video.statistics || {};
-  const rows = geminiAnalysis?.recommendedEdits?.length ? geminiAnalysis.recommendedEdits.map((item) => [
-    item.segment,
-    item.issue,
-    item.recommendation,
-    item.impact
-  ]) : [
+  const retentionRows = retentionEditSuggestions(retentionPoints, video);
+  const rows = geminiAnalysis?.recommendedEdits?.length
+    ? geminiAnalysis.recommendedEdits.map((item) => [
+      item.segment,
+      item.issue,
+      item.recommendation,
+      item.impact
+    ])
+    : retentionRows.length ? retentionRows : [
     ["Public stats", "Views", wholeNumber(stats.viewCount) || "Unavailable", "Data API"],
     ["Public stats", "Likes", wholeNumber(stats.likeCount) || "Unavailable", "Data API"],
     ["Public stats", "Comments", wholeNumber(stats.commentCount) || "Unavailable", "Data API"],
