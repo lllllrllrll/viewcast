@@ -3,6 +3,11 @@ import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/
 import { firebaseConfig, firebaseConfigured, geminiApiKey, geminiModel } from "./firebase-config.js";
 
 const testKeyStorageKey = "viewcastGeminiApiKey";
+const fallbackGeminiModel = "gemini-2.5-flash";
+const allowedGeminiModels = new Set([
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite"
+]);
 
 function geminiText(payload = {}) {
   return payload.candidates?.[0]?.content?.parts
@@ -22,11 +27,16 @@ function activeGeminiApiKey() {
   return geminiApiKey || storedGeminiApiKey();
 }
 
+function safeGeminiModel(modelName) {
+  const model = String(modelName || geminiModel || "").trim();
+  return allowedGeminiModels.has(model) ? model : fallbackGeminiModel;
+}
+
 async function requestGeminiDirect({contents, systemInstruction, generationConfig, modelName}) {
   const apiKey = activeGeminiApiKey();
   if (!apiKey) throw new Error("Gemini API key missing.");
 
-  const model = modelName || geminiModel;
+  const model = safeGeminiModel(modelName);
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const body = {
     contents,
@@ -63,7 +73,7 @@ async function requestGeminiFunction({contents, systemInstruction, generationCon
     contents,
     systemInstruction,
     generationConfig,
-    modelName: modelName || geminiModel
+    modelName: safeGeminiModel(modelName)
   });
   return result.data || {};
 }

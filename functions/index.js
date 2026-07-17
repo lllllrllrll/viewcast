@@ -9,13 +9,10 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 // Allowed models to prevent abuse with expensive models
 const ALLOWED_MODELS = [
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-exp",
-  "gemini-3.5-flash",
-  "gemini-3.1-flash-lite"
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite"
 ];
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
 /**
  * Callable function to generate content using Gemini API.
@@ -56,7 +53,7 @@ exports.generateGeminiContent = onCall(
       }
 
       // 3. Model restriction
-      const selectedModel = modelName || "gemini-1.5-flash";
+      const selectedModel = modelName || DEFAULT_GEMINI_MODEL;
       if (!ALLOWED_MODELS.includes(selectedModel)) {
         throw new HttpsError(
             "invalid-argument",
