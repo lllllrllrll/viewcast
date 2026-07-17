@@ -665,11 +665,23 @@ function safeJsonParse(value) {
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/i, "")
     .trim();
+
+  // Try standard parse first
   try {
     return JSON.parse(cleaned);
-  } catch (error) {
+  } catch (e) {
+    // If that fails, try to extract just the first object found
     const match = cleaned.match(/\{[\s\S]*\}/);
-    return match ? JSON.parse(match[0]) : null;
+    if (match) {
+      try {
+        // Remove trailing commas which are common in LLM output but invalid in JSON
+        const fixTrailingCommas = match[0].replace(/,[ \t\r\n]*([\]\}])/g, "$1");
+        return JSON.parse(fixTrailingCommas);
+      } catch (innerError) {
+        console.warn("JSON repair failed:", innerError);
+      }
+    }
+    return null;
   }
 }
 

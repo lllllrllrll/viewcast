@@ -1252,7 +1252,7 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
     "If a channel has music videos, songs, covers, albums, beats, or artist content, classify it as Music. Use a specific subcategory like Rap, Covers, Beats, or Artist edits only when clear.",
     "If the channel mixes memes with another fandom, game, anime, or music niche, classify the primary content type and put the fandom/game/style in specificCategory.",
     "Then choose trend-search queries that match that classification. A Roblox channel should search Roblox-specific topics; a Music channel should search music trends for its style; a meme channel should search meme formats/trends.",
-    "Return JSON only with this shape:",
+    "Return JSON only with this shape. No trailing commas:",
     `{"categoryKey":"","primaryCategory":"","specificCategory":"","categoryLabel":"","categorySeed":"","categoryConfidence":"high","queries":["","",""]}`,
     "",
     "Channel profile:",
@@ -1271,7 +1271,8 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
         }
       ],
       generationConfig: {
-        responseMimeType: "application/json"
+        responseMimeType: "application/json",
+        maxOutputTokens: 1024
       }
     });
     const text = payload.candidates?.[0]?.content?.parts
@@ -1339,11 +1340,23 @@ function safeJsonParse(value) {
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/i, "")
     .trim();
+
+  // Try standard parse first
   try {
     return JSON.parse(cleaned);
-  } catch (error) {
+  } catch (e) {
+    // If that fails, try to extract just the first object found
     const match = cleaned.match(/\{[\s\S]*\}/);
-    return match ? JSON.parse(match[0]) : null;
+    if (match) {
+      try {
+        // Remove trailing commas which are common in LLM output but invalid in JSON
+        const fixTrailingCommas = match[0].replace(/,[ \t\r\n]*([\]\}])/g, "$1");
+        return JSON.parse(fixTrailingCommas);
+      } catch (innerError) {
+        console.warn("JSON repair failed:", innerError);
+      }
+    }
+    return null;
   }
 }
 
@@ -1424,7 +1437,7 @@ async function buildGeminiPageInsights(summary, videos) {
   if (!isGeminiAvailable()) return null;
 
   const prompt = [
-    "You are ViewCast's YouTube strategist. Return compact JSON only.",
+    "You are ViewCast's YouTube strategist. Return compact JSON only. No trailing commas.",
     "Use only supplied channel stats, trend references, and upload patterns. Do not invent analytics.",
     "Classify the channel niche from repeated upload patterns, then make every card and suggestion match that niche.",
     "Use 12-hour time like 'Tue 6 PM'. Avoid generic advice such as make a follow-up, post more, extend the video, or improve the hook.",
@@ -1447,7 +1460,7 @@ async function buildGeminiPageInsights(summary, videos) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 900
+        maxOutputTokens: 2048
       }
     });
 
