@@ -39,10 +39,17 @@ let googleIdentityScriptPromise = null;
 
 function setButton(label, disabled = false) {
   if (!connectButton) return;
+  const normalizedLabel = String(label || "").trim();
+  connectButton.hidden = !normalizedLabel;
+  if (!normalizedLabel) {
+    connectButton.disabled = true;
+    return;
+  }
+
   const icon = connectButton.querySelector("svg");
   connectButton.textContent = "";
   if (icon) connectButton.append(icon);
-  connectButton.append(document.createTextNode(label));
+  connectButton.append(document.createTextNode(normalizedLabel));
   connectButton.disabled = disabled;
 }
 

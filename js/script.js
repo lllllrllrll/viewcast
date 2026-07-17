@@ -316,9 +316,50 @@ function initCharts() {
   }
 }
 
+function hasVisibleButtonLabel(button) {
+  return Boolean(
+    button.textContent.replace(/\s+/g, " ").trim()
+    || button.getAttribute("aria-label")?.trim()
+  );
+}
+
+function hideEmptyPrimaryButtons(root = document) {
+  root.querySelectorAll?.(".primary-button").forEach((button) => {
+    if (hasVisibleButtonLabel(button)) {
+      if (button.dataset.emptyLabelHidden === "true") {
+        button.hidden = false;
+        delete button.dataset.emptyLabelHidden;
+      }
+      return;
+    }
+
+    button.hidden = true;
+    button.dataset.emptyLabelHidden = "true";
+  });
+}
+
 window.addEventListener("resize", initCharts);
 document.addEventListener("DOMContentLoaded", () => {
   initCharts();
+  hideEmptyPrimaryButtons();
+
+  const emptyButtonObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      const target = mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
+      const button = target?.closest?.(".primary-button");
+      if (button) {
+        hideEmptyPrimaryButtons(button.parentElement || document);
+      } else {
+        hideEmptyPrimaryButtons(target || document);
+      }
+    });
+  });
+
+  emptyButtonObserver.observe(document.body, {
+    childList: true,
+    characterData: true,
+    subtree: true
+  });
 
   // Notification Toggle Logic
   const notifButton = document.getElementById("notifButton");
