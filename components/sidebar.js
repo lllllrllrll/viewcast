@@ -13,6 +13,12 @@
       icon: '<path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9" /><path d="M7 20h10" /><path d="M12 16v4" />'
     },
     {
+      id: "thumbnail",
+      label: "Thumbnail Analyzer",
+      file: "thumbnail-analyzer.html",
+      icon: '<rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8.5" cy="10.5" r="1.5" /><path d="m21 15-5-5L5 21" />'
+    },
+    {
       id: "channel",
       label: "My Channel",
       file: "channel.html",
