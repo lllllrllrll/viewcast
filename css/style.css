@@ -1388,6 +1388,76 @@ body.insights-page .activity-item time {
   margin-top: 14px;
 }
 
+.thumbnail-analysis-panel {
+  padding: 18px;
+}
+
+.thumbnail-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.thumbnail-analysis-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 150px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.thumbnail-analysis-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.thumbnail-analysis-card strong {
+  color: var(--ink);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.thumbnail-analysis-card p,
+.thumbnail-analysis-card li {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.thumbnail-analysis-card ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.thumbnail-suggestions-card {
+  grid-column: span 3;
+}
+
+.thumbnail-suggestion {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.thumbnail-suggestion:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.thumbnail-suggestion b {
+  color: var(--ink);
+  font-size: 14px;
+}
+
 .chat-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1728,6 +1798,14 @@ tbody tr:hover {
 
   .thumbnail-upload-grid {
     grid-template-columns: 1fr;
+  }
+
+  .thumbnail-analysis-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .thumbnail-suggestions-card {
+    grid-column: span 1;
   }
 }
 
