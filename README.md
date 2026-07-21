@@ -14,16 +14,6 @@ npx serve . -listen 4173
 
 Then open `http://localhost:4173/login.html`, or replace `4173` with whichever port your local server prints.
 
-The thumbnail analyzer is available at `/thumbnail-analyzer.html` on whichever localhost port you are using, for example `http://localhost:3000/thumbnail-analyzer.html`.
-These URLs also redirect there for servers or users that expect a root-level or clean page path:
-
-- `http://localhost:3000/thumbnail-analyzer.html`
-- `http://localhost:3000/thumbnail-analyzer/`
-- `http://localhost:3000/thumbnail-analyzer`
-- `http://localhost:3000/pages/thumbnail-analyzer.html`
-- `http://localhost:3000/pages/thumbnail-analyzer/`
-- `http://localhost:3000/pages/thumbnail-analyzer`
-
 If you use Firebase locally, run:
 
 ```bash

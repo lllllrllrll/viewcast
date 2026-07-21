@@ -34,25 +34,6 @@ function safeGeminiModel(modelName) {
   return allowedGeminiModels.has(model) ? model : fallbackGeminiModel;
 }
 
-function restPart(part = {}) {
-  if (part.inlineData) {
-    return {
-      inline_data: {
-        mime_type: part.inlineData.mimeType,
-        data: part.inlineData.data
-      }
-    };
-  }
-  return part;
-}
-
-function restContents(contents = []) {
-  return contents.map((content) => ({
-    ...content,
-    parts: Array.isArray(content.parts) ? content.parts.map(restPart) : content.parts
-  }));
-}
-
 async function requestGeminiDirect({contents, systemInstruction, generationConfig, modelName}) {
   const apiKey = activeGeminiApiKey();
   if (!apiKey) throw new Error("Gemini API key missing.");
@@ -60,7 +41,7 @@ async function requestGeminiDirect({contents, systemInstruction, generationConfi
   const model = safeGeminiModel(modelName);
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const body = {
-    contents: restContents(contents),
+    contents,
     generationConfig
   };
   if (systemInstruction) {

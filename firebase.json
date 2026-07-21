@@ -30,21 +30,6 @@
         "type": 301
       },
       {
-        "source": "/thumbnail-analyzer",
-        "destination": "/thumbnail-analyzer.html",
-        "type": 301
-      },
-      {
-        "source": "/pages/thumbnail-analyzer",
-        "destination": "/thumbnail-analyzer.html",
-        "type": 301
-      },
-      {
-        "source": "/pages/thumbnail-analyzer.html",
-        "destination": "/thumbnail-analyzer.html",
-        "type": 301
-      },
-      {
         "source": "/channel.html",
         "destination": "/pages/channel.html",
         "type": 301
