@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ViewCast - Thumbnail Analyzer</title>
+    <link rel="stylesheet" href="../css/style.css">
+  </head>
+  <body>
+    <div class="app">
+      <div data-component="sidebar" data-active="thumbnail-analyzer" data-root=".." data-footer-title="Thumbnail Lab" data-footer-text="Use Gemini vision to evaluate clarity, composition, and click potential before you publish."></div>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="title-block">
+            <h2>Thumbnail Analyzer</h2>
+            <p>Upload a thumbnail and get an AI critique with practical improvements.</p>
+          </div>
+        </header>
+
+        <section class="thumbnail-layout">
+          <article class="panel thumbnail-upload-panel">
+            <div class="panel-head">
+              <div>
+                <h3>Upload thumbnail</h3>
+                <p>JPG, PNG, or WebP up to 5 MB.</p>
+              </div>
+            </div>
+
+            <form id="thumbnailForm">
+              <input id="thumbnailInput" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" />
+              <label class="thumbnail-dropzone" id="thumbnailDropzone" for="thumbnailInput" tabindex="0">
+                <span class="thumbnail-upload-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" /></svg>
+                </span>
+                <strong>Drop your thumbnail here</strong>
+                <span>or click to choose an image</span>
+              </label>
+
+              <div class="thumbnail-preview" id="thumbnailPreview" hidden>
+                <img id="thumbnailImage" alt="Selected thumbnail preview" />
+                <div class="thumbnail-file-meta">
+                  <div><strong id="thumbnailFileName"></strong><span id="thumbnailFileSize"></span></div>
+                  <button class="thumbnail-remove" id="removeThumbnail" type="button">Remove</button>
+                </div>
+              </div>
+
+              <label class="thumbnail-context-label" for="thumbnailContext">
+                Video context <span>Optional</span>
+              </label>
+              <textarea id="thumbnailContext" class="thumbnail-context" rows="3" maxlength="500" placeholder="What is the video about? Add a working title or target audience for more specific feedback."></textarea>
+
+              <p class="thumbnail-status" id="thumbnailStatus" role="status" aria-live="polite"></p>
+              <button class="primary-button thumbnail-analyze-button" id="analyzeThumbnail" type="submit" disabled>
+                <svg viewBox="0 0 24 24"><path d="M12 3v18" /><path d="M3 12h18" /><path d="m5.6 5.6 12.8 12.8" /><path d="m18.4 5.6-12.8 12.8" /></svg>
+                Analyze with Gemini
+              </button>
+            </form>
+          </article>
+
+          <section class="thumbnail-results" id="thumbnailResults" aria-live="polite">
+            <article class="panel thumbnail-empty-state" id="thumbnailEmptyState">
+              <div class="thumbnail-empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /><path d="M9 21h6" /><path d="M10 17h4" /></svg>
+              </div>
+              <h3>Your analysis will appear here</h3>
+              <p>Gemini will score visual impact, readability, curiosity, and mobile performance.</p>
+            </article>
+
+            <article class="panel thumbnail-analysis-output" id="thumbnailAnalysisOutput" hidden>
+              <div class="thumbnail-score-row">
+                <div class="thumbnail-score" id="thumbnailScore"><strong>--</strong><span>/ 100</span></div>
+                <div><h3 id="thumbnailVerdict">Thumbnail review</h3><p id="thumbnailSummary"></p></div>
+              </div>
+              <div class="thumbnail-analysis-grid">
+                <section><h4>What works</h4><ul id="thumbnailStrengths"></ul></section>
+                <section><h4>What to improve</h4><ul id="thumbnailImprovements"></ul></section>
+              </div>
+              <section class="thumbnail-recommendation">
+                <h4>Recommended direction</h4>
+                <p id="thumbnailRecommendation"></p>
+              </section>
+            </article>
+          </section>
+        </section>
+      </main>
+    </div>
+    <script src="../components/sidebar.js"></script>
+    <script src="../components/plan-modal.js"></script>
+    <script src="../js/script.js"></script>
+    <script type="module" src="../js/dashboard-data.js"></script>
+    <script type="module" src="../js/thumbnail-analyzer.js"></script>
+  </body>
+</html>
