@@ -599,6 +599,11 @@ body.settings-dark .plan-indicator {
   align-items: start;
 }
 
+#analysisPanel[hidden],
+#comparisonPanel[hidden] {
+  display: none !important;
+}
+
 .thumbnail-tabs {
   display: inline-grid;
   grid-auto-flow: column;
