@@ -9,10 +9,27 @@ Serve the project over HTTP and open `login.html`. Firebase Authentication does 
 For a quick local preview:
 
 ```bash
-npx serve . -listen 3000
+npx serve . -listen 4173
 ```
 
 Then open `http://localhost:4173/login.html`.
+
+The thumbnail analyzer is available at `http://localhost:4173/pages/thumbnail-analyzer.html`.
+These URLs also redirect there for servers or users that expect a root-level or clean page path:
+
+- `http://localhost:4173/thumbnail-analyzer.html`
+- `http://localhost:4173/thumbnail-analyzer/`
+- `http://localhost:4173/thumbnail-analyzer`
+- `http://localhost:4173/pages/thumbnail-analyzer/`
+- `http://localhost:4173/pages/thumbnail-analyzer`
+
+If you use Firebase locally, run:
+
+```bash
+npx -y firebase-tools@latest emulators:start --only hosting
+```
+
+Then open the Hosting URL printed by the emulator, usually `http://localhost:5000/login.html`.
 
 ## Firebase Authentication
 
