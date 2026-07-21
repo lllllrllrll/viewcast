@@ -18,7 +18,12 @@
           </div>
         </header>
 
-        <section class="thumbnail-layout">
+        <div class="thumbnail-tabs" role="tablist" aria-label="Thumbnail analyzer modes">
+          <button class="thumbnail-tab active" id="analysisTab" type="button" role="tab" aria-selected="true" aria-controls="analysisPanel" data-thumbnail-tab="analysis">Single analysis</button>
+          <button class="thumbnail-tab" id="comparisonTab" type="button" role="tab" aria-selected="false" aria-controls="comparisonPanel" data-thumbnail-tab="comparison">Comparison</button>
+        </div>
+
+        <section class="thumbnail-layout" id="analysisPanel" role="tabpanel" aria-labelledby="analysisTab">
           <article class="panel thumbnail-upload-panel">
             <div class="panel-head">
               <div>
@@ -80,8 +85,73 @@
                 <h4>Recommended direction</h4>
                 <p id="thumbnailRecommendation"></p>
               </section>
+              <section class="thumbnail-chat">
+                <div class="thumbnail-chat-head">
+                  <div><h4>Ask about this analysis</h4><p>Question Gemini about its score, reasoning, or suggested changes.</p></div>
+                  <span>Gemini</span>
+                </div>
+                <div class="chat-messages" id="thumbnailChatMessages">
+                  <div class="chat-message assistant">I’ve reviewed this thumbnail. Ask me anything about the score or how I would improve it.</div>
+                </div>
+                <div class="chat-quick-options" id="thumbnailChatPrompts">
+                  <button type="button">Why did you give it this score?</button>
+                  <button type="button">What should I change first?</button>
+                  <button type="button">How will this look on mobile?</button>
+                </div>
+                <form class="chat-form" id="thumbnailChatForm">
+                  <input id="thumbnailChatInput" type="text" maxlength="500" autocomplete="off" placeholder="Ask Gemini about its decision…" aria-label="Ask about the thumbnail analysis" />
+                  <button class="primary-button" id="thumbnailChatSend" type="submit">Send</button>
+                </form>
+                <p class="thumbnail-status" id="thumbnailChatStatus" role="status" aria-live="polite"></p>
+              </section>
             </article>
           </section>
+        </section>
+
+        <section id="comparisonPanel" role="tabpanel" aria-labelledby="comparisonTab" hidden>
+          <form id="comparisonForm">
+            <div class="thumbnail-comparison-uploads">
+              <article class="panel comparison-upload-card" data-comparison-slot="v1">
+                <div class="panel-head"><div><h3>Version 1</h3><p>Upload the first thumbnail.</p></div></div>
+                <input class="visually-hidden comparison-input" id="comparisonInputV1" type="file" accept="image/jpeg,image/png,image/webp" />
+                <label class="thumbnail-dropzone comparison-dropzone" for="comparisonInputV1" tabindex="0">
+                  <span class="thumbnail-upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" /></svg></span>
+                  <strong>Add Version 1</strong><span>JPG, PNG, or WebP</span>
+                </label>
+                <div class="thumbnail-preview comparison-preview" hidden><img alt="Version 1 preview" /><div class="thumbnail-file-meta"><div><strong></strong><span></span></div><button class="thumbnail-remove comparison-remove" type="button">Remove</button></div></div>
+              </article>
+
+              <article class="panel comparison-upload-card" data-comparison-slot="v2">
+                <div class="panel-head"><div><h3>Version 2</h3><p>Upload the alternate thumbnail.</p></div></div>
+                <input class="visually-hidden comparison-input" id="comparisonInputV2" type="file" accept="image/jpeg,image/png,image/webp" />
+                <label class="thumbnail-dropzone comparison-dropzone" for="comparisonInputV2" tabindex="0">
+                  <span class="thumbnail-upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" /></svg></span>
+                  <strong>Add Version 2</strong><span>JPG, PNG, or WebP</span>
+                </label>
+                <div class="thumbnail-preview comparison-preview" hidden><img alt="Version 2 preview" /><div class="thumbnail-file-meta"><div><strong></strong><span></span></div><button class="thumbnail-remove comparison-remove" type="button">Remove</button></div></div>
+              </article>
+            </div>
+
+            <article class="panel comparison-controls">
+              <label class="thumbnail-context-label" for="comparisonContext">Video context <span>Optional</span></label>
+              <textarea id="comparisonContext" class="thumbnail-context" rows="2" maxlength="500" placeholder="Add the video topic, title, or target audience for a more useful comparison."></textarea>
+              <p class="thumbnail-status" id="comparisonStatus" role="status" aria-live="polite"></p>
+              <button class="primary-button thumbnail-analyze-button" id="compareThumbnails" type="submit" disabled>Compare with Gemini</button>
+            </article>
+          </form>
+
+          <article class="panel comparison-output" id="comparisonOutput" hidden aria-live="polite">
+            <div class="comparison-winner"><span>Recommended winner</span><h3 id="comparisonWinner"></h3><p id="comparisonSummary"></p></div>
+            <div class="comparison-score-grid">
+              <section><span>Version 1</span><strong id="comparisonScoreV1">--</strong><small>/ 100</small></section>
+              <section><span>Version 2</span><strong id="comparisonScoreV2">--</strong><small>/ 100</small></section>
+            </div>
+            <div class="thumbnail-analysis-grid">
+              <section><h4>Why it wins</h4><ul id="comparisonReasons"></ul></section>
+              <section><h4>Feedback for both</h4><ul id="comparisonFeedback"></ul></section>
+            </div>
+            <section class="thumbnail-recommendation"><h4>Best combined direction</h4><p id="comparisonRecommendation"></p></section>
+          </article>
         </section>
       </main>
     </div>

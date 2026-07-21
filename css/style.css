@@ -599,6 +599,55 @@ body.settings-dark .plan-indicator {
   align-items: start;
 }
 
+.thumbnail-tabs {
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.thumbnail-tab {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.thumbnail-tab.active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgba(30, 41, 59, 0.08);
+}
+
+.thumbnail-comparison-uploads {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.comparison-upload-card { min-height: 0; }
+.comparison-dropzone { min-height: 230px; }
+.comparison-preview img { aspect-ratio: 16 / 9; }
+.comparison-controls { min-height: 0; margin-top: 16px; }
+.comparison-output { min-height: 0; margin-top: 16px; }
+.comparison-winner { padding-bottom: 18px; border-bottom: 1px solid var(--line); text-align: center; }
+.comparison-winner span { color: var(--teal); font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.comparison-winner h3 { margin: 6px 0; font-size: 26px; }
+.comparison-winner p { max-width: 720px; margin: 0 auto; color: var(--muted); line-height: 1.55; }
+.comparison-score-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 18px; }
+.comparison-score-grid section { padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); text-align: center; }
+.comparison-score-grid span { display: block; color: var(--muted); font-size: 13px; font-weight: 700; }
+.comparison-score-grid strong { display: inline-block; margin-top: 8px; color: var(--teal); font-size: 34px; }
+.comparison-score-grid small { color: var(--muted); }
+
 .thumbnail-upload-panel,
 .thumbnail-results .panel {
   min-height: 0;
@@ -677,6 +726,13 @@ body.settings-dark .plan-indicator {
 .thumbnail-analysis-output ul { display: grid; gap: 9px; margin: 0; padding-left: 19px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .thumbnail-recommendation { margin-top: 14px; border-left: 3px solid var(--teal); }
 .thumbnail-recommendation p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.thumbnail-chat { display: grid; gap: 12px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.thumbnail-chat-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.thumbnail-chat-head h4 { margin-bottom: 4px; }
+.thumbnail-chat-head p { margin: 0; color: var(--muted); font-size: 13px; }
+.thumbnail-chat-head > span { padding: 4px 8px; border-radius: 999px; color: #0d6869; background: var(--teal-soft); font-size: 11px; font-weight: 800; }
+.thumbnail-chat .chat-messages { min-height: 124px; max-height: 280px; }
+.thumbnail-chat .thumbnail-status { margin: -4px 0 0; min-height: 0; }
 
 @media (max-width: 980px) {
   .thumbnail-layout { grid-template-columns: 1fr; }
@@ -686,6 +742,7 @@ body.settings-dark .plan-indicator {
 @media (max-width: 600px) {
   .thumbnail-analysis-grid { grid-template-columns: 1fr; }
   .thumbnail-score-row { grid-template-columns: 1fr; }
+  .thumbnail-comparison-uploads { grid-template-columns: 1fr; }
 }
 
 .metric-card,
