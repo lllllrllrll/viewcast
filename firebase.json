@@ -30,18 +30,18 @@
         "type": 301
       },
       {
-        "source": "/thumbnail-analyzer.html",
-        "destination": "/pages/thumbnail-analyzer.html",
-        "type": 301
-      },
-      {
         "source": "/thumbnail-analyzer",
-        "destination": "/pages/thumbnail-analyzer.html",
+        "destination": "/thumbnail-analyzer.html",
         "type": 301
       },
       {
         "source": "/pages/thumbnail-analyzer",
-        "destination": "/pages/thumbnail-analyzer.html",
+        "destination": "/thumbnail-analyzer.html",
+        "type": 301
+      },
+      {
+        "source": "/pages/thumbnail-analyzer.html",
+        "destination": "/thumbnail-analyzer.html",
         "type": 301
       },
       {

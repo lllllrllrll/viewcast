@@ -54,6 +54,7 @@
 
   function hrefFor(page, root) {
     if (page.file === "index.html") return root === ".." ? "../index.html" : "index.html";
+    if (page.id === "thumbnail") return root === ".." ? "../thumbnail-analyzer.html" : "thumbnail-analyzer.html";
     return root === ".." ? page.file : `pages/${page.file}`;
   }
 
