@@ -673,6 +673,10 @@ body.settings-dark .plan-indicator {
   transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
+.thumbnail-dropzone[hidden] {
+  display: none !important;
+}
+
 .thumbnail-dropzone:hover,
 .thumbnail-dropzone:focus-visible,
 .thumbnail-dropzone.dragging {
@@ -716,6 +720,7 @@ body.settings-dark .plan-indicator {
 
 .thumbnail-results { min-width: 0; }
 .thumbnail-empty-state { display: grid; place-items: center; align-content: center; min-height: 520px !important; padding: 48px; text-align: center; }
+.thumbnail-empty-state[hidden] { display: none !important; }
 .thumbnail-empty-state h3 { margin: 18px 0 8px; }
 .thumbnail-empty-state p { max-width: 440px; margin: 0; color: var(--muted); line-height: 1.55; }
 .thumbnail-score-row { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
