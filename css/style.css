@@ -974,6 +974,61 @@ body.settings-dark .plan-indicator {
   font-weight: 800;
 }
 
+.insight-channel-empty[hidden] {
+  display: none;
+}
+
+.insight-channel-empty {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+}
+
+.insight-channel-empty-content {
+  width: min(520px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.insight-channel-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.insight-channel-empty-icon svg {
+  width: 27px;
+  height: 27px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.insight-channel-empty-content h3 {
+  margin: 0;
+  font-size: clamp(24px, 4vw, 34px);
+}
+
+.insight-channel-empty-content p {
+  max-width: 470px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.insight-channel-empty-content .primary-button {
+  text-decoration: none;
+}
+
 .loader-ring {
   width: 34px;
   height: 34px;

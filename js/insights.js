@@ -20,6 +20,7 @@ const refreshInsightsPageButton = document.getElementById("refreshInsightsPage")
 const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
 const insightErrorPanel = document.getElementById("insightErrorPanel");
+const insightChannelEmpty = document.getElementById("insightChannelEmpty");
 const chatMessages = document.getElementById("chatMessages");
 const chatForm = document.getElementById("insightChatForm");
 const chatInput = document.getElementById("insightChatInput");
@@ -1540,6 +1541,23 @@ function setAnalyzerResultsVisible(isVisible) {
   analyzerDashboard?.classList.toggle("analyzer-results-hidden", !isVisible);
 }
 
+function hasLinkedChannel() {
+  try {
+    const connection = JSON.parse(localStorage.getItem(connectionStorageKey) || "null");
+    return Boolean(connection?.channel?.id);
+  } catch (error) {
+    return false;
+  }
+}
+
+function showChannelLinkPrompt(show) {
+  if (insightChannelEmpty) insightChannelEmpty.hidden = !show;
+  if (show) {
+    setAnalyzerLoading(false);
+    setAnalyzerResultsVisible(false);
+  }
+}
+
 function clearAnalyzerResults() {
   latestChannelSummary = null;
   setAnalyzerLoading(false);
@@ -1650,11 +1668,11 @@ async function loadVideoLibrary({allowPrompt = false, generateAfterLoad = false}
 }
 
 async function generateChannelInsights({allowPrompt = true, focusVideoId = "", forceRefresh = false} = {}) {
-  const connection = localStorage.getItem(connectionStorageKey);
-  if (!connection) {
-    window.location.href = "channel.html?link=required";
+  if (!hasLinkedChannel()) {
+    showChannelLinkPrompt(true);
     return;
   }
+  showChannelLinkPrompt(false);
   if (!isGeminiAvailable()) {
     showMissingGeminiKeyMessage();
     return;
@@ -1814,6 +1832,12 @@ if (form && firebaseConfigured) {
       setLibraryStatus(user ? "Verify your email to unlock channel insights." : "Sign in and link a channel to generate channel insights.");
       return;
     }
+
+    if (!hasLinkedChannel()) {
+      showChannelLinkPrompt(true);
+      return;
+    }
+    showChannelLinkPrompt(false);
 
     const cachedVideos = readCachedVideos();
     if (cachedVideos.length) {
