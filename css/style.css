@@ -158,6 +158,64 @@ body.auth-ready .app {
   font-size: 13px;
 }
 
+body.verification-locked {
+  overflow: hidden;
+}
+
+.verification-modal-overlay {
+  background: rgba(16, 24, 32, 0.62);
+  z-index: 5000;
+}
+
+.verification-modal-card {
+  width: min(440px, 100%);
+  padding: 30px;
+  text-align: center;
+}
+
+.verification-modal-icon {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  color: var(--teal);
+  background: var(--teal-soft);
+  font-size: 24px;
+}
+
+.verification-modal-card h3 {
+  margin: 0 0 9px;
+  font-size: 22px;
+}
+
+.verification-modal-card > p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.verification-modal-actions {
+  display: grid;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.verification-modal-status {
+  min-height: 20px;
+  margin-top: 14px !important;
+  font-size: 13px;
+}
+
+.verification-modal-status[data-type="success"] {
+  color: var(--green);
+}
+
+.verification-modal-status[data-type="error"] {
+  color: var(--rose);
+}
+
 button,
 input,
 select {

@@ -156,7 +156,6 @@
 
       const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
       const auth = getAuth(app);
-      const verificationReturnKey = "viewcastVerificationReturn";
       let currentUser = null;
       let usesPasswordProvider = false;
       let verificationRequestInProgress = false;
@@ -215,12 +214,7 @@
           currentUser = auth.currentUser || currentUser;
           renderEmailVerification(currentUser);
           if (!wasVerified && currentUser.emailVerified) {
-            const returnTo = sessionStorage.getItem(verificationReturnKey);
-            sessionStorage.removeItem(verificationReturnKey);
             setCredentialStatus("Email verified. Your ViewCast features are now unlocked.", "success");
-            if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
-              window.location.replace(returnTo);
-            }
           }
         } catch (error) {
           console.warn("Could not refresh email verification status.", error);
