@@ -42,8 +42,11 @@
                 <span>or click to choose an image</span>
               </label>
 
-              <div class="thumbnail-preview" id="thumbnailPreview" hidden>
-                <img id="thumbnailImage" alt="Selected thumbnail preview" />
+              <div class="thumbnail-preview thumbnail-replace-preview" id="thumbnailPreview" hidden>
+                <label class="thumbnail-replace-trigger" for="thumbnailInput" title="Click to replace this thumbnail">
+                  <img id="thumbnailImage" alt="Selected thumbnail preview. Click to replace." />
+                  <span class="thumbnail-replace-label">Click image to replace</span>
+                </label>
                 <div class="thumbnail-file-meta">
                   <div><strong id="thumbnailFileName"></strong><span id="thumbnailFileSize"></span></div>
                   <button class="thumbnail-remove" id="removeThumbnail" type="button">Remove</button>
@@ -57,10 +60,10 @@
 
               <p class="thumbnail-status" id="thumbnailStatus" role="status" aria-live="polite"></p>
               <button class="primary-button thumbnail-analyze-button" id="analyzeThumbnail" type="submit" disabled>
-                <svg viewBox="0 0 24 24"><path d="M12 3v18" /><path d="M3 12h18" /><path d="m5.6 5.6 12.8 12.8" /><path d="m18.4 5.6-12.8 12.8" /></svg>
-                Analyze with Gemini
+                Analyze
               </button>
             </form>
+
           </article>
 
           <section class="thumbnail-results" id="thumbnailResults" aria-live="polite">
@@ -85,26 +88,27 @@
                 <h4>Recommended direction</h4>
                 <p id="thumbnailRecommendation"></p>
               </section>
-              <section class="thumbnail-chat">
-                <div class="thumbnail-chat-head">
-                  <div><h4>Ask about this analysis</h4><p>Question Gemini about its score, reasoning, or suggested changes.</p></div>
-                  <span>Gemini</span>
-                </div>
-                <div class="chat-messages" id="thumbnailChatMessages">
-                  <div class="chat-message assistant">I’ve reviewed this thumbnail. Ask me anything about the score or how I would improve it.</div>
-                </div>
-                <div class="chat-quick-options" id="thumbnailChatPrompts">
-                  <button type="button">Why did you give it this score?</button>
-                  <button type="button">What should I change first?</button>
-                  <button type="button">How will this look on mobile?</button>
-                </div>
-                <form class="chat-form" id="thumbnailChatForm">
-                  <input id="thumbnailChatInput" type="text" maxlength="500" autocomplete="off" placeholder="Ask Gemini about its decision…" aria-label="Ask about the thumbnail analysis" />
-                  <button class="primary-button" id="thumbnailChatSend" type="submit">Send</button>
-                </form>
-                <p class="thumbnail-status" id="thumbnailChatStatus" role="status" aria-live="polite"></p>
-              </section>
             </article>
+          </section>
+
+          <section class="panel thumbnail-chat" id="thumbnailChat" hidden>
+            <div class="thumbnail-chat-head">
+              <div><h4>Ask about this analysis</h4><p>Question Gemini about its score, reasoning, or suggested changes.</p></div>
+              <span>Gemini</span>
+            </div>
+            <div class="chat-messages" id="thumbnailChatMessages">
+              <div class="chat-message assistant">I’ve reviewed this thumbnail. Ask me anything about the score or how I would improve it.</div>
+            </div>
+            <div class="chat-quick-options" id="thumbnailChatPrompts">
+              <button type="button">Why did you give it this score?</button>
+              <button type="button">What should I change first?</button>
+              <button type="button">How will this look on mobile?</button>
+            </div>
+            <form class="chat-form" id="thumbnailChatForm">
+              <input id="thumbnailChatInput" type="text" maxlength="500" autocomplete="off" placeholder="Ask Gemini about its decision…" aria-label="Ask about the thumbnail analysis" />
+              <button class="primary-button" id="thumbnailChatSend" type="submit">Send</button>
+            </form>
+            <p class="thumbnail-status" id="thumbnailChatStatus" role="status" aria-live="polite"></p>
           </section>
         </section>
 
@@ -141,11 +145,11 @@
           </form>
 
           <article class="panel comparison-output" id="comparisonOutput" hidden aria-live="polite">
-            <div class="comparison-winner"><span>Recommended winner</span><h3 id="comparisonWinner"></h3><p id="comparisonSummary"></p></div>
             <div class="comparison-score-grid">
-              <section><span>Version 1</span><strong id="comparisonScoreV1">--</strong><small>/ 100</small></section>
-              <section><span>Version 2</span><strong id="comparisonScoreV2">--</strong><small>/ 100</small></section>
+              <section id="comparisonCardV1"><span>Version 1</span><strong id="comparisonScoreV1">--</strong><small>/ 100</small></section>
+              <section id="comparisonCardV2"><span>Version 2</span><strong id="comparisonScoreV2">--</strong><small>/ 100</small></section>
             </div>
+            <div class="comparison-winner"><span>Recommended winner</span><h3 id="comparisonWinner"></h3><p id="comparisonSummary"></p></div>
             <div class="thumbnail-analysis-grid">
               <section><h4>Why it wins</h4><ul id="comparisonReasons"></ul></section>
               <section><h4>Feedback for both</h4><ul id="comparisonFeedback"></ul></section>

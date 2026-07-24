@@ -21,6 +21,7 @@ const status = document.querySelector("#thumbnailStatus");
 const context = document.querySelector("#thumbnailContext");
 const emptyState = document.querySelector("#thumbnailEmptyState");
 const output = document.querySelector("#thumbnailAnalysisOutput");
+const thumbnailChat = document.querySelector("#thumbnailChat");
 let selectedFile = null;
 let previewUrl = "";
 let latestAnalysis = null;
@@ -62,6 +63,7 @@ function resetFile() {
   dropzone.hidden = false;
   output.hidden = true;
   emptyState.hidden = false;
+  thumbnailChat.hidden = true;
   resetThumbnailChat();
   analyzeButton.disabled = true;
   setStatus("");
@@ -87,6 +89,7 @@ function selectFile(file) {
   dropzone.hidden = true;
   emptyState.hidden = true;
   output.hidden = true;
+  thumbnailChat.hidden = true;
   resetThumbnailChat();
   analyzeButton.disabled = false;
   setStatus("Ready to analyze.");
@@ -126,6 +129,7 @@ function renderAnalysis(analysis) {
   document.querySelector("#thumbnailScore").style.setProperty("--score", `${score * 3.6}deg`);
   emptyState.hidden = true;
   output.hidden = false;
+  thumbnailChat.hidden = false;
 }
 
 function appendThumbnailChatMessage(role, text) {
@@ -338,10 +342,14 @@ function selectComparisonFile(slot, file) {
 });
 
 function renderComparison(analysis) {
-  document.querySelector("#comparisonWinner").textContent = String(analysis.winner || "No clear winner");
+  const winner = String(analysis.winner || "No clear winner");
+  document.querySelector("#comparisonWinner").textContent = winner;
   document.querySelector("#comparisonSummary").textContent = String(analysis.summary || "Comparison complete.");
   document.querySelector("#comparisonScoreV1").textContent = Math.max(0, Math.min(100, Math.round(Number(analysis.version1Score) || 0)));
   document.querySelector("#comparisonScoreV2").textContent = Math.max(0, Math.min(100, Math.round(Number(analysis.version2Score) || 0)));
+  const normalizedWinner = winner.toLowerCase();
+  document.querySelector("#comparisonCardV1").classList.toggle("winner", normalizedWinner.includes("version 1") || normalizedWinner.includes("tie"));
+  document.querySelector("#comparisonCardV2").classList.toggle("winner", normalizedWinner.includes("version 2") || normalizedWinner.includes("tie"));
   document.querySelector("#comparisonRecommendation").textContent = String(analysis.recommendation || "Test both versions with your audience.");
   renderList(document.querySelector("#comparisonReasons"), Array.isArray(analysis.winnerReasons) ? analysis.winnerReasons : []);
   renderList(document.querySelector("#comparisonFeedback"), Array.isArray(analysis.feedback) ? analysis.feedback : []);
