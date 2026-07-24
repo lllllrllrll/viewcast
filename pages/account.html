@@ -32,13 +32,65 @@
                 <span data-user-name>Loading...</span>
               </div>
               <div class="showcase-item">
-                <b>Email Address</b>
-                <span data-user-email>Loading...</span>
+                <b>Sign-in Method</b>
+                <span id="signInMethod">Loading...</span>
               </div>
               <div class="showcase-item">
                 <b>Current Plan</b>
                 <span class="plan-indicator" id="planLabel" style="margin-top: 8px;">Basic</span>
               </div>
+            </div>
+          </article>
+
+          <article class="panel full account-credentials-panel">
+            <div class="panel-head">
+              <div>
+                <h3>Email &amp; Password</h3>
+                <p>Review and securely update your sign-in credentials.</p>
+              </div>
+            </div>
+
+            <div class="account-credential-list">
+              <section class="account-credential-row">
+                <div class="account-credential-copy">
+                  <span>Email address</span>
+                  <strong data-user-email>Loading...</strong>
+                </div>
+                <button class="primary-button" id="toggleEmailForm" type="button">Change email</button>
+              </section>
+              <section class="account-credential-row" id="emailVerificationRow">
+                <div class="account-credential-copy">
+                  <span>Email verification</span>
+                  <strong id="emailVerificationStatus">Checking status...</strong>
+                </div>
+                <button class="primary-button" id="sendVerificationEmail" type="button" disabled>Send verification email</button>
+              </section>
+              <form class="account-credential-form" id="changeEmailForm" hidden>
+                <label>New email address<input id="newEmail" type="email" autocomplete="email" required /></label>
+                <label class="current-password-field">Current password<input id="emailCurrentPassword" type="password" autocomplete="current-password" /></label>
+                <div class="account-form-actions">
+                  <button class="primary-button" id="saveEmail" type="submit">Send verification</button>
+                  <button class="account-cancel-button" data-close-credential-form="changeEmailForm" type="button">Cancel</button>
+                </div>
+              </form>
+
+              <section class="account-credential-row">
+                <div class="account-credential-copy">
+                  <span>Password</span>
+                  <strong id="passwordDisplay">••••••••••••</strong>
+                </div>
+                <button class="primary-button" id="togglePasswordForm" type="button">Change password</button>
+              </section>
+              <form class="account-credential-form" id="changePasswordForm" hidden>
+                <label>Current password<input id="passwordCurrentPassword" type="password" autocomplete="current-password" required /></label>
+                <label>New password<input id="newPassword" type="password" autocomplete="new-password" minlength="6" required /></label>
+                <label>Confirm new password<input id="confirmPassword" type="password" autocomplete="new-password" minlength="6" required /></label>
+                <div class="account-form-actions">
+                  <button class="primary-button" id="savePassword" type="submit">Update password</button>
+                  <button class="account-cancel-button" data-close-credential-form="changePasswordForm" type="button">Cancel</button>
+                </div>
+              </form>
+              <p class="account-credential-status" id="credentialStatus" role="status" aria-live="polite"></p>
             </div>
           </article>
 
@@ -73,7 +125,6 @@
               </div>
             </div>
             <div style="margin-top: 10px; display: grid; gap: 10px;">
-              <button class="primary-button" id="changePassword" type="button" style="width: 100%;">Change Password</button>
               <button class="primary-button danger-button" id="signOutBtn" type="button" style="width: 100%;">Sign Out</button>
             </div>
           </article>
@@ -83,15 +134,97 @@
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js"></script>
     <script type="module">
-      import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
+      import {
+        EmailAuthProvider,
+        getAuth,
+        GoogleAuthProvider,
+        onAuthStateChanged,
+        reauthenticateWithCredential,
+        reauthenticateWithPopup,
+        sendEmailVerification,
+        signOut,
+        updatePassword,
+        verifyBeforeUpdateEmail
+      } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
       import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
       import { firebaseConfig } from "../js/firebase-config.js";
 
       const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
       const auth = getAuth(app);
+      let currentUser = null;
+      let usesPasswordProvider = false;
+      let verificationRequestInProgress = false;
+
+      function setCredentialStatus(message, type = "") {
+        const status = document.getElementById("credentialStatus");
+        status.textContent = message;
+        status.dataset.type = type;
+      }
+
+      function authErrorMessage(error) {
+        const messages = {
+          "auth/email-already-in-use": "That email address is already in use.",
+          "auth/invalid-email": "Enter a valid email address.",
+          "auth/invalid-credential": "The current password is incorrect.",
+          "auth/requires-recent-login": "Please sign out, sign back in, and try again.",
+          "auth/too-many-requests": "Too many verification emails were requested. Please wait and try again.",
+          "auth/weak-password": "Choose a password with at least six characters.",
+          "auth/popup-closed-by-user": "The sign-in confirmation was closed."
+        };
+        return messages[error?.code] || "The credential update could not be completed. Please try again.";
+      }
+
+      function renderEmailVerification(user) {
+        const status = document.getElementById("emailVerificationStatus");
+        const button = document.getElementById("sendVerificationEmail");
+        const canVerify = Boolean(user?.email);
+
+        if (user?.emailVerified) {
+          status.textContent = "Verified";
+          status.dataset.verified = "true";
+          button.hidden = true;
+          button.disabled = true;
+          return;
+        }
+
+        status.textContent = canVerify ? "Not verified" : "No email address available";
+        status.dataset.verified = "false";
+        button.hidden = !canVerify;
+        button.disabled = !canVerify || verificationRequestInProgress;
+        button.textContent = verificationRequestInProgress ? "Sending…" : "Send verification email";
+      }
+
+      async function refreshEmailVerificationStatus() {
+        if (!currentUser || verificationRequestInProgress) return;
+        try {
+          await currentUser.reload();
+          currentUser = auth.currentUser || currentUser;
+          renderEmailVerification(currentUser);
+        } catch (error) {
+          console.warn("Could not refresh email verification status.", error);
+        }
+      }
+
+      async function reauthenticateUser(password = "") {
+        if (!currentUser) throw new Error("No signed-in user.");
+        if (usesPasswordProvider) {
+          if (!password) {
+            const error = new Error("Current password required.");
+            error.code = "auth/invalid-credential";
+            throw error;
+          }
+          const credential = EmailAuthProvider.credential(currentUser.email, password);
+          await reauthenticateWithCredential(currentUser, credential);
+          return;
+        }
+        await reauthenticateWithPopup(currentUser, new GoogleAuthProvider());
+      }
 
       onAuthStateChanged(auth, (user) => {
         if (user) {
+          currentUser = user;
+          usesPasswordProvider = user.providerData.some((provider) => provider.providerId === "password");
+          const usesGoogleProvider = user.providerData.some((provider) => provider.providerId === "google.com");
           const plan = (localStorage.getItem("viewcast:plan") || "basic").charAt(0).toUpperCase() + (localStorage.getItem("viewcast:plan") || "basic").slice(1);
           document.getElementById("planLabel").textContent = plan;
           document.getElementById("accountId").textContent = user.uid;
@@ -100,6 +233,15 @@
 
           document.querySelectorAll("[data-user-name]").forEach(el => el.textContent = user.displayName || user.email.split("@")[0]);
           document.querySelectorAll("[data-user-email]").forEach(el => el.textContent = user.email);
+          document.getElementById("signInMethod").textContent = usesPasswordProvider
+            ? "Email and password"
+            : usesGoogleProvider ? "Google" : "Connected provider";
+          document.querySelector(".current-password-field").hidden = !usesPasswordProvider;
+          document.getElementById("togglePasswordForm").disabled = !usesPasswordProvider;
+          document.getElementById("passwordDisplay").textContent = usesPasswordProvider
+            ? "••••••••••••"
+            : "Managed by your provider";
+          renderEmailVerification(user);
         } else {
           window.location.replace("../login.html");
         }
@@ -111,8 +253,103 @@
         });
       });
 
-      document.getElementById("changePassword").addEventListener("click", () => {
-          alert("Password reset email sent if supported by your current auth provider.");
+      document.getElementById("toggleEmailForm").addEventListener("click", () => {
+        document.getElementById("changeEmailForm").hidden = false;
+        document.getElementById("newEmail").focus();
+        setCredentialStatus("");
+      });
+
+      document.getElementById("togglePasswordForm").addEventListener("click", () => {
+        if (!usesPasswordProvider) {
+          setCredentialStatus("Your password is managed by your sign-in provider.", "info");
+          return;
+        }
+        document.getElementById("changePasswordForm").hidden = false;
+        document.getElementById("passwordCurrentPassword").focus();
+        setCredentialStatus("");
+      });
+
+      document.getElementById("sendVerificationEmail").addEventListener("click", async () => {
+        if (!currentUser?.email || currentUser.emailVerified || verificationRequestInProgress) return;
+
+        verificationRequestInProgress = true;
+        renderEmailVerification(currentUser);
+        setCredentialStatus("Sending your verification email…", "info");
+        try {
+          await sendEmailVerification(currentUser, {
+            url: window.location.href
+          });
+          setCredentialStatus(
+            `Verification sent to ${currentUser.email}. Open the link in that email, then return here to see your updated status.`,
+            "success"
+          );
+        } catch (error) {
+          setCredentialStatus(authErrorMessage(error), "error");
+        } finally {
+          verificationRequestInProgress = false;
+          renderEmailVerification(currentUser);
+        }
+      });
+
+      window.addEventListener("focus", refreshEmailVerificationStatus);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") refreshEmailVerificationStatus();
+      });
+
+      document.querySelectorAll("[data-close-credential-form]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const form = document.getElementById(button.dataset.closeCredentialForm);
+          form.reset();
+          form.hidden = true;
+          setCredentialStatus("");
+        });
+      });
+
+      document.getElementById("changeEmailForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const submit = document.getElementById("saveEmail");
+        const newEmail = document.getElementById("newEmail").value.trim();
+        const password = document.getElementById("emailCurrentPassword").value;
+        submit.disabled = true;
+        setCredentialStatus("Confirming your identity…", "info");
+        try {
+          await reauthenticateUser(password);
+          await verifyBeforeUpdateEmail(currentUser, newEmail);
+          form.reset();
+          form.hidden = true;
+          setCredentialStatus(`Verification sent to ${newEmail}. Your email will change after you confirm it.`, "success");
+        } catch (error) {
+          setCredentialStatus(authErrorMessage(error), "error");
+        } finally {
+          submit.disabled = false;
+        }
+      });
+
+      document.getElementById("changePasswordForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const submit = document.getElementById("savePassword");
+        const currentPassword = document.getElementById("passwordCurrentPassword").value;
+        const newPassword = document.getElementById("newPassword").value;
+        const confirmPassword = document.getElementById("confirmPassword").value;
+        if (newPassword !== confirmPassword) {
+          setCredentialStatus("The new passwords do not match.", "error");
+          return;
+        }
+        submit.disabled = true;
+        setCredentialStatus("Updating your password…", "info");
+        try {
+          await reauthenticateUser(currentPassword);
+          await updatePassword(currentUser, newPassword);
+          form.reset();
+          form.hidden = true;
+          setCredentialStatus("Your password was updated successfully.", "success");
+        } catch (error) {
+          setCredentialStatus(authErrorMessage(error), "error");
+        } finally {
+          submit.disabled = false;
+        }
       });
     </script>
   </body>

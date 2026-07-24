@@ -37,6 +37,7 @@ For local testing, use `http://localhost:4173` rather than `127.0.0.1`, or add `
 The app supports:
 
 - Email/password account creation
+- Optional email verification from the Account page
 - Persistent email/password sign-in
 - Password reset emails
 - Protected dashboard pages
