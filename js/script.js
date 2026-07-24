@@ -410,7 +410,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-const authModuleUrl = new URL("auth.js?v=12", document.currentScript.src);
+const authModuleUrl = new URL("auth.js?v=13", document.currentScript.src);
 import(authModuleUrl.href).catch((error) => {
   console.error("Authentication failed to initialize.", error);
   document.body.classList.add("auth-ready");

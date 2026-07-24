@@ -38,7 +38,7 @@ The app supports:
 
 - Email/password account creation
 - Optional email verification from the Account page
-- Blocking verification popup on feature pages until the account email is verified
+- Closable verification popup when an unverified account attempts to use a feature
 - Persistent email/password sign-in
 - Password reset emails
 - Protected dashboard pages

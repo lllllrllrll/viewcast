@@ -112,6 +112,7 @@ function showEmailVerificationGate(user) {
   overlay.setAttribute("aria-labelledby", "verificationModalTitle");
   overlay.innerHTML = `
     <section class="modal-card verification-modal-card">
+      <button class="close-button verification-modal-close" data-verification-close type="button" aria-label="Close verification popup">&times;</button>
       <div class="verification-modal-icon" aria-hidden="true">✉</div>
       <h3 id="verificationModalTitle">Verify your email</h3>
       <p>Verify <strong></strong> before using ViewCast features.</p>
@@ -128,8 +129,21 @@ function showEmailVerificationGate(user) {
   const sendButton = overlay.querySelector("[data-verification-send]");
   const refreshButton = overlay.querySelector("[data-verification-refresh]");
   const signOutButton = overlay.querySelector("[data-verification-signout]");
+  const closeButton = overlay.querySelector("[data-verification-close]");
   const status = overlay.querySelector("[data-verification-status]");
   email.textContent = user.email;
+
+  function closeVerificationGate() {
+    window.removeEventListener("focus", refreshVerification);
+    window.removeEventListener("keydown", handleVerificationKeydown);
+    document.querySelector(".app")?.removeAttribute("inert");
+    document.body.classList.remove("verification-locked");
+    overlay.remove();
+  }
+
+  function handleVerificationKeydown(event) {
+    if (event.key === "Escape") closeVerificationGate();
+  }
 
   async function refreshVerification() {
     refreshButton.disabled = true;
@@ -172,12 +186,41 @@ function showEmailVerificationGate(user) {
     await signOut(auth);
     window.location.replace(loginUrl.href);
   });
+  closeButton.addEventListener("click", closeVerificationGate);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeVerificationGate();
+  });
   window.addEventListener("focus", refreshVerification);
+  window.addEventListener("keydown", handleVerificationKeydown);
 
   document.body.append(overlay);
   document.querySelector(".app")?.setAttribute("inert", "");
   document.body.classList.add("auth-ready", "verification-locked");
-  refreshButton.focus();
+  closeButton.focus();
+}
+
+function setupEmailVerificationGate(user) {
+  if (document.body.dataset.verificationGateReady === "true") return;
+  document.body.dataset.verificationGateReady = "true";
+
+  function interceptFeatureAttempt(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || target.closest("#emailVerificationGate, .account-signout, a")) return;
+
+    const isFeatureAttempt =
+      event.type === "submit" ||
+      (event.type === "beforeinput" && target.matches("input, textarea, [contenteditable='true']")) ||
+      (event.type === "click" && Boolean(target.closest("button, input, select, textarea, [role='button']")));
+
+    if (!isFeatureAttempt) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    showEmailVerificationGate(user);
+  }
+
+  document.addEventListener("click", interceptFeatureAttempt, true);
+  document.addEventListener("submit", interceptFeatureAttempt, true);
+  document.addEventListener("beforeinput", interceptFeatureAttempt, true);
 }
 
 function setFormBusy(isBusy) {
@@ -476,7 +519,9 @@ if (!firebaseConfigured) {
       let currentUser = auth.currentUser || user;
 
       if (requiresEmailVerification(currentUser) && !isAccountPage) {
-        showEmailVerificationGate(currentUser);
+        updateUserInterface(currentUser);
+        setupEmailVerificationGate(currentUser);
+        document.body.classList.add("auth-ready");
         return;
       }
 

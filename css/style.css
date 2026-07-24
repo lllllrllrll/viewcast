@@ -168,9 +168,16 @@ body.verification-locked {
 }
 
 .verification-modal-card {
+  position: relative;
   width: min(440px, 100%);
   padding: 30px;
   text-align: center;
+}
+
+.verification-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
 }
 
 .verification-modal-icon {
