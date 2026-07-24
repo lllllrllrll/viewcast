@@ -1,14 +1,102 @@
 rules_version = '2';
 
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: Firebase Authentication UID
+// Fields:
+//   - uid: string (required, immutable, matches document owner)
+//   - email: string (required, matches the verified Auth token)
+//   - displayName: string (required, 1-100 characters)
+//   - updatedAt: timestamp (required, set by the server)
+//   - lastSignInAt: timestamp (required)
+//   - createdAt: timestamp (optional, immutable after creation)
+//   - youtubeConnections: list (optional, at most 25 connections)
+//   - youtubeConnection: map (optional legacy connection)
+//
+// All other paths are denied by default.
+// ===============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
-      allow create: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.uid == request.auth.uid;
+    function isAuthenticated() {
+      return request.auth != null;
+    }
 
-      allow read, update, delete: if request.auth != null
-        && request.auth.uid == userId;
+    function isVerifiedOwner(userId) {
+      return isAuthenticated()
+        && request.auth.uid == userId
+        && request.auth.token.email_verified == true;
+    }
+
+    function uidUnchanged(userId) {
+      return request.resource.data.uid == userId
+        && request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasValidOptionalConnectionFields(data) {
+      return (!('youtubeConnections' in data)
+          || (data.youtubeConnections is list
+            && data.youtubeConnections.size() <= 25))
+        && (!('youtubeConnection' in data)
+          || data.youtubeConnection is map);
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasOnly([
+          'uid',
+          'email',
+          'displayName',
+          'updatedAt',
+          'lastSignInAt',
+          'createdAt',
+          'youtubeConnections',
+          'youtubeConnection'
+        ])
+        && data.keys().hasAll([
+          'uid',
+          'email',
+          'displayName',
+          'updatedAt',
+          'lastSignInAt'
+        ])
+        && data.uid is string
+        && data.uid.size() > 0
+        && data.uid.size() <= 128
+        && data.email is string
+        && data.email == request.auth.token.email
+        && data.email.size() >= 3
+        && data.email.size() <= 254
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 100
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time
+        && data.lastSignInAt is timestamp
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && hasValidOptionalConnectionFields(data);
+    }
+
+    match /users/{userId} {
+      allow create: if isVerifiedOwner(userId)
+        && uidUnchanged(userId)
+        && isValidUser(request.resource.data);
+
+      allow read: if isVerifiedOwner(userId);
+
+      allow update: if isVerifiedOwner(userId)
+        && uidNotModified()
+        && isValidUser(request.resource.data)
+        && (!('createdAt' in resource.data)
+          || request.resource.data.createdAt == resource.data.createdAt);
+
+      allow delete: if isVerifiedOwner(userId);
     }
   }
 }

@@ -18,6 +18,11 @@
           </div>
         </header>
 
+        <section class="verification-gate-notice" id="verificationGateNotice" role="alert" hidden>
+          <strong>Verify your email to unlock ViewCast</strong>
+          <p>Your account is active, but dashboard features remain unavailable until you verify your email address.</p>
+        </section>
+
         <section class="dashboard-grid">
           <article class="panel full showcase-panel">
             <div class="panel-head">
@@ -151,6 +156,7 @@
 
       const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
       const auth = getAuth(app);
+      const verificationReturnKey = "viewcastVerificationReturn";
       let currentUser = null;
       let usesPasswordProvider = false;
       let verificationRequestInProgress = false;
@@ -166,17 +172,22 @@
           "auth/email-already-in-use": "That email address is already in use.",
           "auth/invalid-email": "Enter a valid email address.",
           "auth/invalid-credential": "The current password is incorrect.",
+          "auth/invalid-continue-uri": "The verification return address is invalid.",
+          "auth/missing-continue-uri": "Firebase is missing a verification return address.",
           "auth/requires-recent-login": "Please sign out, sign back in, and try again.",
           "auth/too-many-requests": "Too many verification emails were requested. Please wait and try again.",
+          "auth/unauthorized-continue-uri": "This site is not authorized to send verification emails. Add its hostname in Firebase Authentication settings.",
           "auth/weak-password": "Choose a password with at least six characters.",
           "auth/popup-closed-by-user": "The sign-in confirmation was closed."
         };
-        return messages[error?.code] || "The credential update could not be completed. Please try again.";
+        return messages[error?.code] ||
+          `Firebase could not complete the request${error?.code ? ` (${error.code})` : ""}. Please try again.`;
       }
 
       function renderEmailVerification(user) {
         const status = document.getElementById("emailVerificationStatus");
         const button = document.getElementById("sendVerificationEmail");
+        const gateNotice = document.getElementById("verificationGateNotice");
         const canVerify = Boolean(user?.email);
 
         if (user?.emailVerified) {
@@ -184,6 +195,7 @@
           status.dataset.verified = "true";
           button.hidden = true;
           button.disabled = true;
+          gateNotice.hidden = true;
           return;
         }
 
@@ -192,14 +204,24 @@
         button.hidden = !canVerify;
         button.disabled = !canVerify || verificationRequestInProgress;
         button.textContent = verificationRequestInProgress ? "Sending…" : "Send verification email";
+        gateNotice.hidden = !canVerify;
       }
 
       async function refreshEmailVerificationStatus() {
         if (!currentUser || verificationRequestInProgress) return;
+        const wasVerified = currentUser.emailVerified;
         try {
           await currentUser.reload();
           currentUser = auth.currentUser || currentUser;
           renderEmailVerification(currentUser);
+          if (!wasVerified && currentUser.emailVerified) {
+            const returnTo = sessionStorage.getItem(verificationReturnKey);
+            sessionStorage.removeItem(verificationReturnKey);
+            setCredentialStatus("Email verified. Your ViewCast features are now unlocked.", "success");
+            if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
+              window.location.replace(returnTo);
+            }
+          }
         } catch (error) {
           console.warn("Could not refresh email verification status.", error);
         }
@@ -276,11 +298,11 @@
         renderEmailVerification(currentUser);
         setCredentialStatus("Sending your verification email…", "info");
         try {
-          await sendEmailVerification(currentUser, {
-            url: window.location.href
-          });
+          // Firebase's hosted action handler verifies the address without relying
+          // on the current preview/deployment hostname being a valid continue URL.
+          await sendEmailVerification(currentUser);
           setCredentialStatus(
-            `Verification sent to ${currentUser.email}. Open the link in that email, then return here to see your updated status.`,
+            `Firebase accepted the request for ${currentUser.email}. Check your inbox and spam folder, then return here after opening the link.`,
             "success"
           );
         } catch (error) {

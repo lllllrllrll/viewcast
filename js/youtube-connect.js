@@ -302,10 +302,14 @@ if (connectButton && firebaseConfigured) {
   db = getFirestore(app);
 
   onAuthStateChanged(auth, async (user) => {
-    currentUser = user;
+    currentUser = user?.emailVerified ? user : null;
     if (!user) {
       saveConnections([]);
       setButton("Sign in to connect", true);
+      return;
+    }
+    if (!user.emailVerified) {
+      setButton("Verify email to connect", true);
       return;
     }
 

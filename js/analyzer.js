@@ -1107,14 +1107,14 @@ if (form && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   auth = getAuth(app);
   onAuthStateChanged(auth, (user) => {
-    currentUser = user;
+    currentUser = user?.emailVerified ? user : null;
     selectedVideoId = "";
     clearAnalyzerResults();
-    if (!user) {
+    if (!currentUser) {
       channelVideos = [];
       renderVideoLibrary([]);
-      setStatus("Sign in before analyzing a video.");
-      setLibraryStatus("Sign in and link a channel to load your videos.");
+      setStatus(user ? "Verify your email before analyzing a video." : "Sign in before analyzing a video.");
+      setLibraryStatus(user ? "Verify your email to unlock your video library." : "Sign in and link a channel to load your videos.");
       return;
     }
 

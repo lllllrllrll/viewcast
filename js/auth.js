@@ -27,8 +27,11 @@ import {
 
 const loginUrl = new URL("../login.html", import.meta.url);
 const dashboardUrl = new URL("../index.html", import.meta.url);
+const accountUrl = new URL("../pages/account.html", import.meta.url);
 const isLoginPage = document.body.dataset.publicPage === "login";
+const isAccountPage = window.location.pathname === accountUrl.pathname;
 const pendingProfileKey = "viewcastPendingProfile";
+const verificationReturnKey = "viewcastVerificationReturn";
 let authActionInProgress = false;
 
 const errorMessages = {
@@ -92,6 +95,18 @@ function loginUrlForCurrentPage() {
   const url = new URL(loginUrl.href);
   url.searchParams.set("returnTo", `${window.location.pathname}${window.location.search}`);
   return url.href;
+}
+
+function requiresEmailVerification(user) {
+  return Boolean(user?.email && !user.emailVerified);
+}
+
+function redirectToEmailVerification() {
+  const requestedUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  sessionStorage.setItem(verificationReturnKey, requestedUrl);
+  const verificationUrl = new URL(accountUrl.href);
+  verificationUrl.searchParams.set("verify", "required");
+  window.location.replace(verificationUrl.href);
 }
 
 function setFormBusy(isBusy) {
@@ -388,6 +403,12 @@ if (!firebaseConfigured) {
       }
 
       let currentUser = auth.currentUser || user;
+
+      if (requiresEmailVerification(currentUser) && !isAccountPage) {
+        redirectToEmailVerification();
+        return;
+      }
+
       const pendingDisplayName = sessionStorage.getItem("viewcastDisplayName");
       const pendingProfile = readPendingProfile(currentUser);
       const profileDisplayName = pendingProfile?.displayName || pendingDisplayName;

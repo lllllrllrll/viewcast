@@ -38,6 +38,7 @@ The app supports:
 
 - Email/password account creation
 - Optional email verification from the Account page
+- Dashboard feature access restricted until the account email is verified
 - Persistent email/password sign-in
 - Password reset emails
 - Protected dashboard pages

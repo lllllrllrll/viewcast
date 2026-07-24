@@ -1804,14 +1804,14 @@ if (form && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   auth = getAuth(app);
   onAuthStateChanged(auth, (user) => {
-    currentUser = user;
+    currentUser = user?.emailVerified ? user : null;
     selectedVideoId = "";
     clearAnalyzerResults();
-    if (!user) {
+    if (!currentUser) {
       channelVideos = [];
       renderVideoLibrary([]);
-      setStatus("Sign in before generating AI insights.");
-      setLibraryStatus("Sign in and link a channel to generate channel insights.");
+      setStatus(user ? "Verify your email before generating AI insights." : "Sign in before generating AI insights.");
+      setLibraryStatus(user ? "Verify your email to unlock channel insights." : "Sign in and link a channel to generate channel insights.");
       return;
     }
 

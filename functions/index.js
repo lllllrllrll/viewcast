@@ -37,6 +37,16 @@ exports.generateGeminiContent = onCall(
             "The function must be called while authenticated.",
         );
       }
+      if (request.auth.token.email_verified !== true) {
+        logger.warn(
+            "Unverified account attempted to use generateGeminiContent",
+            {uid: request.auth.uid},
+        );
+        throw new HttpsError(
+            "permission-denied",
+            "Verify your email address before using ViewCast AI features.",
+        );
+      }
 
       const {
         contents,
