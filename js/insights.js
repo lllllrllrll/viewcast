@@ -1821,23 +1821,34 @@ clearAnalyzerResults();
 if (form && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   auth = getAuth(app);
-  onAuthStateChanged(auth, (user) => {
-    currentUser = user?.emailVerified ? user : null;
+  onAuthStateChanged(auth, async (user) => {
+    let refreshedUser = user;
+    if (user) {
+      try {
+        await user.reload();
+        refreshedUser = auth.currentUser || user;
+      } catch (error) {
+        console.warn("Could not refresh email verification status for AI Insights.", error);
+      }
+    }
+
+    currentUser = refreshedUser?.emailVerified ? refreshedUser : null;
     selectedVideoId = "";
     clearAnalyzerResults();
-    if (!currentUser) {
-      channelVideos = [];
-      renderVideoLibrary([]);
-      setStatus(user ? "Verify your email before generating AI insights." : "Sign in before generating AI insights.");
-      setLibraryStatus(user ? "Verify your email to unlock channel insights." : "Sign in and link a channel to generate channel insights.");
-      return;
-    }
 
     if (!hasLinkedChannel()) {
       showChannelLinkPrompt(true);
       return;
     }
     showChannelLinkPrompt(false);
+
+    if (!currentUser) {
+      channelVideos = [];
+      renderVideoLibrary([]);
+      setStatus(refreshedUser ? "Verify your email before generating AI insights." : "Sign in before generating AI insights.");
+      setLibraryStatus(refreshedUser ? "Verify your email to unlock channel insights." : "Sign in and link a channel to generate channel insights.");
+      return;
+    }
 
     const cachedVideos = readCachedVideos();
     if (cachedVideos.length) {
