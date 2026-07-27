@@ -32,7 +32,7 @@ const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
-const insightsCacheVersion = 2;
+const insightsCacheVersion = 3;
 const insightsCacheMaxAge = 15 * 60 * 1000;
 
 let currentUser = null;
@@ -923,29 +923,40 @@ function topicSignals(videos, trendVideos = [], {preferTrend = false} = {}) {
 function readableTrendQuery(query = "") {
   return String(query || "")
     .replace(/\b(20\d{2}|19\d{2})\b/g, "")
+    .replace(/\b(youtube|trending|trend|trends|viral|current|latest)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
     .slice(0, 40);
 }
 
-function currentTrendSignal(videos, trendVideos = []) {
-  const sourceTopics = topVideos(videos, 16).flatMap((video) => titleTopicPhrases(video.snippet?.title));
-  const nicheTrendVideos = trendVideos.filter((video) => video.trendSource === "Niche YouTube trend search");
-  const relevantTrendVideos = nicheTrendVideos.length ? nicheTrendVideos : trendVideos;
-  const trendTopics = scoredTopicsFromVideos(topVideos(relevantTrendVideos, 20), 2)
-    .map(([topic]) => topic)
-    .filter((topic) => !stronglyOverlapsSourceTopic(topic, sourceTopics));
-  if (trendTopics.length) return trendTopics[0];
+function trendReferenceText(trendVideos = []) {
+  return [
+    ...(trendVideos.trendQueries || []),
+    ...trendVideos
+      .filter((video) => video.trendSource === "Niche YouTube trend search")
+      .slice(0, 20)
+      .map((video) => video.snippet?.title || "")
+  ].join(" ");
+}
 
+function isGroundedTrendLabel(value, trendVideos = []) {
+  const labelWords = importantWords(value);
+  if (labelWords.length < 2 || labelWords.length > 6) return false;
+  const referenceWords = new Set(importantWords(trendReferenceText(trendVideos)));
+  const matchingWords = labelWords.filter((word) => referenceWords.has(word)).length;
+  return matchingWords >= Math.min(2, labelWords.length);
+}
+
+function currentTrendSignal(videos, trendVideos = []) {
   const query = (trendVideos.trendQueries || [])
     .map(readableTrendQuery)
     .find(Boolean);
-  if (query && !stronglyOverlapsSourceTopic(query, sourceTopics)) return query;
+  if (query) return query;
   const laneLabel = trendVideos.channelLane?.specificCategory
     || trendVideos.channelLane?.primaryCategory
     || trendVideos.channelLane?.label;
-  return laneLabel ? `${laneLabel} trends` : "Current creator trends";
+  return laneLabel ? `${laneLabel} on YouTube` : "Current YouTube trends";
 }
 
 function isOwnUploadRestatement(value, videos = []) {
@@ -1440,9 +1451,12 @@ function normalizeGeminiInsights(value, summary) {
   const cards = value.cards || {};
   const fallbackIdeas = summary.topicIdeas || [];
   const fallbackSuggestions = summary.nextVideoSuggestions || fallbackIdeas;
-  // Keep the visible trend grounded in the niche-targeted YouTube search results.
-  // Gemini can explain the signal, but it must not replace it with an invented one.
-  const trendValue = summary.currentTrend;
+  // Accept Gemini's readable label only when its words occur in the actual
+  // niche search queries/results. Otherwise show the clean niche query.
+  const generatedTrendValue = String(cards.topTopicSignal?.value || "").trim();
+  const trendValue = isGroundedTrendLabel(generatedTrendValue, summary.trendVideos)
+    ? generatedTrendValue
+    : summary.currentTrend;
   const trendDetail = `${summary.channelLane?.specificCategory
     || summary.channelLane?.primaryCategory
     || summary.channelLane?.label
@@ -1490,7 +1504,8 @@ async function buildGeminiPageInsights(summary, videos) {
     "Return exactly 3 nextVideoSuggestions and exactly 3 recommendations. Every item needs a non-empty title, body, label, and tone.",
     "nextVideoSuggestions must be specific new video concepts tied to a high/low performer pattern and an external trend signal.",
     "recommendations must be 3 important strategic tips the creator can act on now, such as packaging, upload timing, format length, niche/trend fit, Shorts strategy, or weak-angle avoidance.",
-    "topTopicSignal must use only the supplied external YouTube trend references and must not restate this channel's own titles.",
+    "topTopicSignal.value must be a short, recognizable trend name (2-6 words), not a sentence or a fragment copied from a video title.",
+    "Every word in topTopicSignal.value must be supported by the supplied external YouTube trend references or trend queries. Do not invent a trend.",
     "JSON shape:",
     `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
