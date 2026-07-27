@@ -17,6 +17,9 @@ const videoLibrary = document.getElementById("videoLibrary");
 const videoLibraryStatus = document.getElementById("videoLibraryStatus");
 const refreshVideosButton = document.getElementById("refreshVideos");
 const refreshInsightsPageButton = document.getElementById("refreshInsightsPage");
+const insightsHeaderActions = document.getElementById("insightsHeaderActions");
+const insightRefreshEmpty = document.getElementById("insightRefreshEmpty");
+const insightRefreshEmptyContent = document.getElementById("insightRefreshEmptyContent");
 const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
 const insightErrorPanel = document.getElementById("insightErrorPanel");
@@ -29,6 +32,7 @@ const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
+const insightsCacheVersion = 2;
 const insightsCacheMaxAge = 15 * 60 * 1000;
 
 let currentUser = null;
@@ -205,6 +209,7 @@ function insightsStorageKey(focusVideoId = "") {
 
 function insightsFingerprint(videos, focusVideoId = "") {
   return JSON.stringify({
+    version: insightsCacheVersion,
     focusVideoId,
     videos: videos.slice(0, 40).map((video) => ({
       id: video.id,
@@ -672,8 +677,13 @@ async function fetchGeminiTrendVideos(accessToken, trendPlan) {
   );
   return {
     lane: trendPlan.lane,
-    videos: results.flatMap((result) => result.status === "fulfilled" ? result.value : [])
-      .map((video) => ({...video, trendSource: "Gemini trend search"}))
+    videos: results.flatMap((result, index) => result.status === "fulfilled"
+      ? result.value.map((video) => ({
+        ...video,
+        trendSource: "Niche YouTube trend search",
+        trendQuery: trendPlan.queries[index]
+      }))
+      : [])
   };
 }
 
@@ -707,13 +717,18 @@ async function fetchSimilarTrendVideos(accessToken, videos) {
 
 async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) {
   const lane = detectChannelLane(videos);
-  const [popularResult, similarResult, laneResult] = await Promise.allSettled([
+  const [nicheResult, popularResult, similarResult, laneResult] = await Promise.allSettled([
+    fetchGeminiTrendVideos(accessToken, trendPlan),
     fetchTrendingVideos(accessToken, videos),
     fetchSimilarTrendVideos(accessToken, videos),
     fetchLaneTrendVideos(accessToken, videos)
   ]);
+  const nicheVideos = nicheResult.status === "fulfilled" ? nicheResult.value.videos : [];
   const merged = [
-    ...(laneResult.status === "fulfilled" ? laneResult.value.videos : []),
+    ...nicheVideos,
+    // The deterministic lane search is the fallback when Gemini's niche searches
+    // return nothing, rather than a competing source that can dilute the niche.
+    ...(!nicheVideos.length && laneResult.status === "fulfilled" ? laneResult.value.videos : []),
     ...(similarResult.status === "fulfilled" ? similarResult.value : []),
     ...(popularResult.status === "fulfilled" ? popularResult.value : [])
   ];
@@ -723,7 +738,9 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     seen.add(video.id);
     return true;
   });
-  trendVideos.channelLane = trendPlan?.lane || (laneResult.status === "fulfilled" ? laneResult.value.lane : lane);
+  trendVideos.channelLane = trendPlan?.lane
+    || (nicheResult.status === "fulfilled" ? nicheResult.value.lane : null)
+    || (laneResult.status === "fulfilled" ? laneResult.value.lane : lane);
   trendVideos.trendQueries = trendPlan?.queries || trendQueriesForLane(trendVideos.channelLane);
   return trendVideos;
 }
@@ -914,7 +931,9 @@ function readableTrendQuery(query = "") {
 
 function currentTrendSignal(videos, trendVideos = []) {
   const sourceTopics = topVideos(videos, 16).flatMap((video) => titleTopicPhrases(video.snippet?.title));
-  const trendTopics = scoredTopicsFromVideos(topVideos(trendVideos, 20), 2)
+  const nicheTrendVideos = trendVideos.filter((video) => video.trendSource === "Niche YouTube trend search");
+  const relevantTrendVideos = nicheTrendVideos.length ? nicheTrendVideos : trendVideos;
+  const trendTopics = scoredTopicsFromVideos(topVideos(relevantTrendVideos, 20), 2)
     .map(([topic]) => topic)
     .filter((topic) => !stronglyOverlapsSourceTopic(topic, sourceTopics));
   if (trendTopics.length) return trendTopics[0];
@@ -1117,6 +1136,7 @@ function showMissingGeminiKeyMessage() {
   setAnalyzerLoading(false);
   setAnalyzerResultsVisible(false);
   if (insightErrorPanel) insightErrorPanel.hidden = false;
+  setRefreshButtonPlacement(true, insightErrorPanel?.querySelector(".insight-error-content"));
   setStatus("An error has occurred. AI Insights could not be generated right now.");
   setLibraryStatus("AI Insights could not be generated right now.");
 }
@@ -1125,6 +1145,7 @@ function showInsightGenerationError() {
   setAnalyzerLoading(false);
   setAnalyzerResultsVisible(false);
   if (insightErrorPanel) insightErrorPanel.hidden = false;
+  setRefreshButtonPlacement(true, insightErrorPanel?.querySelector(".insight-error-content"));
   setStatus("An error has occurred. AI Insights could not be generated right now.");
   setLibraryStatus("AI Insights could not be generated right now.");
 }
@@ -1419,12 +1440,13 @@ function normalizeGeminiInsights(value, summary) {
   const cards = value.cards || {};
   const fallbackIdeas = summary.topicIdeas || [];
   const fallbackSuggestions = summary.nextVideoSuggestions || fallbackIdeas;
-  const trendValue = isOwnUploadRestatement(cards.topTopicSignal?.value, summary.recent)
-    ? summary.currentTrend
-    : cards.topTopicSignal?.value;
-  const trendDetail = isOwnUploadRestatement(cards.topTopicSignal?.detail, summary.recent)
-    ? summary.channelLane?.label
-    : cards.topTopicSignal?.detail;
+  // Keep the visible trend grounded in the niche-targeted YouTube search results.
+  // Gemini can explain the signal, but it must not replace it with an invented one.
+  const trendValue = summary.currentTrend;
+  const trendDetail = `${summary.channelLane?.specificCategory
+    || summary.channelLane?.primaryCategory
+    || summary.channelLane?.label
+    || "Niche"} on YouTube`;
   const recommendations = filledInsightItems(value.recommendations, fallbackIdeas, normalizeRecommendation);
   const nextVideoSuggestions = filledInsightItems(value.nextVideoSuggestions, fallbackSuggestions, normalizeConceptSuggestion);
 
@@ -1468,7 +1490,7 @@ async function buildGeminiPageInsights(summary, videos) {
     "Return exactly 3 nextVideoSuggestions and exactly 3 recommendations. Every item needs a non-empty title, body, label, and tone.",
     "nextVideoSuggestions must be specific new video concepts tied to a high/low performer pattern and an external trend signal.",
     "recommendations must be 3 important strategic tips the creator can act on now, such as packaging, upload timing, format length, niche/trend fit, Shorts strategy, or weak-angle avoidance.",
-    "topTopicSignal must summarize external YouTube trends, not restate this channel's own titles.",
+    "topTopicSignal must use only the supplied external YouTube trend references and must not restate this channel's own titles.",
     "JSON shape:",
     `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
@@ -1535,10 +1557,23 @@ async function buildGeminiChatReply(question, summary) {
 
 function setAnalyzerLoading(isLoading) {
   if (analyzerLoading) analyzerLoading.hidden = !isLoading;
+  if (isLoading) setRefreshButtonPlacement(false);
 }
 
 function setAnalyzerResultsVisible(isVisible) {
   analyzerDashboard?.classList.toggle("analyzer-results-hidden", !isVisible);
+  setRefreshButtonPlacement(!isVisible);
+}
+
+function setRefreshButtonPlacement(centered, target = insightRefreshEmptyContent) {
+  if (!refreshInsightsPageButton) return;
+  const destination = centered ? target : insightsHeaderActions;
+  if (destination && refreshInsightsPageButton.parentElement !== destination) {
+    destination.append(refreshInsightsPageButton);
+  }
+  if (insightRefreshEmpty) {
+    insightRefreshEmpty.hidden = !centered || destination !== insightRefreshEmptyContent;
+  }
 }
 
 function hasLinkedChannel() {
@@ -1555,6 +1590,7 @@ function showChannelLinkPrompt(show) {
   if (show) {
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(false);
+    setRefreshButtonPlacement(false);
   }
 }
 

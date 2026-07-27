@@ -16,7 +16,7 @@
             <h2>AI Insights</h2>
             <p>Get channel-level recommendations for upload timing, format length, and topic ideas based on your uploads and current YouTube trend signals.</p>
           </div>
-          <div class="actions">
+          <div class="actions" id="insightsHeaderActions">
             <button class="primary-button refresh-insights-button" id="refreshInsightsPage" type="button">
               <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path></svg>
               <span>Refresh Page</span>
@@ -27,6 +27,10 @@
         </header>
 
         <section class="dashboard-grid analyzer-results-hidden" id="analyzerDashboard">
+          <article class="panel full insight-refresh-empty" id="insightRefreshEmpty">
+            <div class="insight-refresh-empty-content" id="insightRefreshEmptyContent"></div>
+          </article>
+
           <article class="panel full insight-channel-empty" id="insightChannelEmpty" hidden>
             <div class="insight-channel-empty-content">
               <div class="insight-channel-empty-icon" aria-hidden="true">
@@ -157,6 +161,6 @@
     <script src="../components/sidebar.js"></script>
     <script src="../components/plan-modal.js"></script>
     <script src="../js/script.js?v=2"></script>
-    <script type="module" src="../js/insights.js?v=21"></script>
+    <script type="module" src="../js/insights.js?v=22"></script>
   </body>
 </html>

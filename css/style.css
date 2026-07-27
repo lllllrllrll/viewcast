@@ -654,6 +654,11 @@ body.settings-dark .plan-indicator {
   background: rgba(208, 77, 103, 0.08);
 }
 
+.account-delete-link {
+  width: 100%;
+  text-decoration: none;
+}
+
 .primary-button:disabled {
   cursor: not-allowed;
   opacity: 0.56;
@@ -972,6 +977,21 @@ body.settings-dark .plan-indicator {
 .insight-error-content code {
   color: var(--ink);
   font-weight: 800;
+}
+
+.insight-refresh-empty[hidden] {
+  display: none;
+}
+
+.insight-refresh-empty {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+}
+
+.insight-refresh-empty-content {
+  display: grid;
+  place-items: center;
 }
 
 .insight-channel-empty[hidden] {
@@ -1345,6 +1365,74 @@ body.settings-dark .plan-indicator {
   color: #176448;
   background: #edf9f3;
   font-size: 13px;
+}
+
+.account-danger-zone {
+  border-color: rgba(208, 77, 103, 0.3);
+}
+
+.account-danger-zone .panel-head {
+  align-items: center;
+}
+
+.delete-account-modal-card {
+  width: min(520px, 100%);
+}
+
+.delete-account-form {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+
+.delete-account-form > p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.delete-account-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.delete-account-form input {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.delete-account-status {
+  min-height: 20px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.delete-account-status[data-type="success"] { color: var(--green); }
+.delete-account-status[data-type="error"] { color: var(--rose); }
+
+.delete-account-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+@media (max-width: 680px) {
+  .account-danger-zone .panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .delete-account-actions {
+    flex-direction: column-reverse;
+  }
 }
 
 .account-credential-list {

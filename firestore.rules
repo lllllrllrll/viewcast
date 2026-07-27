@@ -96,7 +96,8 @@ service cloud.firestore {
         && (!('createdAt' in resource.data)
           || request.resource.data.createdAt == resource.data.createdAt);
 
-      allow delete: if isVerifiedOwner(userId);
+      // Account deletion remains available before email verification.
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
     }
   }
 }

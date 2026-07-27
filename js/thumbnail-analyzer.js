@@ -260,6 +260,7 @@ form.addEventListener("submit", async (event) => {
 const comparisonForm = document.querySelector("#comparisonForm");
 const comparisonButton = document.querySelector("#compareThumbnails");
 const comparisonStatus = document.querySelector("#comparisonStatus");
+const comparisonTitle = document.querySelector("#comparisonTitle");
 
 function setComparisonStatus(message, type = "") {
   comparisonStatus.textContent = message;
@@ -267,8 +268,15 @@ function setComparisonStatus(message, type = "") {
 }
 
 function updateComparisonButton() {
-  comparisonButton.disabled = !(comparisonFiles.v1 && comparisonFiles.v2);
+  comparisonButton.disabled = !(comparisonFiles.v1 && comparisonFiles.v2 && comparisonTitle.value.trim());
 }
+
+comparisonTitle.addEventListener("input", () => {
+  updateComparisonButton();
+  if (comparisonFiles.v1 && comparisonFiles.v2) {
+    setComparisonStatus(comparisonTitle.value.trim() ? "Ready to compare." : "Enter the video title to continue.");
+  }
+});
 
 function comparisonSlotElements(slot) {
   const card = document.querySelector(`[data-comparison-slot="${slot}"]`);
@@ -317,7 +325,11 @@ function selectComparisonFile(slot, file) {
   elements.preview.hidden = false;
   elements.dropzone.hidden = true;
   updateComparisonButton();
-  setComparisonStatus(comparisonFiles.v1 && comparisonFiles.v2 ? "Ready to compare." : "Add the other version to continue.");
+  setComparisonStatus(
+    comparisonFiles.v1 && comparisonFiles.v2
+      ? comparisonTitle.value.trim() ? "Ready to compare." : "Enter the video title to continue."
+      : "Add the other version to continue."
+  );
 }
 
 ["v1", "v2"].forEach((slot) => {
@@ -345,8 +357,10 @@ function renderComparison(analysis) {
   const winner = String(analysis.winner || "No clear winner");
   document.querySelector("#comparisonWinner").textContent = winner;
   document.querySelector("#comparisonSummary").textContent = String(analysis.summary || "Comparison complete.");
-  document.querySelector("#comparisonScoreV1").textContent = Math.max(0, Math.min(100, Math.round(Number(analysis.version1Score) || 0)));
-  document.querySelector("#comparisonScoreV2").textContent = Math.max(0, Math.min(100, Math.round(Number(analysis.version2Score) || 0)));
+  const version1Score = Math.max(0, Math.min(10, Number(analysis.version1Score) || 0));
+  const version2Score = Math.max(0, Math.min(10, Number(analysis.version2Score) || 0));
+  document.querySelector("#comparisonScoreV1").textContent = Number(version1Score.toFixed(1));
+  document.querySelector("#comparisonScoreV2").textContent = Number(version2Score.toFixed(1));
   const normalizedWinner = winner.toLowerCase();
   document.querySelector("#comparisonCardV1").classList.toggle("winner", normalizedWinner.includes("version 1") || normalizedWinner.includes("tie"));
   document.querySelector("#comparisonCardV2").classList.toggle("winner", normalizedWinner.includes("version 2") || normalizedWinner.includes("tie"));
@@ -371,15 +385,15 @@ comparisonForm.addEventListener("submit", async (event) => {
       fileToBase64(comparisonFiles.v1),
       fileToBase64(comparisonFiles.v2)
     ]);
-    const userContext = document.querySelector("#comparisonContext").value.trim() || "No additional video context was provided.";
+    const videoTitle = comparisonTitle.value.trim();
     const response = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist. Compare the two labeled images objectively and return only valid JSON, without markdown.",
       contents: [{role: "user", parts: [
-        {text: `Compare two thumbnail versions for likely click performance, visual hierarchy, mobile readability, emotional pull, curiosity, clutter, and audience fit. Video context: ${userContext}\nThe next image is Version 1.`},
+        {text: `Compare two thumbnail versions for the video titled "${videoTitle}". Score how well each thumbnail supports the title and its likely click performance, visual hierarchy, mobile readability, emotional pull, curiosity, clarity, and clutter. Scores must be from 0 to 10 and may use one decimal place. The next image is Version 1.`},
         {inlineData: {data: version1Data, mimeType: imageMimeType(comparisonFiles.v1)}},
         {text: "The next image is Version 2."},
         {inlineData: {data: version2Data, mimeType: imageMimeType(comparisonFiles.v2)}},
-        {text: 'Return this exact JSON shape: {"winner":"Version 1, Version 2, or Tie","version1Score":0,"version2Score":0,"summary":"2-3 sentence comparison","winnerReasons":["reason","reason","reason"],"feedback":["specific Version 1 feedback","specific Version 2 feedback","shared lesson"],"recommendation":"best combined redesign direction"}'}
+        {text: 'Return this exact JSON shape: {"winner":"Version 1, Version 2, or Tie","version1Score":0.0,"version2Score":0.0,"summary":"2-3 sentence comparison tied to the title","winnerReasons":["reason","reason","reason"],"feedback":["specific Version 1 feedback","specific Version 2 feedback","shared lesson"],"recommendation":"best combined redesign direction for this title"}'}
       ]}],
       generationConfig: {temperature: 0.3, maxOutputTokens: 1400, responseMimeType: "application/json"}
     });
@@ -389,7 +403,7 @@ comparisonForm.addEventListener("submit", async (event) => {
     console.error("Thumbnail comparison failed.", error);
     setComparisonStatus("Gemini could not compare these images. Please try again.", "error");
   } finally {
-    comparisonButton.disabled = false;
+    updateComparisonButton();
     comparisonButton.classList.remove("is-loading");
   }
 });

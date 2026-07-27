@@ -1,3 +1,23 @@
+import {
+  getApps,
+  initializeApp
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+import {
+  deleteUser,
+  EmailAuthProvider,
+  getAuth,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
+import {
+  deleteDoc,
+  doc,
+  getFirestore
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
+import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
+
 (function () {
   const defaults = {
     darkMode: "off",
@@ -41,6 +61,16 @@
     videos: document.querySelector("[data-usage-bar='videos']"),
     channels: document.querySelector("[data-usage-bar='channels']")
   };
+  const deleteModal = document.getElementById("deleteAccountModal");
+  const deleteForm = document.getElementById("deleteAccountForm");
+  const deletePasswordField = document.getElementById("deletePasswordField");
+  const deletePassword = document.getElementById("deleteAccountPassword");
+  const deleteConfirmation = document.getElementById("deleteAccountConfirmation");
+  const deleteStatus = document.getElementById("deleteAccountStatus");
+  const confirmDeleteButton = document.getElementById("confirmDeleteAccount");
+  let shouldOpenDeleteAccount = new URLSearchParams(window.location.search).get("delete") === "1";
+  let accountUser = null;
+  let usesPasswordProvider = false;
 
   function readSetting(key) {
     return localStorage.getItem(`viewcast:${key}`) || defaults[key];
@@ -142,6 +172,65 @@
     status.hidden = false;
   }
 
+  function setDeleteStatus(message, type = "") {
+    if (!deleteStatus) return;
+    deleteStatus.textContent = message;
+    deleteStatus.dataset.type = type;
+  }
+
+  function closeDeleteModal() {
+    if (!deleteModal) return;
+    deleteModal.hidden = true;
+    deleteForm?.reset();
+    setDeleteStatus("");
+    document.body.classList.remove("verification-locked");
+  }
+
+  function openDeleteModal() {
+    if (!deleteModal || !accountUser) return;
+    deletePasswordField.hidden = !usesPasswordProvider;
+    deletePassword.required = usesPasswordProvider;
+    deleteModal.hidden = false;
+    document.body.classList.add("verification-locked");
+    deleteConfirmation.focus();
+  }
+
+  function clearLocalAccountData() {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith("viewcast"))
+      .forEach((key) => localStorage.removeItem(key));
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith("viewcast"))
+      .forEach((key) => sessionStorage.removeItem(key));
+  }
+
+  async function reauthenticateForDeletion(user) {
+    if (usesPasswordProvider) {
+      const credential = EmailAuthProvider.credential(user.email, deletePassword.value);
+      await reauthenticateWithCredential(user, credential);
+      return;
+    }
+    if (user.providerData.some((provider) => provider.providerId === "google.com")) {
+      await reauthenticateWithPopup(user, new GoogleAuthProvider());
+      return;
+    }
+    const error = new Error("Unsupported sign-in provider.");
+    error.code = "auth/operation-not-supported-in-this-environment";
+    throw error;
+  }
+
+  function deleteErrorMessage(error) {
+    const messages = {
+      "auth/invalid-credential": "The current password is incorrect.",
+      "auth/missing-password": "Enter your current password.",
+      "auth/popup-closed-by-user": "The sign-in confirmation was closed.",
+      "auth/requires-recent-login": "Please sign out, sign back in, and try again.",
+      "auth/too-many-requests": "Too many attempts. Please wait and try again.",
+      "permission-denied": "ViewCast could not delete your stored profile. Please try again."
+    };
+    return messages[error?.code] || "Your account could not be deleted. Please try again.";
+  }
+
   function updateToggle(group, value) {
     group.querySelectorAll("button").forEach((button) => {
       const isActive = button.dataset.value === value;
@@ -198,6 +287,61 @@
       window.showPlanModal();
     }
   });
+
+  document.getElementById("openDeleteAccount")?.addEventListener("click", openDeleteModal);
+  document.getElementById("closeDeleteAccount")?.addEventListener("click", closeDeleteModal);
+  document.getElementById("cancelDeleteAccount")?.addEventListener("click", closeDeleteModal);
+  deleteModal?.addEventListener("click", (event) => {
+    if (event.target === deleteModal) closeDeleteModal();
+  });
+
+  deleteForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!accountUser) {
+      setDeleteStatus("Your signed-in account could not be loaded.", "error");
+      return;
+    }
+    if (deleteConfirmation.value.trim() !== "DELETE") {
+      setDeleteStatus("Type DELETE exactly to confirm account deletion.", "error");
+      deleteConfirmation.focus();
+      return;
+    }
+
+    confirmDeleteButton.disabled = true;
+    setDeleteStatus("Confirming your identity…", "info");
+    try {
+      const user = accountUser;
+      await reauthenticateForDeletion(user);
+      setDeleteStatus("Deleting your saved ViewCast data…", "info");
+      await deleteDoc(doc(getFirestore(), "users", user.uid));
+      setDeleteStatus("Deleting your account…", "info");
+      await deleteUser(user);
+      clearLocalAccountData();
+      window.location.replace("../login.html?deleted=1");
+    } catch (error) {
+      console.error("Account deletion failed.", error);
+      setDeleteStatus(deleteErrorMessage(error), "error");
+      confirmDeleteButton.disabled = false;
+    }
+  });
+
+  if (firebaseConfigured) {
+    const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    onAuthStateChanged(auth, (user) => {
+      accountUser = user;
+      usesPasswordProvider = Boolean(
+        user?.providerData.some((provider) => provider.providerId === "password")
+      );
+      if (user && shouldOpenDeleteAccount) {
+        shouldOpenDeleteAccount = false;
+        openDeleteModal();
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("delete");
+        window.history.replaceState({}, "", cleanUrl);
+      }
+    });
+  }
 
   // Check for auto-upgrade prompt
   const urlParams = new URLSearchParams(window.location.search);

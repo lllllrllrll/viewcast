@@ -205,7 +205,7 @@ function setupEmailVerificationGate(user) {
 
   function interceptFeatureAttempt(event) {
     const target = event.target instanceof Element ? event.target : null;
-    if (!target || target.closest("#emailVerificationGate, .account-signout, a")) return;
+    if (!target || target.closest("#emailVerificationGate, #deleteAccountModal, .account-signout, .account-destructive-action, a")) return;
 
     const isFeatureAttempt =
       event.type === "submit" ||
@@ -497,6 +497,9 @@ if (!firebaseConfigured) {
       setupValidationFeedback();
       setupLoginForm();
       warnIfUnauthorizedHost();
+      if (new URLSearchParams(window.location.search).get("deleted") === "1") {
+        showMessage("Your ViewCast account was permanently deleted.", "success");
+      }
     }
 
     onAuthStateChanged(auth, async (user) => {

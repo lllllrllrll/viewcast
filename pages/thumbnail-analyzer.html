@@ -137,8 +137,8 @@
             </div>
 
             <article class="panel comparison-controls">
-              <label class="thumbnail-context-label" for="comparisonContext">Video context <span>Optional</span></label>
-              <textarea id="comparisonContext" class="thumbnail-context" rows="2" maxlength="500" placeholder="Add the video topic, title, or target audience for a more useful comparison."></textarea>
+              <label class="thumbnail-context-label" for="comparisonTitle">Video title <span>Required</span></label>
+              <input id="comparisonTitle" class="thumbnail-context" type="text" maxlength="150" autocomplete="off" placeholder="Enter the video title" required />
               <p class="thumbnail-status" id="comparisonStatus" role="status" aria-live="polite"></p>
               <button class="primary-button thumbnail-analyze-button" id="compareThumbnails" type="submit" disabled>Compare with Gemini</button>
             </article>
@@ -146,8 +146,8 @@
 
           <article class="panel comparison-output" id="comparisonOutput" hidden aria-live="polite">
             <div class="comparison-score-grid">
-              <section id="comparisonCardV1"><span>Version 1</span><strong id="comparisonScoreV1">--</strong><small>/ 100</small></section>
-              <section id="comparisonCardV2"><span>Version 2</span><strong id="comparisonScoreV2">--</strong><small>/ 100</small></section>
+              <section id="comparisonCardV1"><span>Version 1</span><strong id="comparisonScoreV1">--</strong><small>/ 10</small></section>
+              <section id="comparisonCardV2"><span>Version 2</span><strong id="comparisonScoreV2">--</strong><small>/ 10</small></section>
             </div>
             <div class="comparison-winner"><span>Recommended winner</span><h3 id="comparisonWinner"></h3><p id="comparisonSummary"></p></div>
             <div class="thumbnail-analysis-grid">
