@@ -151,21 +151,26 @@ function renderChannelContext(value = {}) {
 
 async function loadChannelContext(user) {
   const key = channelContextStorageKey(user);
+  let localValue = {};
+  const hasLocalValue = Boolean(localStorage.getItem(key));
+  try {
+    localValue = JSON.parse(localStorage.getItem(key) || "{}");
+    renderChannelContext(localValue);
+  } catch {
+    localStorage.removeItem(key);
+  }
+
   try {
     const snapshot = await getDoc(doc(db, "users", user.uid));
     const data = snapshot.exists() ? snapshot.data() : {};
     const value = {
-      channelTopic: String(data.channelTopic || "").slice(0, 120),
-      channelContext: String(data.channelContext || "").slice(0, 1000)
+      channelTopic: String(hasLocalValue ? (localValue.channelTopic || "") : (data.channelTopic || "")).slice(0, 120),
+      channelContext: String(hasLocalValue ? (localValue.channelContext || "") : (data.channelContext || "")).slice(0, 1000)
     };
     cacheChannelContext(user, value);
     renderChannelContext(value);
   } catch (error) {
-    try {
-      renderChannelContext(JSON.parse(localStorage.getItem(key) || "{}"));
-    } catch {
-      renderChannelContext();
-    }
+    renderChannelContext(localValue);
     console.warn("Could not load saved channel context.", error);
   }
 }
@@ -184,6 +189,9 @@ async function saveChannelContext(event) {
     channelTopic: channelTopicInput?.value.trim().slice(0, 120) || "",
     channelContext: channelContextInput?.value.trim().slice(0, 1000) || ""
   };
+  cacheChannelContext(currentUser, value);
+  clearCachedInsightsForUser(currentUser);
+  renderChannelContext(value);
   saveChannelContextButton.disabled = true;
   channelContextStatus.textContent = "Saving...";
   try {
@@ -191,13 +199,10 @@ async function saveChannelContext(event) {
       ...value,
       updatedAt: serverTimestamp()
     }, {merge: true});
-    cacheChannelContext(currentUser, value);
-    clearCachedInsightsForUser(currentUser);
-    renderChannelContext(value);
     channelContextStatus.textContent = "Saved. New AI insights will use this context.";
   } catch (error) {
     console.error("Could not save channel context.", error);
-    channelContextStatus.textContent = "Could not save context. Please try again.";
+    channelContextStatus.textContent = "Saved on this device. Cloud sync is unavailable.";
   } finally {
     saveChannelContextButton.disabled = false;
   }

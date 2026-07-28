@@ -247,6 +247,7 @@ async function loadSavedChannelContext() {
   savedChannelContext = {channelTopic: "", channelContext: ""};
   const key = channelContextStorageKey();
   if (!key) return savedChannelContext;
+  const hasLocalValue = Boolean(localStorage.getItem(key));
 
   try {
     savedChannelContext = normalizeSavedChannelContext(JSON.parse(localStorage.getItem(key) || "{}"));
@@ -257,8 +258,9 @@ async function loadSavedChannelContext() {
   if (!db || !currentUser) return savedChannelContext;
   try {
     const snapshot = await getDoc(doc(db, "users", currentUser.uid));
-    if (snapshot.exists()) {
-      savedChannelContext = normalizeSavedChannelContext(snapshot.data());
+    if (snapshot.exists() && !hasLocalValue) {
+      const cloudContext = snapshot.data();
+      savedChannelContext = normalizeSavedChannelContext(cloudContext);
       localStorage.setItem(key, JSON.stringify(savedChannelContext));
     }
   } catch (error) {
