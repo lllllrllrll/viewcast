@@ -38,7 +38,7 @@ const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 3;
+const insightsCacheVersion = 5;
 const insightsCacheMaxAge = 15 * 60 * 1000;
 
 let currentUser = null;
@@ -688,7 +688,7 @@ function trendQueriesForLane(lane) {
 }
 
 async function searchVideosByQuery(accessToken, query, maxResults = 8) {
-  const publishedAfter = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+  const publishedAfter = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const url = new URL("https://www.googleapis.com/youtube/v3/search");
   url.searchParams.set("part", "snippet");
   url.searchParams.set("type", "video");
@@ -780,15 +780,17 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     ...(popularResult.status === "fulfilled" ? popularResult.value : [])
   ];
   const seen = new Set();
+  const ownVideoIds = new Set(videos.map((video) => video.id).filter(Boolean));
   const trendVideos = merged.filter((video) => {
-    if (!video?.id || seen.has(video.id)) return false;
+    if (!video?.id || seen.has(video.id) || ownVideoIds.has(video.id)) return false;
     seen.add(video.id);
     return true;
-  });
+  }).sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
   trendVideos.channelLane = trendPlan?.lane
     || (nicheResult.status === "fulfilled" ? nicheResult.value.lane : null)
     || (laneResult.status === "fulfilled" ? laneResult.value.lane : lane);
   trendVideos.trendQueries = trendPlan?.queries || trendQueriesForLane(trendVideos.channelLane);
+  trendVideos.contentInterpretations = trendPlan?.contentInterpretations || [];
   return trendVideos;
 }
 
@@ -798,6 +800,40 @@ function videoScore(video) {
   const likes = numberValue(stats.likeCount) || 0;
   const comments = numberValue(stats.commentCount) || 0;
   return views + likes * 20 + comments * 40;
+}
+
+function trendAgeDays(video) {
+  const publishedAt = new Date(video.snippet?.publishedAt || "").getTime();
+  if (!Number.isFinite(publishedAt)) return 999;
+  return Math.max(1, (Date.now() - publishedAt) / (24 * 60 * 60 * 1000));
+}
+
+function trendMomentumScore(video) {
+  const views = numberValue(video.statistics?.viewCount) || 0;
+  const likes = numberValue(video.statistics?.likeCount) || 0;
+  const comments = numberValue(video.statistics?.commentCount) || 0;
+  const ageDays = trendAgeDays(video);
+  const dailyViews = views / ageDays;
+  const engagementRate = views ? (likes + comments * 2) / views : 0;
+  const nicheBoost = video.trendSource === "Niche YouTube trend search" ? 1.35 : 1;
+  return dailyViews * (1 + Math.min(engagementRate * 20, 1.5)) * nicheBoost;
+}
+
+function trendEvidence(video) {
+  if (!video) return null;
+  const views = numberValue(video.statistics?.viewCount) || 0;
+  const ageDays = Math.ceil(trendAgeDays(video));
+  const publishedAt = video.snippet?.publishedAt || "";
+  return {
+    title: video.snippet?.title || "",
+    publishedAt,
+    publishedLabel: publishedAt ? dateLabel(publishedAt) : "",
+    ageDays,
+    views,
+    viewsPerDay: Math.round(views / Math.max(1, ageDays)),
+    query: video.trendQuery || "",
+    source: video.trendSource || "External YouTube trend"
+  };
 }
 
 function isShort(video) {
@@ -1064,7 +1100,9 @@ function buildNextVideoSuggestions(videos, trendVideos) {
   const medianViews = compactNumber(performance.medianViews);
   const averageViews = compactNumber(performance.averageViews);
   const trend = currentTrendSignal(videos, trendVideos);
-  const trendReference = trendVideos[0]?.snippet?.title || trend;
+  const primaryEvidence = trendEvidence(trendVideos[0]);
+  const secondaryEvidence = trendEvidence(trendVideos.find((video) => video.trendQuery !== trendVideos[0]?.trendQuery) || trendVideos[1]);
+  const trendReference = primaryEvidence?.title || trend;
   const betterFormat = performance.shortAverageViews > performance.videoAverageViews ? "Short" : "video";
   const betterFormatViews = performance.shortAverageViews > performance.videoAverageViews
     ? performance.shortAverageViews
@@ -1076,16 +1114,20 @@ function buildNextVideoSuggestions(videos, trendVideos) {
 
   return [
     {
-      title: `${category}: trend explainer with a twist`,
+      title: `${category}: explain “${shortText(trendReference, 72)}”`,
       body: top
-        ? `Use the hook pattern from your ${compactNumber(top.views)}-view top upload, but apply it to ${trendReference}. Make the promise about why the trend matters now.`
-        : `Package ${trendReference} as a clear viewer question, then answer it with your channel's usual style instead of copying the trend format.`,
-      label: "Trend"
+        ? `${trendReference} is an external YouTube signal from ${primaryEvidence?.publishedLabel || "the last 60 days"} (${compactNumber(primaryEvidence?.views || 0)} views; about ${compactNumber(primaryEvidence?.viewsPerDay || 0)}/day). Use the hook pattern from your ${compactNumber(top.views)}-view top upload, then explain why this topic matters now.`
+        : `${trendReference} is an external YouTube signal from ${primaryEvidence?.publishedLabel || "the last 60 days"}. Turn it into a clear viewer question and answer it in your own style.`,
+      label: "Current trend"
     },
     {
-      title: `${betterFormat} idea: compare the trend to your lane`,
-      body: `Your ${betterFormat.toLowerCase()} format averages about ${compactNumber(betterFormatViews)} views. Turn ${trend} into a comparison, ranking, test, or myth-check that fits ${category}.`,
-      label: "Format",
+      title: secondaryEvidence
+        ? `${betterFormat} test: “${shortText(secondaryEvidence.title, 68)}”`
+        : `${betterFormat} test: compare the trend to your lane`,
+      body: secondaryEvidence
+        ? `This separate external signal was published ${secondaryEvidence.publishedLabel} and is averaging about ${compactNumber(secondaryEvidence.viewsPerDay)} views/day. Adapt its viewer question into a comparison, ranking, test, or myth-check for ${category}; your ${betterFormat.toLowerCase()} format averages ${compactNumber(betterFormatViews)} views.`
+        : `Your ${betterFormat.toLowerCase()} format averages about ${compactNumber(betterFormatViews)} views. Turn ${trend} into a comparison, ranking, test, or myth-check that fits ${category}.`,
+      label: "Current trend",
       tone: "warn"
     },
     {
@@ -1093,7 +1135,7 @@ function buildNextVideoSuggestions(videos, trendVideos) {
       body: second
         ? `Your strong uploads beat the ${medianViews} median when the idea is easy to understand fast. If ${under?.title || "a past upload"} underperformed, avoid that vague angle and make the next concept instantly searchable.`
         : `Aim above your ${averageViews} average by making the idea specific enough to search and broad enough to connect with ${trend}.`,
-      label: "Angle"
+      label: "Channel data"
     }
   ];
 }
@@ -1125,6 +1167,7 @@ function buildChannelSummary(videos, trendVideos, channelProfile = null) {
     currentTrend,
     currentTrends,
     channelLane,
+    contentInterpretations: trendVideos.contentInterpretations || [],
     channelProfile,
     creatorProvidedContext: savedChannelContext,
     nextVideoSuggestions: buildNextVideoSuggestions(videos, trendVideos),
@@ -1341,6 +1384,19 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
   const categoryLabel = specificCategory && specificCategory.toLowerCase() !== primaryCategory.toLowerCase()
     ? `${primaryCategory} - ${specificCategory}`
     : primaryCategory;
+  const contentInterpretations = (Array.isArray(value.contentInterpretations) ? value.contentInterpretations : [])
+    .slice(0, 12)
+    .map((item) => ({
+      title: String(item?.title || "").slice(0, 160),
+      mediaReferences: (Array.isArray(item?.mediaReferences) ? item.mediaReferences : [])
+        .map((reference) => String(reference || "").trim().slice(0, 80))
+        .filter(Boolean)
+        .slice(0, 4),
+      premise: String(item?.premise || "").trim().slice(0, 240),
+      audienceAppeal: String(item?.audienceAppeal || "").trim().slice(0, 180),
+      confidence: ["high", "medium", "low"].includes(item?.confidence) ? item.confidence : "low"
+    }))
+    .filter((item) => item.title && item.premise);
 
   return {
     lane: {
@@ -1351,7 +1407,8 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
       specificCategory,
       confidence: String(value.categoryConfidence || "medium").slice(0, 20)
     },
-    queries
+    queries,
+    contentInterpretations
   };
 }
 
@@ -1360,7 +1417,8 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
   if (!isGeminiAvailable()) {
     return {
       lane: fallbackLane,
-      queries: trendQueriesForLane(fallbackLane)
+      queries: trendQueriesForLane(fallbackLane),
+      contentInterpretations: []
     };
   }
 
@@ -1372,9 +1430,12 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
     "If the channel is broad gaming, primaryCategory should be Gaming and specificCategory should be General gaming. If it is mostly Roblox, primaryCategory should be Gaming and specificCategory should be Roblox.",
     "If a channel has music videos, songs, covers, albums, beats, or artist content, classify it as Music. Use a specific subcategory like Rap, Covers, Beats, or Artist edits only when clear.",
     "If the channel mixes memes with another fandom, game, anime, or music niche, classify the primary content type and put the fandom/game/style in specificCategory.",
-    "Then choose trend-search queries that match that classification. A Roblox channel should search Roblox-specific topics; a Music channel should search music trends for its style; a meme channel should search meme formats/trends.",
+    "Semantically interpret every upload title using its description, tags, category, and the repeated context across the channel. Identify what the title actually means, the media or real-world entity it references (game, show, film, song, artist, character, person, event, product, or meme), the video's underlying premise, and why that premise appeals to viewers.",
+    "Do not treat title wording as the topic by itself. Resolve slang, abbreviations, character names, quotes, episode references, memes, and fandom-specific language when the surrounding metadata supports it.",
+    "Never invent a media reference. If a reference is ambiguous, use an empty mediaReferences list, explain the likely premise conservatively, and set confidence to low.",
+    "Then choose trend-search queries from the resolved media references and premises, not by copying full upload titles. A Roblox channel should search Roblox-specific topics; a Music channel should search music trends for its style; a meme channel should search meme formats/trends.",
     "Return JSON only with this shape. No trailing commas:",
-    `{"categoryKey":"","primaryCategory":"","specificCategory":"","categoryLabel":"","categorySeed":"","categoryConfidence":"high","queries":["","",""]}`,
+    `{"categoryKey":"","primaryCategory":"","specificCategory":"","categoryLabel":"","categorySeed":"","categoryConfidence":"high","contentInterpretations":[{"title":"","mediaReferences":[""],"premise":"","audienceAppeal":"","confidence":"high"}],"queries":["","",""]}`,
     "",
     "Channel profile:",
     JSON.stringify(channelProfile || {}, null, 2),
@@ -1396,7 +1457,7 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 1024
+        maxOutputTokens: 3072
       }
     });
     const text = payload.candidates?.[0]?.content?.parts
@@ -1405,29 +1466,28 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
       .trim();
     return normalizeGeminiTrendPlan(safeJsonParse(text), fallbackLane) || {
       lane: fallbackLane,
-      queries: trendQueriesForLane(fallbackLane)
+      queries: trendQueriesForLane(fallbackLane),
+      contentInterpretations: []
     };
   } catch (error) {
     console.warn("Gemini trend plan failed.", error);
     return {
       lane: fallbackLane,
-      queries: trendQueriesForLane(fallbackLane)
+      queries: trendQueriesForLane(fallbackLane),
+      contentInterpretations: []
     };
   }
 }
 
 function geminiContext(summary) {
   const trendReferences = summary.trendVideos
-    .slice(0, 5)
+    .slice(0, 8)
     .map((video) => ({
-      title: video.snippet?.title || "",
-      publishedAt: video.snippet?.publishedAt || "",
-      views: numberValue(video.statistics?.viewCount) || 0,
+      ...trendEvidence(video),
       likes: numberValue(video.statistics?.likeCount) || 0,
       comments: numberValue(video.statistics?.commentCount) || 0,
       format: isShort(video) ? "Short" : "Video",
       category: youtubeCategoryName(video.snippet?.categoryId),
-      source: video.trendSource || "Trend reference"
     }))
     .filter((video) => video.title);
   const visibleIdeas = summary.geminiInsights?.recommendations || summary.topicIdeas;
@@ -1447,7 +1507,8 @@ function geminiContext(summary) {
     nextShortLength: summary.geminiInsights?.cards?.nextShortLength?.value || summary.nextShortLength,
     suggestedIdeas: ideas,
     trendReferences,
-    trendQueries: summary.trendVideos.trendQueries || []
+    trendQueries: summary.trendVideos.trendQueries || [],
+    contentInterpretations: summary.contentInterpretations || []
   };
 }
 
@@ -1593,9 +1654,15 @@ async function buildGeminiPageInsights(summary, videos) {
     "Use only supplied channel stats, trend references, and upload patterns. Do not invent analytics.",
     "Treat creatorProvidedContext as the primary source for the channel niche, audience, goals, and requested content direction.",
     "Classify the channel niche from repeated upload patterns, then make every card and suggestion match that niche.",
+    "Use contentInterpretations to understand what the creator's titles mean and which media they reference. Treat the raw title only as a lookup key and performance label, never as a ready-made topic.",
+    "Base concepts on the resolved mediaReferences, premise, audienceAppeal, and external trend evidence. Do not paste a creator title into a suggestion, tell the creator to expand it, or merely propose a follow-up/part 2.",
+    "When an interpretation has low confidence or no resolved media reference, do not build a recommendation around that interpretation.",
     "Use 12-hour time like 'Tue 6 PM'. Avoid generic advice such as make a follow-up, post more, extend the video, or improve the hook.",
     "Return exactly 3 nextVideoSuggestions and exactly 3 recommendations. Every item needs a non-empty title, body, label, and tone.",
-    "nextVideoSuggestions must be specific new video concepts tied to a high/low performer pattern and an external trend signal.",
+    "Exactly 2 of the 3 nextVideoSuggestions must be specific new concepts grounded in two different external trendReferences. The third must be grounded in the creator's own channel performance.",
+    "For each trend-grounded suggestion, name the external reference, state its published date and viewsPerDay, explain why it fits this channel, and use the label 'Current trend'. Never present a search query itself as proof of a trend.",
+    "For the channel-grounded suggestion, cite a supplied performance number and use the label 'Channel data'.",
+    "A trend reference is supporting evidence, not a concept to copy. Transform its viewer demand into an original angle for this channel.",
     "recommendations must be 3 important strategic tips the creator can act on now, such as packaging, upload timing, format length, niche/trend fit, Shorts strategy, or weak-angle avoidance.",
     "topTopicSignal.value must be a short, recognizable trend name (2-6 words), not a sentence or a fragment copied from a video title.",
     "Every word in topTopicSignal.value must be supported by the supplied external YouTube trend references or trend queries. Do not invent a trend.",
