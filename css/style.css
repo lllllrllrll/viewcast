@@ -592,6 +592,53 @@ body.settings-dark .plan-indicator {
   padding: 10px;
 }
 
+.channel-context-form {
+  display: grid;
+  gap: 16px;
+}
+
+.channel-context-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.channel-context-form input,
+.channel-context-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+}
+
+.channel-context-form input {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.channel-context-form textarea {
+  min-height: 104px;
+  padding: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.channel-context-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+#channelContextStatus {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .search {
   display: flex;
   align-items: center;
@@ -862,6 +909,10 @@ body.settings-dark .plan-indicator {
 .thumbnail-score span { margin-top: 3px; color: var(--muted); font-size: 12px; }
 .thumbnail-score-row h3 { margin: 0; font-size: 21px; }
 .thumbnail-score-row p { margin: 7px 0 0; color: var(--muted); line-height: 1.55; }
+.thumbnail-title-alignment { margin-top: 18px; padding: 16px; border: 1px solid rgba(50, 103, 214, 0.26); border-left: 3px solid var(--blue); border-radius: 8px; background: rgba(50, 103, 214, 0.07); }
+.thumbnail-title-alignment span { color: var(--blue); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.thumbnail-title-alignment h4 { margin: 7px 0 !important; font-size: 15px !important; }
+.thumbnail-title-alignment p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
 .thumbnail-analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
 .thumbnail-analysis-grid section,
 .thumbnail-recommendation { padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
@@ -1692,6 +1743,23 @@ body.insights-page .metric-value {
   font-size: clamp(20px, 2vw, 30px);
   line-height: 1.15;
   overflow-wrap: anywhere;
+}
+
+body.insights-page .insights-trends-card {
+  min-height: 230px;
+}
+
+.youtube-trend-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 28px;
+  font-size: clamp(16px, 1.5vw, 21px);
+  line-height: 1.25;
+}
+
+.youtube-trend-list li {
+  padding-left: 3px;
 }
 
 body.insights-page .trend {

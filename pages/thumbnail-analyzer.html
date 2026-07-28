@@ -53,10 +53,10 @@
                 </div>
               </div>
 
-              <label class="thumbnail-context-label" for="thumbnailContext">
-                Video context <span>Optional</span>
+              <label class="thumbnail-context-label" for="thumbnailTitle">
+                Video title <span>Required</span>
               </label>
-              <textarea id="thumbnailContext" class="thumbnail-context" rows="3" maxlength="500" placeholder="What is the video about? Add a working title or target audience for more specific feedback."></textarea>
+              <input id="thumbnailTitle" class="thumbnail-context" type="text" maxlength="150" autocomplete="off" placeholder="Enter the video title" required />
 
               <p class="thumbnail-status" id="thumbnailStatus" role="status" aria-live="polite"></p>
               <button class="primary-button thumbnail-analyze-button" id="analyzeThumbnail" type="submit" disabled>
@@ -77,9 +77,14 @@
 
             <article class="panel thumbnail-analysis-output" id="thumbnailAnalysisOutput" hidden>
               <div class="thumbnail-score-row">
-                <div class="thumbnail-score" id="thumbnailScore"><strong>--</strong><span>/ 100</span></div>
+                <div class="thumbnail-score" id="thumbnailScore"><strong>--</strong><span>/ 10</span></div>
                 <div><h3 id="thumbnailVerdict">Thumbnail review</h3><p id="thumbnailSummary"></p></div>
               </div>
+              <section class="thumbnail-title-alignment">
+                <span>Title–thumbnail match</span>
+                <h4 id="analyzedVideoTitle"></h4>
+                <p id="thumbnailTitleAlignment"></p>
+              </section>
               <div class="thumbnail-analysis-grid">
                 <section><h4>What works</h4><ul id="thumbnailStrengths"></ul></section>
                 <section><h4>What to improve</h4><ul id="thumbnailImprovements"></ul></section>

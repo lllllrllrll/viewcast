@@ -3,6 +3,11 @@ import {
   getAuth,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
+import {
+  doc,
+  getDoc,
+  getFirestore
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
 import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js";
 
@@ -32,17 +37,20 @@ const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
+const channelContextStorageKeyPrefix = "viewcastChannelContext:";
 const insightsCacheVersion = 3;
 const insightsCacheMaxAge = 15 * 60 * 1000;
 
 let currentUser = null;
 let auth = null;
+let db = null;
 let channelVideos = [];
 let selectedVideoId = "";
 let analysisRequestId = 0;
 let googleIdentityScriptPromise = null;
 let latestChannelSummary = null;
 let chatHistory = [];
+let savedChannelContext = {channelTopic: "", channelContext: ""};
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
@@ -211,6 +219,8 @@ function insightsFingerprint(videos, focusVideoId = "") {
   return JSON.stringify({
     version: insightsCacheVersion,
     focusVideoId,
+    channelTopic: savedChannelContext.channelTopic,
+    channelContext: savedChannelContext.channelContext,
     videos: videos.slice(0, 40).map((video) => ({
       id: video.id,
       publishedAt: video.snippet?.publishedAt || "",
@@ -220,6 +230,41 @@ function insightsFingerprint(videos, focusVideoId = "") {
       comments: video.statistics?.commentCount || ""
     }))
   });
+}
+
+function channelContextStorageKey() {
+  return currentUser ? `${channelContextStorageKeyPrefix}${currentUser.uid}` : "";
+}
+
+function normalizeSavedChannelContext(value = {}) {
+  return {
+    channelTopic: String(value.channelTopic || "").trim().slice(0, 120),
+    channelContext: String(value.channelContext || "").trim().slice(0, 1000)
+  };
+}
+
+async function loadSavedChannelContext() {
+  savedChannelContext = {channelTopic: "", channelContext: ""};
+  const key = channelContextStorageKey();
+  if (!key) return savedChannelContext;
+
+  try {
+    savedChannelContext = normalizeSavedChannelContext(JSON.parse(localStorage.getItem(key) || "{}"));
+  } catch {
+    localStorage.removeItem(key);
+  }
+
+  if (!db || !currentUser) return savedChannelContext;
+  try {
+    const snapshot = await getDoc(doc(db, "users", currentUser.uid));
+    if (snapshot.exists()) {
+      savedChannelContext = normalizeSavedChannelContext(snapshot.data());
+      localStorage.setItem(key, JSON.stringify(savedChannelContext));
+    }
+  } catch (error) {
+    console.warn("Could not refresh saved channel context for AI Insights.", error);
+  }
+  return savedChannelContext;
 }
 
 function readCachedInsights(videos, focusVideoId = "") {
@@ -948,15 +993,29 @@ function isGroundedTrendLabel(value, trendVideos = []) {
   return matchingWords >= Math.min(2, labelWords.length);
 }
 
-function currentTrendSignal(videos, trendVideos = []) {
-  const query = (trendVideos.trendQueries || [])
+function currentTrendSignals(trendVideos = []) {
+  const queries = (trendVideos.trendQueries || [])
     .map(readableTrendQuery)
-    .find(Boolean);
-  if (query) return query;
+    .filter(Boolean);
+  const uniqueQueries = [...new Set(queries.map((query) => query.toLowerCase()))]
+    .map((query) => queries.find((candidate) => candidate.toLowerCase() === query))
+    .slice(0, 3);
+  if (uniqueQueries.length >= 3) return uniqueQueries;
+
   const laneLabel = trendVideos.channelLane?.specificCategory
     || trendVideos.channelLane?.primaryCategory
-    || trendVideos.channelLane?.label;
-  return laneLabel ? `${laneLabel} on YouTube` : "Current YouTube trends";
+    || trendVideos.channelLane?.label
+    || "Your niche";
+  const fallbacks = [
+    `${laneLabel} on YouTube`,
+    `${laneLabel} videos`,
+    `${laneLabel} Shorts`
+  ];
+  return [...new Set([...uniqueQueries, ...fallbacks])].slice(0, 3);
+}
+
+function currentTrendSignal(videos, trendVideos = []) {
+  return currentTrendSignals(trendVideos)[0];
 }
 
 function isOwnUploadRestatement(value, videos = []) {
@@ -1047,7 +1106,8 @@ function buildChannelSummary(videos, trendVideos, channelProfile = null) {
   const bestViews = numberValue(best?.statistics?.viewCount) || 0;
   const topics = topicSignals(videos, trendVideos, {preferTrend: true});
   const channelLane = trendVideos.channelLane || detectChannelLane(videos);
-  const currentTrend = currentTrendSignal(videos, trendVideos);
+  const currentTrends = currentTrendSignals(trendVideos);
+  const currentTrend = currentTrends[0];
 
   return {
     recent,
@@ -1061,8 +1121,10 @@ function buildChannelSummary(videos, trendVideos, channelProfile = null) {
     nextShortLength: recommendedLength(shorts.length ? shorts : videos, "short"),
     topSignal: topics[0] || currentTrend || "Current trends",
     currentTrend,
+    currentTrends,
     channelLane,
     channelProfile,
+    creatorProvidedContext: savedChannelContext,
     nextVideoSuggestions: buildNextVideoSuggestions(videos, trendVideos),
     topicIdeas: buildTopicIdeas(videos, trendVideos),
     trendVideos
@@ -1085,6 +1147,30 @@ function setMetric(index, value, trend = "", trendClass = "") {
   if (valueEl) valueEl.textContent = value === "" || value === null || value === undefined ? " " : value;
   if (trendEl) {
     trendEl.textContent = trend || " ";
+    trendEl.className = ["trend", trendClass].filter(Boolean).join(" ");
+  }
+}
+
+function setTrendMetric(values = [], detail = "", trendClass = "good") {
+  const card = document.querySelector(".insights-trends-card");
+  if (!card) return;
+  const valueEl = card.querySelector(".metric-value");
+  const trendEl = card.querySelector(".trend");
+  const trends = values.filter(Boolean).slice(0, 3);
+
+  if (valueEl) {
+    valueEl.textContent = "";
+    const list = document.createElement("ol");
+    list.className = "youtube-trend-list";
+    trends.forEach((value) => {
+      const item = document.createElement("li");
+      item.textContent = value;
+      list.append(item);
+    });
+    valueEl.append(list);
+  }
+  if (trendEl) {
+    trendEl.textContent = detail || "Niche trends";
     trendEl.className = ["trend", trendClass].filter(Boolean).join(" ");
   }
 }
@@ -1278,7 +1364,7 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
 
   const prompt = [
     "You are classifying a YouTube channel for ViewCast.",
-    "Use the channel profile first, then repeated patterns across uploads, descriptions, tags, YouTube category names, formats, dates, and performance.",
+    "Use the creator-provided topic and context first, then the channel profile and repeated patterns across uploads, descriptions, tags, YouTube category names, formats, dates, and performance.",
     "Decide the channel's broad category and, when possible, a specific subcategory. Do not classify from one ambiguous word or one outlier upload.",
     "Use clean creator categories. Examples: Music, Gaming, Roblox, Minecraft, Fortnite, Anime, Memes, Sports, Beauty, Education, Tech, Vlogs, Cooking.",
     "If the channel is broad gaming, primaryCategory should be Gaming and specificCategory should be General gaming. If it is mostly Roblox, primaryCategory should be Gaming and specificCategory should be Roblox.",
@@ -1290,6 +1376,9 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
     "",
     "Channel profile:",
     JSON.stringify(channelProfile || {}, null, 2),
+    "",
+    "Creator-provided channel topic and context (use this as the primary niche guidance):",
+    JSON.stringify(savedChannelContext, null, 2),
     "",
     "Channel uploads:",
     JSON.stringify(channelVideoContext(videos), null, 2)
@@ -1342,6 +1431,7 @@ function geminiContext(summary) {
   const visibleIdeas = summary.geminiInsights?.recommendations || summary.topicIdeas;
   const ideas = visibleIdeas.slice(0, 3).map((idea) => `${idea.title}: ${shortText(idea.body, 120)}`);
   return {
+    creatorProvidedContext: summary.creatorProvidedContext || savedChannelContext,
     channelProfile: compactChannelProfile(summary.channelProfile || {}),
     channelCategory: summary.channelLane?.label || "General creator channel",
     primaryCategory: summary.channelLane?.primaryCategory || summary.channelLane?.label || "General",
@@ -1499,6 +1589,7 @@ async function buildGeminiPageInsights(summary, videos) {
   const prompt = [
     "You are ViewCast's YouTube strategist. Return compact JSON only. No trailing commas.",
     "Use only supplied channel stats, trend references, and upload patterns. Do not invent analytics.",
+    "Treat creatorProvidedContext as the primary source for the channel niche, audience, goals, and requested content direction.",
     "Classify the channel niche from repeated upload patterns, then make every card and suggestion match that niche.",
     "Use 12-hour time like 'Tue 6 PM'. Avoid generic advice such as make a follow-up, post more, extend the video, or improve the hook.",
     "Return exactly 3 nextVideoSuggestions and exactly 3 recommendations. Every item needs a non-empty title, body, label, and tone.",
@@ -1660,10 +1751,19 @@ function renderChannelInsights(summary) {
     cards.nextShortLength?.detail || summary.shortUploadTime,
     cards.nextShortLength?.tone || "warn"
   );
-  setMetric(
-    3,
-    isOwnUploadRestatement(cards.topTopicSignal?.value, summary.recent) ? summary.currentTrend : (cards.topTopicSignal?.value || summary.currentTrend || summary.topSignal),
-    cards.topTopicSignal?.detail || "Current YouTube trend",
+  const generatedTrend = cards.topTopicSignal?.value;
+  const groundedGeneratedTrend = isGroundedTrendLabel(generatedTrend, summary.trendVideos)
+    ? generatedTrend
+    : "";
+  const displayedTrends = [
+    groundedGeneratedTrend,
+    ...(summary.currentTrends || currentTrendSignals(summary.trendVideos))
+  ].filter((trend, index, values) => trend && values.findIndex(
+    (candidate) => candidate.toLowerCase() === trend.toLowerCase()
+  ) === index).slice(0, 3);
+  setTrendMetric(
+    displayedTrends,
+    cards.topTopicSignal?.detail || `${summary.channelLane?.specificCategory || summary.channelLane?.primaryCategory || "Niche"} trends`,
     cards.topTopicSignal?.tone || bestTone
   );
   updateNextVideoSuggestions(geminiInsights?.nextVideoSuggestions || summary.nextVideoSuggestions);
@@ -1872,6 +1972,7 @@ clearAnalyzerResults();
 if (form && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   auth = getAuth(app);
+  db = getFirestore(app);
   onAuthStateChanged(auth, async (user) => {
     let refreshedUser = user;
     if (user) {
@@ -1900,6 +2001,8 @@ if (form && firebaseConfigured) {
       setLibraryStatus(refreshedUser ? "Verify your email to unlock channel insights." : "Sign in and link a channel to generate channel insights.");
       return;
     }
+
+    await loadSavedChannelContext();
 
     const cachedVideos = readCachedVideos();
     if (cachedVideos.length) {

@@ -18,7 +18,7 @@ const fileSize = document.querySelector("#thumbnailFileSize");
 const removeButton = document.querySelector("#removeThumbnail");
 const analyzeButton = document.querySelector("#analyzeThumbnail");
 const status = document.querySelector("#thumbnailStatus");
-const context = document.querySelector("#thumbnailContext");
+const thumbnailTitle = document.querySelector("#thumbnailTitle");
 const emptyState = document.querySelector("#thumbnailEmptyState");
 const output = document.querySelector("#thumbnailAnalysisOutput");
 const thumbnailChat = document.querySelector("#thumbnailChat");
@@ -39,6 +39,17 @@ function setStatus(message, type = "") {
   status.textContent = message;
   status.dataset.type = type;
 }
+
+function updateAnalyzeButton() {
+  analyzeButton.disabled = !(selectedFile && thumbnailTitle.value.trim());
+}
+
+thumbnailTitle.addEventListener("input", () => {
+  updateAnalyzeButton();
+  if (selectedFile) {
+    setStatus(thumbnailTitle.value.trim() ? "Ready to analyze." : "Enter the video title to continue.");
+  }
+});
 
 function resetThumbnailChat() {
   latestAnalysis = null;
@@ -65,7 +76,7 @@ function resetFile() {
   emptyState.hidden = false;
   thumbnailChat.hidden = true;
   resetThumbnailChat();
-  analyzeButton.disabled = true;
+  updateAnalyzeButton();
   setStatus("");
 }
 
@@ -91,8 +102,8 @@ function selectFile(file) {
   output.hidden = true;
   thumbnailChat.hidden = true;
   resetThumbnailChat();
-  analyzeButton.disabled = false;
-  setStatus("Ready to analyze.");
+  updateAnalyzeButton();
+  setStatus(thumbnailTitle.value.trim() ? "Ready to analyze." : "Enter the video title to continue.");
 }
 
 function fileToBase64(file) {
@@ -119,14 +130,18 @@ function renderList(element, items) {
 
 function renderAnalysis(analysis) {
   latestAnalysis = analysis;
-  const score = Math.max(0, Math.min(100, Number(analysis.score) || 0));
-  document.querySelector("#thumbnailScore strong").textContent = Math.round(score);
+  const score = Math.max(0, Math.min(10, Number(analysis.score) || 0));
+  document.querySelector("#thumbnailScore strong").textContent = Number(score.toFixed(1));
   document.querySelector("#thumbnailVerdict").textContent = String(analysis.verdict || "Thumbnail review");
   document.querySelector("#thumbnailSummary").textContent = String(analysis.summary || "Analysis complete.");
+  document.querySelector("#analyzedVideoTitle").textContent = thumbnailTitle.value.trim();
+  document.querySelector("#thumbnailTitleAlignment").textContent = String(
+    analysis.titleAlignment || "The title and thumbnail should communicate one clear, complementary promise."
+  );
   document.querySelector("#thumbnailRecommendation").textContent = String(analysis.recommendation || "Test a simplified variation against the current design.");
   renderList(document.querySelector("#thumbnailStrengths"), Array.isArray(analysis.strengths) ? analysis.strengths : []);
   renderList(document.querySelector("#thumbnailImprovements"), Array.isArray(analysis.improvements) ? analysis.improvements : []);
-  document.querySelector("#thumbnailScore").style.setProperty("--score", `${score * 3.6}deg`);
+  document.querySelector("#thumbnailScore").style.setProperty("--score", `${score * 36}deg`);
   emptyState.hidden = true;
   output.hidden = false;
   thumbnailChat.hidden = false;
@@ -170,7 +185,7 @@ thumbnailChatForm.addEventListener("submit", async (event) => {
     const reply = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist answering follow-up questions about your prior visual analysis. Be concise, specific, honest about uncertainty, and ground every answer in the supplied thumbnail and analysis.",
       contents: [{role: "user", parts: [
-        {text: `Original thumbnail analysis:\n${JSON.stringify(latestAnalysis)}\n\nVideo context: ${context.value.trim() || "None provided"}\n\nRecent conversation:\n${recentConversation}\n\nAnswer the user's latest question directly. Do not return JSON.`},
+        {text: `Original thumbnail analysis:\n${JSON.stringify(latestAnalysis)}\n\nVideo title: ${thumbnailTitle.value.trim()}\n\nRecent conversation:\n${recentConversation}\n\nAnswer the user's latest question directly. Do not return JSON.`},
         {inlineData: {data: base64, mimeType: imageMimeType(selectedFile)}}
       ]}],
       generationConfig: {temperature: 0.45, maxOutputTokens: 700}
@@ -234,13 +249,13 @@ form.addEventListener("submit", async (event) => {
   setStatus("Gemini is reviewing your thumbnail…", "loading");
   try {
     const base64 = await fileToBase64(selectedFile);
-    const userContext = context.value.trim() || "No additional video context was provided.";
+    const videoTitle = thumbnailTitle.value.trim();
     const response = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist. Give specific, candid, visually grounded feedback. Return only valid JSON, without markdown.",
       contents: [{
         role: "user",
         parts: [
-          { text: `Analyze this thumbnail for likely click performance. Consider visual hierarchy, contrast, subject clarity, text legibility at mobile size, emotional pull, curiosity, clutter, and audience fit. Video context: ${userContext}\nReturn this exact JSON shape: {"score": number from 0 to 100, "verdict": "short headline", "summary": "2-3 sentence assessment", "strengths": ["specific point", "specific point", "specific point"], "improvements": ["specific actionable point", "specific actionable point", "specific actionable point"], "recommendation": "one concrete redesign direction"}` },
+          { text: `Analyze this thumbnail together with the video title "${videoTitle}". Do not judge the image in isolation. First determine the promise, topic, and curiosity created by the title, then compare that promise with what the thumbnail communicates. Identify whether they reinforce each other, add complementary information, redundantly repeat each other, create confusion, or make conflicting promises. Make title–thumbnail alignment 40% of the overall score; use likely click performance, visual hierarchy, contrast, subject clarity, mobile text legibility, emotional pull, curiosity, and clutter for the remaining 60%. The score must be from 0 to 10 and may use one decimal place.\nReturn this exact JSON shape: {"score": 0.0, "verdict": "short headline", "summary": "2-3 sentence combined title and thumbnail assessment", "titleAlignment": "specific explanation of what the title promises, what the thumbnail promises, and whether they work together", "strengths": ["specific point", "specific point", "specific point"], "improvements": ["specific actionable point", "specific actionable point", "specific actionable point"], "recommendation": "one concrete redesign direction that better supports this title"}` },
           { inlineData: { data: base64, mimeType: imageMimeType(selectedFile) } }
         ]
       }],
@@ -252,7 +267,7 @@ form.addEventListener("submit", async (event) => {
     console.error("Thumbnail analysis failed.", error);
     setStatus("Gemini could not analyze this image. Please try again.", "error");
   } finally {
-    analyzeButton.disabled = false;
+    updateAnalyzeButton();
     analyzeButton.classList.remove("is-loading");
   }
 });
@@ -389,7 +404,7 @@ comparisonForm.addEventListener("submit", async (event) => {
     const response = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist. Compare the two labeled images objectively and return only valid JSON, without markdown.",
       contents: [{role: "user", parts: [
-        {text: `Compare two thumbnail versions for the video titled "${videoTitle}". Score how well each thumbnail supports the title and its likely click performance, visual hierarchy, mobile readability, emotional pull, curiosity, clarity, and clutter. Scores must be from 0 to 10 and may use one decimal place. The next image is Version 1.`},
+        {text: `Compare two thumbnail versions together with the video title "${videoTitle}". Do not judge either image in isolation. Determine what the title promises, then compare that promise with what each thumbnail communicates. Make title–thumbnail alignment 40% of each score, with likely click performance, visual hierarchy, mobile readability, emotional pull, curiosity, clarity, and clutter making up the remaining 60%. Scores must be from 0 to 10 and may use one decimal place. The next image is Version 1.`},
         {inlineData: {data: version1Data, mimeType: imageMimeType(comparisonFiles.v1)}},
         {text: "The next image is Version 2."},
         {inlineData: {data: version2Data, mimeType: imageMimeType(comparisonFiles.v2)}},

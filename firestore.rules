@@ -15,6 +15,8 @@ rules_version = '2';
 //   - createdAt: timestamp (optional, immutable after creation)
 //   - youtubeConnections: list (optional, at most 25 connections)
 //   - youtubeConnection: map (optional legacy connection)
+//   - channelTopic: string (optional, at most 120 characters)
+//   - channelContext: string (optional, at most 1000 characters)
 //
 // All other paths are denied by default.
 // ===============================================================
@@ -48,6 +50,15 @@ service cloud.firestore {
           || data.youtubeConnection is map);
     }
 
+    function hasValidOptionalChannelContext(data) {
+      return (!('channelTopic' in data)
+          || (data.channelTopic is string
+            && data.channelTopic.size() <= 120))
+        && (!('channelContext' in data)
+          || (data.channelContext is string
+            && data.channelContext.size() <= 1000));
+    }
+
     function isValidUser(data) {
       return data.keys().hasOnly([
           'uid',
@@ -57,7 +68,9 @@ service cloud.firestore {
           'lastSignInAt',
           'createdAt',
           'youtubeConnections',
-          'youtubeConnection'
+          'youtubeConnection',
+          'channelTopic',
+          'channelContext'
         ])
         && data.keys().hasAll([
           'uid',
@@ -80,7 +93,8 @@ service cloud.firestore {
         && data.updatedAt == request.time
         && data.lastSignInAt is timestamp
         && (!('createdAt' in data) || data.createdAt is timestamp)
-        && hasValidOptionalConnectionFields(data);
+        && hasValidOptionalConnectionFields(data)
+        && hasValidOptionalChannelContext(data);
     }
 
     match /users/{userId} {

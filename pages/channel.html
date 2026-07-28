@@ -42,6 +42,29 @@
             </div>
           </article>
 
+          <article class="panel full channel-context-panel">
+            <div class="panel-head">
+              <div>
+                <h3>AI Channel Context</h3>
+                <p>Tell ViewCast what your channel covers so trends, ideas, and recommendations stay focused on your niche.</p>
+              </div>
+            </div>
+            <form class="channel-context-form" id="channelContextForm">
+              <label>
+                <span>Primary topic or niche</span>
+                <input id="channelTopic" type="text" maxlength="120" placeholder="Example: Roblox challenge videos for teens" />
+              </label>
+              <label>
+                <span>Additional context</span>
+                <textarea id="channelContext" rows="4" maxlength="1000" placeholder="Describe your audience, content pillars, style, goals, or topics you want the AI to prioritize."></textarea>
+              </label>
+              <div class="channel-context-actions">
+                <button class="primary-button" id="saveChannelContext" type="submit">Save Context</button>
+                <span id="channelContextStatus" role="status" aria-live="polite"></span>
+              </div>
+            </form>
+          </article>
+
           <article class="panel large channel-connections-panel">
             <div class="panel-head">
               <div>
@@ -144,7 +167,7 @@
     <script src="../components/sidebar.js"></script>
     <script src="../js/script.js?v=2"></script>
     <script type="module" src="../js/dashboard-data.js?v=3"></script>
-    <script type="module" src="../js/youtube-connect.js?v=5"></script>
+    <script type="module" src="../js/youtube-connect.js?v=6"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
         drawLineChart("subsChart", [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], ["M1", "M2", "M3", "M4", "M5", "M6"], {ySuffix: ""});

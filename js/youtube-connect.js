@@ -25,11 +25,17 @@ const connectButton = document.getElementById("connectYouTube");
 const unlinkButton = document.getElementById("unlinkYouTube");
 const channelSelector = document.getElementById("channelSelector");
 const channelSelectorWrap = document.getElementById("channelSelectorWrap");
+const channelContextForm = document.getElementById("channelContextForm");
+const channelTopicInput = document.getElementById("channelTopic");
+const channelContextInput = document.getElementById("channelContext");
+const channelContextStatus = document.getElementById("channelContextStatus");
+const saveChannelContextButton = document.getElementById("saveChannelContext");
 
 const allConnectionsKey = "viewcastYouTubeAllConnections";
 const activeConnectionKey = "viewcastYouTubeConnection";
 const channelStorageKey = "viewcastYouTubeChannel";
 const tokenStorageKey = "viewcastYouTubeAccessToken";
+const channelContextStorageKeyPrefix = "viewcastChannelContext:";
 
 let currentUser = null;
 let auth = null;
@@ -126,6 +132,75 @@ function saveCachedAccessToken(accessToken) {
     uid: currentUser.uid,
     expiresAt: Date.now() + 50 * 60 * 1000
   }));
+}
+
+function channelContextStorageKey(user = currentUser) {
+  return user ? `${channelContextStorageKeyPrefix}${user.uid}` : "";
+}
+
+function cacheChannelContext(user, value) {
+  const key = channelContextStorageKey(user);
+  if (!key) return;
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function renderChannelContext(value = {}) {
+  if (channelTopicInput) channelTopicInput.value = value.channelTopic || "";
+  if (channelContextInput) channelContextInput.value = value.channelContext || "";
+}
+
+async function loadChannelContext(user) {
+  const key = channelContextStorageKey(user);
+  try {
+    const snapshot = await getDoc(doc(db, "users", user.uid));
+    const data = snapshot.exists() ? snapshot.data() : {};
+    const value = {
+      channelTopic: String(data.channelTopic || "").slice(0, 120),
+      channelContext: String(data.channelContext || "").slice(0, 1000)
+    };
+    cacheChannelContext(user, value);
+    renderChannelContext(value);
+  } catch (error) {
+    try {
+      renderChannelContext(JSON.parse(localStorage.getItem(key) || "{}"));
+    } catch {
+      renderChannelContext();
+    }
+    console.warn("Could not load saved channel context.", error);
+  }
+}
+
+function clearCachedInsightsForUser(user) {
+  const prefix = `viewcastAiInsights:${user.uid}:`;
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith(prefix))
+    .forEach((key) => localStorage.removeItem(key));
+}
+
+async function saveChannelContext(event) {
+  event.preventDefault();
+  if (!currentUser || !db) return;
+  const value = {
+    channelTopic: channelTopicInput?.value.trim().slice(0, 120) || "",
+    channelContext: channelContextInput?.value.trim().slice(0, 1000) || ""
+  };
+  saveChannelContextButton.disabled = true;
+  channelContextStatus.textContent = "Saving...";
+  try {
+    await setDoc(doc(db, "users", currentUser.uid), {
+      ...value,
+      updatedAt: serverTimestamp()
+    }, {merge: true});
+    cacheChannelContext(currentUser, value);
+    clearCachedInsightsForUser(currentUser);
+    renderChannelContext(value);
+    channelContextStatus.textContent = "Saved. New AI insights will use this context.";
+  } catch (error) {
+    console.error("Could not save channel context.", error);
+    channelContextStatus.textContent = "Could not save context. Please try again.";
+  } finally {
+    saveChannelContextButton.disabled = false;
+  }
 }
 
 async function syncConnectionsFromFirestore(user) {
@@ -324,7 +399,10 @@ if (connectButton && firebaseConfigured) {
     }
 
     try {
-      await syncConnectionsFromFirestore(user);
+      await Promise.all([
+        syncConnectionsFromFirestore(user),
+        loadChannelContext(user)
+      ]);
     } catch (e) {
       updateUI();
     }
@@ -332,6 +410,7 @@ if (connectButton && firebaseConfigured) {
 
   connectButton.addEventListener("click", connectYouTube);
   unlinkButton?.addEventListener("click", unlinkYouTube);
+  channelContextForm?.addEventListener("submit", saveChannelContext);
 
   channelSelector?.addEventListener("change", () => {
     const connections = readAllConnections();
