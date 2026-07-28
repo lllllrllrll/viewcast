@@ -26,6 +26,12 @@
                 <input id="videoUrl" type="text" inputmode="url" placeholder="Paste video URL" aria-label="Video URL" style="border: 0; background: transparent; width: 100%; outline: 0;" />
               </label>
               <button class="primary-button" type="submit">Analyze</button>
+              <span class="analyzer-source-divider">or</span>
+              <label class="secondary-button video-upload-button" for="videoFile">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
+                Upload video
+              </label>
+              <input id="videoFile" class="visually-hidden" type="file" accept="video/*" aria-label="Upload a video to analyze" />
             </form>
           </div>
         </header>
@@ -165,6 +171,21 @@
               </table>
             </div>
           </article>
+
+          <article class="panel full analyzer-result video-timeline-panel" id="videoTimelinePanel">
+            <div class="panel-head">
+              <div>
+                <h3>Video Improvement Timeline</h3>
+                <p>Jump to moments where pacing, clarity, visuals, or engagement could be improved.</p>
+              </div>
+              <span class="timeline-duration" id="timelineDuration"></span>
+            </div>
+            <div class="video-timeline" id="videoTimeline">
+              <div class="timeline-track" aria-hidden="true"></div>
+              <div class="timeline-markers" id="timelineMarkers"></div>
+            </div>
+            <div class="timeline-points" id="timelinePoints"></div>
+          </article>
         </section>
       </main>
     </div>
@@ -172,6 +193,6 @@
     <script src="../components/plan-modal.js"></script>
     <script src="../js/script.js"></script>
     <script type="module" src="../js/dashboard-data.js"></script>
-    <script type="module" src="../js/analyzer.js?v=5"></script>
+    <script type="module" src="../js/analyzer.js?v=6"></script>
   </body>
 </html>

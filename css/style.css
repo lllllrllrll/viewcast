@@ -992,6 +992,126 @@ body.settings-dark .plan-indicator {
   display: none;
 }
 
+.analyzer-source-divider {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.video-upload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #167b7d;
+  border-radius: 8px;
+  background: var(--surface);
+  color: #12696b;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.video-upload-button:hover {
+  background: var(--teal-soft);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.video-timeline-panel {
+  overflow: hidden;
+}
+
+.timeline-duration {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.video-timeline {
+  position: relative;
+  height: 42px;
+  margin: 10px 8px 16px;
+}
+
+.timeline-track {
+  position: absolute;
+  inset: 17px 0 auto;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #c9eff0, #167b7d);
+  box-shadow: inset 0 0 0 1px rgba(22, 123, 125, 0.16);
+}
+
+.timeline-markers {
+  position: absolute;
+  inset: 0;
+}
+
+.timeline-marker {
+  position: absolute;
+  top: 9px;
+  width: 24px;
+  height: 24px;
+  transform: translateX(-50%);
+  border: 4px solid white;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
+}
+
+.timeline-marker.high { background: var(--rose); }
+.timeline-marker.low { background: var(--blue); }
+
+.timeline-points {
+  display: grid;
+  gap: 10px;
+}
+
+.timeline-point {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.76);
+}
+
+.timeline-point time {
+  color: #167b7d;
+  font-weight: 850;
+}
+
+.timeline-point div {
+  display: grid;
+  gap: 4px;
+}
+
+.timeline-point span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .channel-link-form { flex-wrap: wrap; }
+  .analyzer-source-divider { display: none; }
+  .timeline-point { grid-template-columns: 54px minmax(0, 1fr); }
+}
+
 .insight-error-panel[hidden] {
   display: none;
 }

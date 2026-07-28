@@ -38,7 +38,7 @@ const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 7;
+const insightsCacheVersion = 10;
 const insightsCacheMaxAge = 15 * 60 * 1000;
 
 let currentUser = null;
@@ -534,6 +534,19 @@ async function fetchMostPopularVideosByCategory(accessToken, categoryId, maxResu
   }));
 }
 
+async function fetchMostPopularVideos(accessToken, maxResults = 50) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+  url.searchParams.set("part", "snippet,statistics,contentDetails");
+  url.searchParams.set("chart", "mostPopular");
+  url.searchParams.set("regionCode", "US");
+  url.searchParams.set("maxResults", String(maxResults));
+  const payload = await fetchJson(url, accessToken);
+  return (payload.items || []).map((video) => ({
+    ...video,
+    trendSource: "US most popular — outside your topic"
+  }));
+}
+
 async function fetchTrendingVideos(accessToken, videos) {
   const categoryIds = channelVideoCategoryIds(videos);
   if (!categoryIds.length) return [];
@@ -688,7 +701,7 @@ function trendQueriesForLane(lane) {
 }
 
 async function searchVideosByQuery(accessToken, query, maxResults = 8) {
-  const publishedAfter = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const publishedAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const url = new URL("https://www.googleapis.com/youtube/v3/search");
   url.searchParams.set("part", "snippet");
   url.searchParams.set("type", "video");
@@ -767,11 +780,12 @@ async function fetchSimilarTrendVideos(accessToken, videos) {
 async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) {
   const lane = detectChannelLane(videos);
   const contextControlsTrends = Boolean(savedChannelContext.channelTopic || savedChannelContext.channelContext);
-  const [nicheResult, popularResult, similarResult, laneResult] = await Promise.allSettled([
+  const [nicheResult, popularResult, similarResult, laneResult, outsideResult] = await Promise.allSettled([
     fetchGeminiTrendVideos(accessToken, trendPlan),
     contextControlsTrends ? Promise.resolve([]) : fetchTrendingVideos(accessToken, videos),
     contextControlsTrends ? Promise.resolve([]) : fetchSimilarTrendVideos(accessToken, videos),
-    contextControlsTrends ? Promise.resolve({lane: null, videos: []}) : fetchLaneTrendVideos(accessToken, videos)
+    contextControlsTrends ? Promise.resolve({lane: null, videos: []}) : fetchLaneTrendVideos(accessToken, videos),
+    fetchMostPopularVideos(accessToken)
   ]);
   const nicheVideos = nicheResult.status === "fulfilled" ? nicheResult.value.videos : [];
   const merged = [
@@ -786,6 +800,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
   const ownVideoIds = new Set(videos.map((video) => video.id).filter(Boolean));
   const filteredTrendVideos = merged.filter((video) => {
     if (!video?.id || seen.has(video.id) || ownVideoIds.has(video.id)) return false;
+    if (contextControlsTrends && !trendMatchesCreatorContext(video)) return false;
     seen.add(video.id);
     return true;
   }).sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
@@ -795,6 +810,10 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     || (laneResult.status === "fulfilled" ? laneResult.value.lane : lane);
   trendVideos.trendQueries = trendPlan?.queries || trendQueriesForLane(trendVideos.channelLane);
   trendVideos.contentInterpretations = trendPlan?.contentInterpretations || [];
+  trendVideos.outsideTrendVideos = selectOutsideTopicTrends(
+    outsideResult.status === "fulfilled" ? outsideResult.value : [],
+    ownVideoIds
+  );
   return trendVideos;
 }
 
@@ -823,6 +842,21 @@ function trendMomentumScore(video) {
   return dailyViews * (1 + Math.min(engagementRate * 20, 1.5)) * nicheBoost;
 }
 
+function trendMatchesCreatorContext(video) {
+  const contextWords = importantWords(
+    `${savedChannelContext.channelTopic} ${savedChannelContext.channelContext}`
+  );
+  if (!contextWords.length) return true;
+
+  const snippet = video.snippet || {};
+  const candidateWords = new Set(importantWords([
+    snippet.title || "",
+    shortText(snippet.description || "", 240),
+    ...(snippet.tags || []).slice(0, 8)
+  ].join(" ")));
+  return contextWords.some((word) => candidateWords.has(word));
+}
+
 function trendTitlesOverlap(first, second) {
   const firstWords = new Set(importantWords(first?.snippet?.title || ""));
   const secondWords = new Set(importantWords(second?.snippet?.title || ""));
@@ -849,6 +883,33 @@ function diversifyTrendVideos(videos, queries = []) {
   });
 
   videos.forEach(addIfDistinct);
+  return selected;
+}
+
+function selectOutsideTopicTrends(videos, ownVideoIds = new Set()) {
+  const selected = [];
+  const selectedCategories = new Set();
+  const hasCreatorContext = Boolean(savedChannelContext.channelTopic || savedChannelContext.channelContext);
+
+  const candidates = videos
+    .filter((video) => video?.id && !ownVideoIds.has(video.id))
+    .filter((video) => !hasCreatorContext || !trendMatchesCreatorContext(video))
+    .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+
+  candidates.forEach((video) => {
+    if (selected.length >= 3) return;
+    const categoryId = String(video.snippet?.categoryId || "");
+    if (selectedCategories.has(categoryId)) return;
+    if (selected.some((item) => trendTitlesOverlap(item, video))) return;
+    selected.push(video);
+    if (categoryId) selectedCategories.add(categoryId);
+  });
+
+  candidates.forEach((video) => {
+    if (selected.length >= 3 || selected.some((item) => item.id === video.id || trendTitlesOverlap(item, video))) return;
+    selected.push(video);
+  });
+
   return selected;
 }
 
@@ -1177,6 +1238,26 @@ function buildNextVideoSuggestions(videos, trendVideos) {
   ];
 }
 
+function buildCrossoverTrendSuggestions(summary) {
+  const category = summary.channelLane?.specificCategory
+    || summary.channelLane?.primaryCategory
+    || summary.channelLane?.label
+    || "your current audience";
+  const performance = uploadPerformanceContext(summary.recent || []);
+  const preferredFormat = performance.shortAverageViews > performance.videoAverageViews ? "Short" : "video";
+
+  return (summary.outsideTrendVideos || []).slice(0, 3).map((video) => {
+    const evidence = trendEvidence(video);
+    const outsideCategory = youtubeCategoryName(video.snippet?.categoryId) || "Outside topic";
+    return {
+      title: `${outsideCategory} crossover: ${shortText(evidence?.title || "popular trend", 72)}`,
+      body: `${evidence?.title || "This popular video"} is outside ${category}, with ${compactNumber(evidence?.views || 0)} views as of ${evidence?.publishedLabel || "recently"}. Keep that outside subject as the main story, but introduce it through a ${preferredFormat} structure and viewer perspective already familiar to your audience.`,
+      label: "Targeted crossover",
+      tone: "good"
+    };
+  });
+}
+
 function buildChannelSummary(videos, trendVideos, channelProfile = null) {
   const recent = videos.slice(0, 20);
   const longVideos = videos.filter((video) => !isShort(video));
@@ -1205,6 +1286,7 @@ function buildChannelSummary(videos, trendVideos, channelProfile = null) {
     currentTrends,
     channelLane,
     contentInterpretations: trendVideos.contentInterpretations || [],
+    outsideTrendVideos: trendVideos.outsideTrendVideos || [],
     channelProfile,
     creatorProvidedContext: savedChannelContext,
     nextVideoSuggestions: buildNextVideoSuggestions(videos, trendVideos),
@@ -1259,6 +1341,8 @@ function setTrendMetric(values = [], detail = "", trendClass = "good") {
 
 function updateActivityItems(selector, items) {
   document.querySelectorAll(selector).forEach((item, index) => {
+    const hasInsight = Boolean(items[index]);
+    item.hidden = !hasInsight;
     const insight = items[index] || {title: " ", body: " ", label: " "};
     const timeEl = item.querySelector("time");
     const bodyEl = item.querySelector("span");
@@ -1302,6 +1386,33 @@ function updateRecommendations(items) {
 
 function updateNextVideoSuggestions(items) {
   updateActivityItems("#nextVideoSuggestions .activity-item", items);
+}
+
+function updateOutsideTopicTrends(videos = []) {
+  const items = videos.slice(0, 3).map((video) => {
+    const evidence = trendEvidence(video);
+    const category = youtubeCategoryName(video.snippet?.categoryId) || "Popular video";
+    return {
+      title: evidence?.title || "Popular YouTube video",
+      body: `${category} outside your current topic · ${evidence?.publishedLabel || "Recently published"} · ${compactNumber(evidence?.views || 0)} views. Use its format, audience promise, or presentation style as expansion inspiration—not as a direction your channel must follow.`,
+      label: "Outside your topic",
+      tone: "warn"
+    };
+  });
+
+  if (!items.length) {
+    items.push({
+      title: "No clearly unrelated popular trend found",
+      body: "The current most-popular feed did not contain a strong result that was clearly outside your saved channel context. Refresh later for a new set.",
+      label: "Outside your topic",
+      tone: "warn"
+    });
+  }
+  updateActivityItems("#outsideTopicTrends .activity-item", items);
+}
+
+function updateCrossoverTrends(items = []) {
+  updateActivityItems("#targetedCrossoverTrends .activity-item", items);
 }
 
 function setChatSeedMessage(message = "Hi! I'm your ViewCast assistant. To give you the best advice, should we focus on growing your views, increasing your subscribers, or improving your retention today?") {
@@ -1544,6 +1655,14 @@ function geminiContext(summary) {
       category: youtubeCategoryName(video.snippet?.categoryId),
     }))
     .filter((video) => video.title);
+  const outsideTrendReferences = (summary.outsideTrendVideos || [])
+    .slice(0, 6)
+    .map((video) => ({
+      ...trendEvidence(video),
+      category: youtubeCategoryName(video.snippet?.categoryId) || "Popular video",
+      format: isShort(video) ? "Short" : "Video"
+    }))
+    .filter((video) => video.title);
   const visibleIdeas = summary.geminiInsights?.recommendations || summary.topicIdeas;
   const ideas = visibleIdeas.slice(0, 3).map((idea) => `${idea.title}: ${shortText(idea.body, 120)}`);
   return {
@@ -1561,6 +1680,7 @@ function geminiContext(summary) {
     nextShortLength: summary.geminiInsights?.cards?.nextShortLength?.value || summary.nextShortLength,
     suggestedIdeas: ideas,
     trendReferences,
+    outsideTrendReferences,
     trendQueries: summary.trendVideos.trendQueries || [],
     contentInterpretations: summary.contentInterpretations || []
   };
@@ -1653,6 +1773,37 @@ function filledInsightItems(items, fallbacks, normalizer) {
   return normalizedItems.slice(0, 3);
 }
 
+function normalizeCrossoverTrends(items, summary) {
+  const outsideTitles = (summary.outsideTrendVideos || [])
+    .map((video) => String(video.snippet?.title || "").trim())
+    .filter(Boolean);
+  const fallbacks = buildCrossoverTrendSuggestions(summary);
+  const normalized = (Array.isArray(items) ? items : [])
+    .filter((item) => {
+      const text = `${item?.title || ""} ${item?.body || ""}`.toLowerCase();
+      return outsideTitles.some((title) => text.includes(title.toLowerCase()));
+    })
+    .map((item, index) => normalizeConceptSuggestion(item, fallbacks[index]))
+    .slice(0, 3);
+  const seen = new Set(normalized.map((item) => item.title.toLowerCase()));
+
+  fallbacks.forEach((fallback) => {
+    if (normalized.length >= 3 || seen.has(fallback.title.toLowerCase())) return;
+    normalized.push(fallback);
+    seen.add(fallback.title.toLowerCase());
+  });
+
+  if (!normalized.length) {
+    normalized.push({
+      title: "No targeted crossover is available yet",
+      body: "No clearly unrelated most-popular video was available to combine with your channel context. Refresh later rather than forcing an unrelated expansion idea.",
+      label: "Targeted crossover",
+      tone: "warn"
+    });
+  }
+  return normalized;
+}
+
 function normalizeGeminiInsights(value, summary) {
   if (!value || typeof value !== "object") return null;
   const cards = value.cards || {};
@@ -1670,6 +1821,16 @@ function normalizeGeminiInsights(value, summary) {
     || "Niche"} on YouTube`;
   const recommendations = filledInsightItems(value.recommendations, fallbackIdeas, normalizeRecommendation);
   const nextVideoSuggestions = filledInsightItems(value.nextVideoSuggestions, fallbackSuggestions, normalizeConceptSuggestion);
+  const crossoverTrends = normalizeCrossoverTrends(value.crossoverTrends, summary);
+  const allowedTrendTitles = new Map(summary.trendVideos.map((video) => [
+    String(video.snippet?.title || "").trim().toLowerCase(),
+    String(video.snippet?.title || "").trim()
+  ]));
+  const validatedTrends = (Array.isArray(value.validatedTrends) ? value.validatedTrends : [])
+    .map((title) => allowedTrendTitles.get(String(title || "").trim().toLowerCase()))
+    .filter(Boolean)
+    .filter((title, index, values) => values.indexOf(title) === index)
+    .slice(0, 3);
 
   return {
     cards: {
@@ -1694,6 +1855,8 @@ function normalizeGeminiInsights(value, summary) {
         tone: cards.topTopicSignal?.tone || "good"
       }
     },
+    validatedTrends,
+    crossoverTrends,
     nextVideoSuggestions,
     recommendations,
     chatIntro: String(value.chatIntro || compactAdviceSummary(summary)).slice(0, 360)
@@ -1720,8 +1883,13 @@ async function buildGeminiPageInsights(summary, videos) {
     "recommendations must be 3 important strategic tips the creator can act on now, such as packaging, upload timing, format length, niche/trend fit, Shorts strategy, or weak-angle avoidance.",
     "topTopicSignal.value must be a short, recognizable trend name (2-6 words), not a sentence or a fragment copied from a video title.",
     "Every word in topTopicSignal.value must be supported by the supplied external YouTube trend references or trend queries. Do not invent a trend.",
+    "Review every trendReference for semantic relevance to creatorProvidedContext and present-day usefulness. Reject videos that only share a broad category word, discuss an old event/topic despite being newly uploaded, are archival/reuploads, or do not help this specific creator.",
+    "Return validatedTrends as up to 3 exact, character-for-character title strings copied from distinct accepted trendReferences. Use fewer than 3 when fewer are genuinely current and relevant; never fill space with a weak match.",
+    "Use only references included in validatedTrends for trend-grounded nextVideoSuggestions. If fewer than 2 references pass, replace the unsupported trend suggestion with channel-data advice instead of using a rejected reference.",
+    "Return exactly 3 crossoverTrends using outsideTrendReferences. Each must keep the outside subject as the primary topic while connecting it to this channel's audience perspective, strongest format, presentation style, or creator expertise.",
+    "Every crossover trend must name its exact outside reference, explain why the existing audience could enter it, and use the label 'Targeted crossover'. Do not turn the outside subject into another video about the existing channel topic.",
     "JSON shape:",
-    `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
+    `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"validatedTrends":["","",""],"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"crossoverTrends":[{"title":"","body":"","label":"Targeted crossover","tone":"good"},{"title":"","body":"","label":"Targeted crossover","tone":"good"},{"title":"","body":"","label":"Targeted crossover","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
     "Channel data:",
     JSON.stringify(geminiPageContext(summary, videos), null, 2)
@@ -1878,7 +2046,12 @@ function renderChannelInsights(summary) {
   const groundedGeneratedTrend = isGroundedTrendLabel(generatedTrend, summary.trendVideos)
     ? generatedTrend
     : "";
-  const externalTrends = summary.currentTrends || currentTrendSignals(summary.trendVideos);
+  const creatorTopic = savedChannelContext.channelTopic || "channel topic";
+  const externalTrends = geminiInsights
+    ? (geminiInsights.validatedTrends.length
+      ? geminiInsights.validatedTrends
+      : [`No current ${shortText(creatorTopic, 48)} matches passed validation`])
+    : (summary.currentTrends || currentTrendSignals(summary.trendVideos));
   const displayedTrends = [
     ...externalTrends,
     ...(!externalTrends.length && groundedGeneratedTrend ? [groundedGeneratedTrend] : [])
@@ -1892,6 +2065,8 @@ function renderChannelInsights(summary) {
   );
   updateNextVideoSuggestions(geminiInsights?.nextVideoSuggestions || summary.nextVideoSuggestions);
   updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
+  updateOutsideTopicTrends(summary.outsideTrendVideos);
+  updateCrossoverTrends(geminiInsights?.crossoverTrends || buildCrossoverTrendSuggestions(summary));
   setChatSeedMessage(geminiInsights?.chatIntro || compactAdviceSummary(summary));
 }
 

@@ -17,6 +17,7 @@ const scopes = [
 const form = document.getElementById("videoAnalysisForm");
 const videoUrlInput = document.getElementById("videoUrl");
 const submitButton = form?.querySelector('button[type="submit"]');
+const videoFileInput = document.getElementById("videoFile");
 const videoLibrary = document.getElementById("videoLibrary");
 const videoLibraryStatus = document.getElementById("videoLibraryStatus");
 const refreshVideosButton = document.getElementById("refreshVideos");
@@ -33,6 +34,7 @@ let channelVideos = [];
 let selectedVideoId = "";
 let analysisRequestId = 0;
 let initialVideoId = "";
+const maxUploadBytes = 15 * 1024 * 1024;
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
@@ -100,6 +102,12 @@ function secondsFromIso(value = "") {
 function durationFromIso(value = "") {
   const seconds = secondsFromIso(value);
   return seconds === null ? "" : durationFromSeconds(seconds);
+}
+
+function secondsFromTimestamp(value = "") {
+  const parts = String(value).trim().split(":").map(Number);
+  if (!parts.length || parts.some((part) => !Number.isFinite(part))) return 0;
+  return parts.reduce((total, part) => total * 60 + part, 0);
 }
 
 function truncate(value = "", maxLength = 180) {
@@ -759,6 +767,14 @@ function normalizeGeminiVideoAnalysis(value) {
       impact: String(item.impact || "AI").slice(0, 32)
     }))
     : [];
+  const timeline = Array.isArray(value.timelineInterestPoints)
+    ? value.timelineInterestPoints.slice(0, 8).map((item) => ({
+      timestamp: String(item.timestamp || "0:00").slice(0, 12),
+      title: String(item.title || item.issue || "Improvement opportunity").slice(0, 90),
+      suggestion: String(item.suggestion || item.recommendation || "Tighten this moment to keep viewers engaged.").slice(0, 260),
+      severity: ["high", "medium", "low"].includes(String(item.severity).toLowerCase()) ? String(item.severity).toLowerCase() : "medium"
+    }))
+    : [];
 
   return {
     metricLabels: {
@@ -767,7 +783,8 @@ function normalizeGeminiVideoAnalysis(value) {
       comments: String(labels.comments || "Gemini").slice(0, 18),
       averageViewDuration: String(labels.averageViewDuration || "Gemini").slice(0, 18)
     },
-    recommendedEdits: edits
+    recommendedEdits: edits,
+    timelineInterestPoints: timeline
   };
 }
 
@@ -798,8 +815,9 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
     "Recommended edits must prioritize retentionDips when present. Each suggestion should name the dip time or segment, explain the likely viewer friction, and give a concrete edit the creator can make.",
     "Use practical fixes: shorten/rewrite the intro, move payoff earlier, cut repetition, add pattern interrupts, add chapter/card/pinned-comment recovery, tighten title-thumbnail promise, or make a follow-up/Shorts cutdown.",
     "If retentionDips is empty, say retention data is unavailable and base edits on public stats/search intent only.",
+    "Create 3-6 timelineInterestPoints. Use exact timestamps from retention dips when available; otherwise use honest approximate segments. Each point needs a concise title and a concrete suggestion.",
     "Return JSON only with this shape:",
-    `{"metricLabels":{"views":"","likes":"","comments":"","averageViewDuration":""},"recommendedEdits":[{"segment":"","issue":"","recommendation":"","impact":""}]}`,
+    `{"metricLabels":{"views":"","likes":"","comments":"","averageViewDuration":""},"recommendedEdits":[{"segment":"","issue":"","recommendation":"","impact":""}],"timelineInterestPoints":[{"timestamp":"0:00","title":"","suggestion":"","severity":"high|medium|low"}]}`,
     "",
     "Video and channel data:",
     JSON.stringify(videoAnalysisContext(video, analytics, retentionPoints, searchTerms, channelProfile, videos), null, 2)
@@ -829,6 +847,44 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
   }
 }
 
+function fallbackTimeline(retentionPoints, video, edits = []) {
+  const dips = retentionDipContext(retentionPoints, video, 6);
+  if (dips.length) {
+    return dips.map((dip, index) => ({
+      timestamp: dip.time,
+      title: `${dip.dropPoints}-point audience drop`,
+      suggestion: edits[index]?.recommendation || "Check for slow pacing, repetition, or a delayed payoff. Tighten the edit or add a visual change before this moment.",
+      severity: dip.dropPoints >= 10 ? "high" : "medium"
+    }));
+  }
+  return edits.slice(0, 5).map((item, index) => ({
+    timestamp: item.segment.match(/\d{1,2}:\d{2}(?::\d{2})?/)?.[0] || durationFromSeconds(index * 30),
+    title: item.issue,
+    suggestion: item.recommendation,
+    severity: index < 2 ? "high" : "medium"
+  }));
+}
+
+function renderTimeline(points, durationSeconds = 0) {
+  const markers = document.getElementById("timelineMarkers");
+  const list = document.getElementById("timelinePoints");
+  const duration = document.getElementById("timelineDuration");
+  if (!markers || !list) return;
+  const normalized = (points || []).slice(0, 8);
+  const inferredDuration = Math.max(durationSeconds, ...normalized.map((point) => secondsFromTimestamp(point.timestamp)), 1);
+  if (duration) duration.textContent = durationSeconds ? durationFromSeconds(durationSeconds) : "";
+  markers.innerHTML = normalized.map((point) => {
+    const position = Math.min(100, Math.max(1.5, secondsFromTimestamp(point.timestamp) / inferredDuration * 100));
+    return `<span class="timeline-marker ${escapeHtml(point.severity)}" style="left:${position}%" title="${escapeHtml(point.timestamp + " — " + point.title)}"></span>`;
+  }).join("");
+  list.innerHTML = normalized.length ? normalized.map((point) => `
+    <article class="timeline-point">
+      <time>${escapeHtml(point.timestamp)}</time>
+      <div><b>${escapeHtml(point.title)}</b><span>${escapeHtml(point.suggestion)}</span></div>
+    </article>
+  `).join("") : '<div class="video-library-empty">No timestamped improvement points were available for this analysis.</div>';
+}
+
 function setAnalyzerLoading(isLoading) {
   if (analyzerLoading) analyzerLoading.hidden = !isLoading;
 }
@@ -856,6 +912,7 @@ function clearAnalyzerResults() {
     tbody.innerHTML = Array.from({length: 3}, () => "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>").join("");
   }
   if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+  renderTimeline([], 0);
 }
 
 function updateTable(video, analytics, retentionPoints, geminiAnalysis = null) {
@@ -1018,6 +1075,12 @@ async function analyzeVideoById(videoId) {
     updateMetrics(video, analytics, geminiAnalysis);
     updateSearchTerms(searchTerms);
     updateTable(video, analytics, retentionPoints, geminiAnalysis);
+    renderTimeline(
+      geminiAnalysis?.timelineInterestPoints?.length
+        ? geminiAnalysis.timelineInterestPoints
+        : fallbackTimeline(retentionPoints, video, geminiAnalysis?.recommendedEdits || []),
+      secondsFromIso(video.contentDetails?.duration) || 0
+    );
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     requestAnimationFrame(() => drawActualRetention(retentionPoints, video));
@@ -1036,6 +1099,97 @@ async function analyzeVideoById(videoId) {
     if (requestId === analysisRequestId) {
       setAnalyzerLoading(false);
       setBusy(false);
+    }
+  }
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("The selected video could not be read."));
+    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+    reader.readAsDataURL(file);
+  });
+}
+
+function readVideoDuration(file) {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    const objectUrl = URL.createObjectURL(file);
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const seconds = Number.isFinite(video.duration) ? video.duration : 0;
+      URL.revokeObjectURL(objectUrl);
+      resolve(seconds);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(0);
+    };
+    video.src = objectUrl;
+  });
+}
+
+async function analyzeUploadedVideo(file) {
+  if (!file) return;
+  if (!file.type.startsWith("video/")) {
+    setStatus("Choose a valid video file.");
+    return;
+  }
+  if (file.size > maxUploadBytes) {
+    setStatus("Choose a video smaller than 15 MB. A shorter export works best for direct analysis.");
+    return;
+  }
+  if (!isGeminiAvailable()) {
+    setStatus("AI analysis is unavailable until Gemini is configured.");
+    return;
+  }
+
+  const requestId = ++analysisRequestId;
+  try {
+    setBusy(true);
+    setAnalyzerResultsVisible(false);
+    setAnalyzerLoading(true);
+    setStatus(`Uploading and analyzing ${file.name}...`);
+    updateLibrarySelection("");
+    const [data, durationSeconds] = await Promise.all([readFileAsBase64(file), readVideoDuration(file)]);
+    const prompt = [
+      "Analyze the attached video as an expert video editor and audience-retention strategist.",
+      "Inspect its visuals, audible content, pacing, hook, clarity, transitions, dead space, and opportunities for stronger engagement.",
+      "Return JSON only. Give 3-6 timestamped improvement points tied to moments you can actually observe.",
+      `Filename: ${file.name}. Duration: ${durationFromSeconds(durationSeconds)}.`,
+      `Shape: {"recommendedEdits":[{"segment":"","issue":"","recommendation":"","impact":""}],"timelineInterestPoints":[{"timestamp":"0:00","title":"","suggestion":"","severity":"high|medium|low"}]}`
+    ].join("\n");
+    const payload = await requestGeminiContent({
+      contents: [{role: "user", parts: [{text: prompt}, {inlineData: {mimeType: file.type, data}}]}],
+      generationConfig: {responseMimeType: "application/json", maxOutputTokens: 1200}
+    });
+    if (requestId !== analysisRequestId) return;
+    const responseText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
+    const analysis = normalizeGeminiVideoAnalysis(safeJsonParse(responseText));
+    if (!analysis) throw new Error("The video analysis returned an invalid response. Please try again.");
+    const localVideo = {statistics: {}, contentDetails: {duration: ""}, snippet: {title: file.name}};
+    updateMetrics(localVideo, null, {metricLabels: {views: "Uploaded file", likes: "Unavailable", comments: "Unavailable", averageViewDuration: "File length"}});
+    setMetric(3, durationFromSeconds(durationSeconds), "File length");
+    updateSearchTerms([]);
+    updateTable(localVideo, null, [], analysis);
+    renderTimeline(analysis.timelineInterestPoints, durationSeconds);
+    setAnalyzerLoading(false);
+    setAnalyzerResultsVisible(true);
+    if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+    recordVideoAnalysis();
+    setStatus(`Analysis complete for ${file.name}. Uploaded files do not include YouTube performance metrics.`);
+    setLibraryStatus(`Analyzed uploaded file: ${file.name}.`);
+  } catch (error) {
+    if (requestId !== analysisRequestId) return;
+    console.error("Could not analyze uploaded video.", error);
+    setAnalyzerResultsVisible(false);
+    setStatus(error.message || "Could not analyze the uploaded video.");
+  } finally {
+    if (requestId === analysisRequestId) {
+      setAnalyzerLoading(false);
+      setBusy(false);
+      if (videoFileInput) videoFileInput.value = "";
     }
   }
 }
@@ -1136,6 +1290,7 @@ if (form && firebaseConfigured) {
     analyzeVideoById(card.dataset.videoId);
   });
   refreshVideosButton?.addEventListener("click", () => loadVideoLibrary({allowPrompt: true}));
+  videoFileInput?.addEventListener("change", () => analyzeUploadedVideo(videoFileInput.files?.[0]));
 } else if (form) {
   setStatus("Firebase is not configured yet.");
 }
