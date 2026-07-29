@@ -34,6 +34,7 @@ let channelVideos = [];
 let selectedVideoId = "";
 let analysisRequestId = 0;
 let initialVideoId = "";
+let timelineDismissHandler = null;
 const maxUploadBytes = 15 * 1024 * 1024;
 
 function setStatus(message) {
@@ -213,6 +214,7 @@ function videoAnalysisStorageKey(videoId = "") {
 
 function videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms) {
   return JSON.stringify({
+    analysisVersion: 2,
     id: video.id || "",
     views: video.statistics?.viewCount || "",
     likes: video.statistics?.likeCount || "",
@@ -628,23 +630,40 @@ function drawActualRetention(points, video) {
 
 function retentionDipContext(retentionPoints, video, maxDips = 4) {
   const durationSeconds = secondsFromIso(video?.contentDetails?.duration) || 0;
-  if (!retentionPoints.length) return [];
-
-  return retentionPoints
-    .slice(1)
+  if (retentionPoints.length < 2) return [];
+  // Compare short windows rather than only adjacent samples so gradual but
+  // meaningful audience losses are surfaced alongside sharp single-point dips.
+  const windowSize = Math.max(1, Math.round(retentionPoints.length * 0.03));
+  const candidates = retentionPoints
+    .slice(windowSize)
     .map((point, index) => {
       const previous = retentionPoints[index];
       const drop = previous.ratio - point.ratio;
+      const positionPercent = Math.round(point.position * 100);
+      const phase = positionPercent <= 15
+        ? "Hook / intro"
+        : positionPercent >= 85 ? "Ending / CTA" : "Main content";
       return {
         time: durationSeconds ? durationFromSeconds(point.position * durationSeconds) : `${Math.round(point.position * 100)}%`,
+        startTime: durationSeconds ? durationFromSeconds(previous.position * durationSeconds) : `${Math.round(previous.position * 100)}%`,
+        positionPercent,
+        phase,
         fromPercent: Math.round(previous.ratio * 100),
         toPercent: Math.round(point.ratio * 100),
-        dropPoints: Math.round(drop * 100)
+        dropPoints: Math.round(drop * 100),
+        windowSeconds: durationSeconds ? Math.max(1, Math.round((point.position - previous.position) * durationSeconds)) : null
       };
     })
-    .filter((dip) => dip.dropPoints >= 4)
-    .sort((a, b) => b.dropPoints - a.dropPoints)
-    .slice(0, maxDips);
+    .filter((dip) => dip.dropPoints >= 2)
+    .sort((a, b) => b.dropPoints - a.dropPoints);
+
+  const selected = [];
+  for (const dip of candidates) {
+    const overlapsExisting = selected.some((item) => Math.abs(item.positionPercent - dip.positionPercent) < 4);
+    if (!overlapsExisting) selected.push(dip);
+    if (selected.length >= maxDips) break;
+  }
+  return selected.map((dip, index) => ({...dip, rank: index + 1}));
 }
 
 function updateSearchTerms(searchTerms) {
@@ -792,11 +811,11 @@ function retentionEditSuggestions(retentionPoints, video) {
   const dips = retentionDipContext(retentionPoints, video, 5);
   if (!dips.length) return [];
 
-  return dips.map((dip, index) => {
-    const isIntro = index === 0 && /^0:0|^0:1|^0:2/.test(dip.time);
+  return dips.map((dip) => {
+    const isIntro = dip.positionPercent <= 15;
     return [
       dip.time,
-      `${dip.dropPoints} point retention drop`,
+      `${dip.dropPoints} point retention drop (${dip.fromPercent}% → ${dip.toPercent}%)`,
       isIntro
         ? "Tighten the opening: state the payoff sooner, cut setup, and show the strongest visual or result before the drop."
         : "Review this moment for repetition, slow setup, or a promise mismatch. Cut dead air, add a pattern interrupt, or move the next payoff before this timestamp.",
@@ -812,10 +831,12 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
     "You are ViewCast's YouTube video analyst. Return compact JSON only.",
     "Use only supplied selected-video data, private analytics, retention samples, search terms, and compact channel comparison.",
     "Metric labels must be short: Above avg, Needs lift, Strong, Watch drop, or Unavailable.",
-    "Recommended edits must prioritize retentionDips when present. Each suggestion should name the dip time or segment, explain the likely viewer friction, and give a concrete edit the creator can make.",
+    "Actively analyze retentionDips when present. Rank them by dropPoints, consider fromPercent, toPercent, windowSeconds, video phase, and nearby retention samples.",
+    "For every major dip, state what the analytics prove, then label the cause as a likely hypothesis—not a certainty—because analytics alone cannot reveal the exact on-screen cause.",
+    "Recommended edits must prioritize the largest retention drops. Each suggestion must name the exact dip timestamp, quantify the drop, explain likely viewer friction, and give a concrete edit or content change.",
     "Use practical fixes: shorten/rewrite the intro, move payoff earlier, cut repetition, add pattern interrupts, add chapter/card/pinned-comment recovery, tighten title-thumbnail promise, or make a follow-up/Shorts cutdown.",
-    "If retentionDips is empty, say retention data is unavailable and base edits on public stats/search intent only.",
-    "Create 3-6 timelineInterestPoints. Use exact timestamps from retention dips when available; otherwise use honest approximate segments. Each point needs a concise title and a concrete suggestion.",
+    "If retention samples exist but retentionDips is empty, explicitly say there was no significant 2+ point drop in the sampled curve. If retention data is absent, say it is unavailable.",
+    "Create timelineInterestPoints for the major retention drops before adding other opportunities. Use exact timestamps and include the measured before-to-after percentages in each title or suggestion.",
     "Return JSON only with this shape:",
     `{"metricLabels":{"views":"","likes":"","comments":"","averageViewDuration":""},"recommendedEdits":[{"segment":"","issue":"","recommendation":"","impact":""}],"timelineInterestPoints":[{"timestamp":"0:00","title":"","suggestion":"","severity":"high|medium|low"}]}`,
     "",
@@ -833,7 +854,7 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 650
+        maxOutputTokens: 1200
       }
     });
     const text = payload.candidates?.[0]?.content?.parts
@@ -852,8 +873,8 @@ function fallbackTimeline(retentionPoints, video, edits = []) {
   if (dips.length) {
     return dips.map((dip, index) => ({
       timestamp: dip.time,
-      title: `${dip.dropPoints}-point audience drop`,
-      suggestion: edits[index]?.recommendation || "Check for slow pacing, repetition, or a delayed payoff. Tighten the edit or add a visual change before this moment.",
+      title: `${dip.fromPercent}% → ${dip.toPercent}% retention (${dip.dropPoints}-point drop)`,
+      suggestion: edits[index]?.recommendation || `${dip.phase}: analytics show viewers leaving between ${dip.startTime} and ${dip.time}. Check this window for slow pacing, repetition, or a delayed payoff, then tighten the edit or add a visual change before the drop.`,
       severity: dip.dropPoints >= 10 ? "high" : "medium"
     }));
   }
@@ -869,13 +890,24 @@ function renderTimeline(points, durationSeconds = 0) {
   const markers = document.getElementById("timelineMarkers");
   const list = document.getElementById("timelinePoints");
   const duration = document.getElementById("timelineDuration");
+  const popover = document.getElementById("timelinePopover");
+  const popoverTime = document.getElementById("timelinePopoverTime");
+  const popoverTitle = document.getElementById("timelinePopoverTitle");
+  const popoverSuggestion = document.getElementById("timelinePopoverSuggestion");
+  const popoverClose = document.getElementById("timelinePopoverClose");
   if (!markers || !list) return;
+  if (timelineDismissHandler) {
+    document.removeEventListener("click", timelineDismissHandler);
+    timelineDismissHandler = null;
+  }
   const normalized = (points || []).slice(0, 8);
+  let pinnedIndex = -1;
   const inferredDuration = Math.max(durationSeconds, ...normalized.map((point) => secondsFromTimestamp(point.timestamp)), 1);
   if (duration) duration.textContent = durationSeconds ? durationFromSeconds(durationSeconds) : "";
-  markers.innerHTML = normalized.map((point) => {
+  if (popover) popover.hidden = true;
+  markers.innerHTML = normalized.map((point, index) => {
     const position = Math.min(100, Math.max(1.5, secondsFromTimestamp(point.timestamp) / inferredDuration * 100));
-    return `<span class="timeline-marker ${escapeHtml(point.severity)}" style="left:${position}%" title="${escapeHtml(point.timestamp + " — " + point.title)}"></span>`;
+    return `<button class="timeline-marker ${escapeHtml(point.severity)}" type="button" data-timeline-index="${index}" style="left:${position}%" aria-label="${escapeHtml(point.timestamp + ": " + point.title)}" aria-expanded="false"></button>`;
   }).join("");
   list.innerHTML = normalized.length ? normalized.map((point) => `
     <article class="timeline-point">
@@ -883,6 +915,62 @@ function renderTimeline(points, durationSeconds = 0) {
       <div><b>${escapeHtml(point.title)}</b><span>${escapeHtml(point.suggestion)}</span></div>
     </article>
   `).join("") : '<div class="video-library-empty">No timestamped improvement points were available for this analysis.</div>';
+
+  const showPoint = (index, {pin = false} = {}) => {
+    const point = normalized[index];
+    if (!point || !popover) return;
+    if (pin) pinnedIndex = index;
+    if (popoverTime) popoverTime.textContent = `${point.timestamp} · ${point.severity} priority`;
+    if (popoverTitle) popoverTitle.textContent = point.title;
+    if (popoverSuggestion) popoverSuggestion.textContent = point.suggestion;
+    popover.hidden = false;
+    markers.querySelectorAll(".timeline-marker").forEach((marker) => {
+      const isActive = Number(marker.dataset.timelineIndex) === index;
+      marker.classList.toggle("is-active", isActive);
+      marker.setAttribute("aria-expanded", String(isActive));
+    });
+  };
+
+  const closePoint = () => {
+    pinnedIndex = -1;
+    if (popover) popover.hidden = true;
+    markers.querySelectorAll(".timeline-marker").forEach((marker) => {
+      marker.classList.remove("is-active");
+      marker.setAttribute("aria-expanded", "false");
+    });
+  };
+
+  markers.querySelectorAll(".timeline-marker").forEach((marker) => {
+    const index = Number(marker.dataset.timelineIndex);
+    marker.addEventListener("mouseenter", () => showPoint(index));
+    marker.addEventListener("focus", () => showPoint(index));
+    marker.addEventListener("mouseleave", () => {
+      if (pinnedIndex >= 0) showPoint(pinnedIndex);
+      else closePoint();
+    });
+    marker.addEventListener("blur", () => {
+      if (pinnedIndex >= 0) showPoint(pinnedIndex);
+      else closePoint();
+    });
+    marker.addEventListener("click", () => {
+      if (pinnedIndex === index) closePoint();
+      else showPoint(index, {pin: true});
+    });
+    marker.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        closePoint();
+        marker.blur();
+      }
+    });
+  });
+  if (popoverClose) popoverClose.onclick = closePoint;
+  timelineDismissHandler = (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (pinnedIndex >= 0 && !target?.closest(".timeline-marker") && !target?.closest("#timelinePopover")) {
+      closePoint();
+    }
+  };
+  document.addEventListener("click", timelineDismissHandler);
 }
 
 function setAnalyzerLoading(isLoading) {

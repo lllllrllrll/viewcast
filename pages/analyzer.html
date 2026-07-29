@@ -184,6 +184,14 @@
               <div class="timeline-track" aria-hidden="true"></div>
               <div class="timeline-markers" id="timelineMarkers"></div>
             </div>
+            <aside class="timeline-popover" id="timelinePopover" aria-live="polite" hidden>
+              <div class="timeline-popover-head">
+                <span id="timelinePopoverTime"></span>
+                <button type="button" id="timelinePopoverClose" aria-label="Close timeline suggestion">&times;</button>
+              </div>
+              <strong id="timelinePopoverTitle"></strong>
+              <p id="timelinePopoverSuggestion"></p>
+            </aside>
             <div class="timeline-points" id="timelinePoints"></div>
           </article>
         </section>
