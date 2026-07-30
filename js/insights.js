@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 12;
+const insightsCacheVersion = 13;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -577,7 +577,7 @@ async function fetchMostPopularVideos(accessToken, maxResults = 50) {
 
 async function fetchTrendingVideos(accessToken, videos) {
   const categoryIds = channelVideoCategoryIds(videos);
-  if (!categoryIds.length) return [];
+  if (!categoryIds.length) return fetchMostPopularVideos(accessToken, 25);
 
   try {
     const results = await Promise.allSettled(
@@ -770,7 +770,7 @@ async function fetchLaneTrendVideos(accessToken, videos) {
 async function fetchGeminiTrendVideos(accessToken, trendPlan) {
   if (!trendPlan?.queries?.length) return {lane: null, videos: []};
   const recentResults = await Promise.allSettled(
-    trendPlan.queries.slice(0, 4).map((query) => searchVideosByQuery(accessToken, query, 6))
+    trendPlan.queries.slice(0, 2).map((query) => searchVideosByQuery(accessToken, query, 8))
   );
   let videos = recentResults.flatMap((result, index) => result.status === "fulfilled"
     ? result.value.map((video) => ({
@@ -782,8 +782,8 @@ async function fetchGeminiTrendVideos(accessToken, trendPlan) {
 
   if (!videos.length) {
     const fallbackResults = await Promise.allSettled(
-      trendPlan.queries.slice(0, 4).map(
-        (query) => searchVideosByQuery(accessToken, query, 8, 90)
+      trendPlan.queries.slice(0, 2).map(
+        (query) => searchVideosByQuery(accessToken, query, 10, 90)
       )
     );
     videos = fallbackResults.flatMap((result, index) => result.status === "fulfilled"
@@ -862,8 +862,8 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
       contextControlsTrends &&
       trendPlan?.queries?.length) {
     const expandedResults = await Promise.allSettled(
-      trendPlan.queries.slice(0, 4).map(
-        (query) => searchVideosByQuery(accessToken, query, 8, 90)
+      trendPlan.queries.slice(0, 2).map(
+        (query) => searchVideosByQuery(accessToken, query, 10, 90)
       )
     );
     filteredTrendVideos = expandedResults
@@ -1264,21 +1264,7 @@ function currentTrendSignals(trendVideos = []) {
   const uniqueSignals = [...new Set(externalSignals.map((signal) => signal.toLowerCase()))]
     .map((signal) => externalSignals.find((candidate) => candidate.toLowerCase() === signal))
     .slice(0, 3);
-  if (uniqueSignals.length >= 3) return uniqueSignals;
-
-  const creatorContextLabel = savedChannelContext.channelTopic
-    || importantWords(savedChannelContext.channelContext).slice(0, 5).join(" ");
-  const laneLabel = creatorContextLabel
-    || trendVideos.channelLane?.specificCategory
-    || trendVideos.channelLane?.primaryCategory
-    || trendVideos.channelLane?.label
-    || "Your niche";
-  const fallbacks = [
-    uniqueSignals.length ? `${laneLabel} — more signals pending` : `No recent ${laneLabel} match found`,
-    "Refresh to check newer results",
-    "No channel titles used"
-  ];
-  return [...new Set([...uniqueSignals, ...fallbacks])].slice(0, 3);
+  return uniqueSignals;
 }
 
 function currentTrendSignal(videos, trendVideos = []) {
