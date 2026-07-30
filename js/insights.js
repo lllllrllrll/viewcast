@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 10;
+const insightsCacheVersion = 11;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -807,7 +807,7 @@ async function fetchSimilarTrendVideos(accessToken, videos) {
 
 async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) {
   const lane = detectChannelLane(videos);
-  const contextControlsTrends = Boolean(savedChannelContext.channelTopic || savedChannelContext.channelContext);
+  const contextControlsTrends = meaningfulCreatorContextWords().length > 0;
   const [nicheResult, popularResult, similarResult, laneResult, outsideResult] = await Promise.allSettled([
     fetchGeminiTrendVideos(accessToken, trendPlan),
     contextControlsTrends ? Promise.resolve([]) : fetchTrendingVideos(accessToken, videos),
@@ -870,10 +870,18 @@ function trendMomentumScore(video) {
   return dailyViews * (1 + Math.min(engagementRate * 20, 1.5)) * nicheBoost;
 }
 
-function trendMatchesCreatorContext(video) {
-  const contextWords = importantWords(
+function meaningfulCreatorContextWords() {
+  const genericContextWords = new Set([
+    "channel", "creator", "content", "youtube", "uploads", "audience",
+    "topic", "niche", "page", "account"
+  ]);
+  return importantWords(
     `${savedChannelContext.channelTopic} ${savedChannelContext.channelContext}`
-  );
+  ).filter((word) => !genericContextWords.has(word));
+}
+
+function trendMatchesCreatorContext(video) {
+  const contextWords = meaningfulCreatorContextWords();
   if (!contextWords.length) return true;
 
   const snippet = video.snippet || {};
@@ -882,7 +890,9 @@ function trendMatchesCreatorContext(video) {
     shortText(snippet.description || "", 240),
     ...(snippet.tags || []).slice(0, 8)
   ].join(" ")));
-  return contextWords.some((word) => candidateWords.has(word));
+  const matches = contextWords.filter((word) => candidateWords.has(word)).length;
+  const requiredMatches = contextWords.length >= 4 ? 2 : 1;
+  return matches >= requiredMatches;
 }
 
 function trendTitlesOverlap(first, second) {
@@ -917,7 +927,7 @@ function diversifyTrendVideos(videos, queries = []) {
 function selectOutsideTopicTrends(videos, ownVideoIds = new Set()) {
   const selected = [];
   const selectedCategories = new Set();
-  const hasCreatorContext = Boolean(savedChannelContext.channelTopic || savedChannelContext.channelContext);
+  const hasCreatorContext = meaningfulCreatorContextWords().length > 0;
 
   const candidates = videos
     .filter((video) => video?.id && !ownVideoIds.has(video.id))
@@ -1918,11 +1928,23 @@ function normalizeGeminiInsights(value, summary) {
   const nextVideoSuggestions = filledInsightItems(value.nextVideoSuggestions, fallbackSuggestions, normalizeConceptSuggestion);
   const crossoverTrends = normalizeCrossoverTrends(value.crossoverTrends, summary);
   const allowedTrendTitles = new Map(summary.trendVideos.map((video) => [
-    String(video.snippet?.title || "").trim().toLowerCase(),
+    normalizedTitleWords(video.snippet?.title || "").join(" "),
     String(video.snippet?.title || "").trim()
   ]));
   const validatedTrends = (Array.isArray(value.validatedTrends) ? value.validatedTrends : [])
-    .map((title) => allowedTrendTitles.get(String(title || "").trim().toLowerCase()))
+    .map((title) => {
+      const normalized = normalizedTitleWords(title).join(" ");
+      if (allowedTrendTitles.has(normalized)) return allowedTrendTitles.get(normalized);
+
+      const titleWords = new Set(normalizedTitleWords(title));
+      if (!titleWords.size) return "";
+      const closest = [...allowedTrendTitles.entries()].find(([candidate]) => {
+        const candidateWords = new Set(candidate.split(" ").filter(Boolean));
+        const shared = [...titleWords].filter((word) => candidateWords.has(word)).length;
+        return shared / Math.max(titleWords.size, candidateWords.size) >= 0.8;
+      });
+      return closest?.[1] || "";
+    })
     .filter(Boolean)
     .filter((title, index, values) => values.indexOf(title) === index)
     .slice(0, 3);
@@ -2167,11 +2189,10 @@ function renderChannelInsights(summary) {
   const groundedGeneratedTrend = isGroundedTrendLabel(generatedTrend, summary.trendVideos)
     ? generatedTrend
     : "";
-  const creatorTopic = savedChannelContext.channelTopic || "channel topic";
   const externalTrends = geminiInsights
     ? (geminiInsights.validatedTrends.length
       ? geminiInsights.validatedTrends
-      : [`No current ${shortText(creatorTopic, 48)} matches passed validation`])
+      : (summary.currentTrends || currentTrendSignals(summary.trendVideos)))
     : (summary.currentTrends || currentTrendSignals(summary.trendVideos));
   const displayedTrends = [
     ...externalTrends,
@@ -2280,7 +2301,12 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
       return;
     }
 
-    const accessToken = readCachedAccessToken();
+    let accessToken = readCachedAccessToken();
+    if (!accessToken && allowPrompt) {
+      setStatus("YouTube access is required to search current trends...");
+      accessToken = await requestAccessToken();
+      if (requestId !== analysisRequestId) return;
+    }
     let channelProfile = null;
     if (accessToken) {
       setStatus("Loading channel profile...");
@@ -2307,7 +2333,9 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
     if (!summary.geminiInsights) throw new Error("AI_INSIGHTS_GENERATION_FAILED");
     if (requestId !== analysisRequestId) return;
     renderChannelInsights(summary);
-    saveCachedInsights(summary, videos, focusVideoId);
+    if (trendVideos.length || trendVideos.outsideTrendVideos?.length) {
+      saveCachedInsights(summary, videos, focusVideoId);
+    }
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     setStatus("");
