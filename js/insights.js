@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 11;
+const insightsCacheVersion = 12;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -728,8 +728,15 @@ function trendQueriesForLane(lane) {
   ];
 }
 
-async function searchVideosByQuery(accessToken, query, maxResults = 8) {
-  const publishedAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+async function searchVideosByQuery(
+  accessToken,
+  query,
+  maxResults = 8,
+  maxAgeDays = 30
+) {
+  const publishedAfter = new Date(
+    Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+  ).toISOString();
   const url = new URL("https://www.googleapis.com/youtube/v3/search");
   url.searchParams.set("part", "snippet");
   url.searchParams.set("type", "video");
@@ -762,18 +769,35 @@ async function fetchLaneTrendVideos(accessToken, videos) {
 
 async function fetchGeminiTrendVideos(accessToken, trendPlan) {
   if (!trendPlan?.queries?.length) return {lane: null, videos: []};
-  const results = await Promise.allSettled(
+  const recentResults = await Promise.allSettled(
     trendPlan.queries.slice(0, 4).map((query) => searchVideosByQuery(accessToken, query, 6))
   );
-  return {
-    lane: trendPlan.lane,
-    videos: results.flatMap((result, index) => result.status === "fulfilled"
+  let videos = recentResults.flatMap((result, index) => result.status === "fulfilled"
+    ? result.value.map((video) => ({
+      ...video,
+      trendSource: "Niche YouTube trend search",
+      trendQuery: trendPlan.queries[index]
+    }))
+    : []);
+
+  if (!videos.length) {
+    const fallbackResults = await Promise.allSettled(
+      trendPlan.queries.slice(0, 4).map(
+        (query) => searchVideosByQuery(accessToken, query, 8, 90)
+      )
+    );
+    videos = fallbackResults.flatMap((result, index) => result.status === "fulfilled"
       ? result.value.map((video) => ({
         ...video,
-        trendSource: "Niche YouTube trend search",
+        trendSource: "Expanded niche YouTube trend search",
         trendQuery: trendPlan.queries[index]
       }))
-      : [])
+      : []);
+  }
+
+  return {
+    lane: trendPlan.lane,
+    videos
   };
 }
 
@@ -826,12 +850,50 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
   ];
   const seen = new Set();
   const ownVideoIds = new Set(videos.map((video) => video.id).filter(Boolean));
-  const filteredTrendVideos = merged.filter((video) => {
+  let filteredTrendVideos = merged.filter((video) => {
     if (!video?.id || seen.has(video.id) || ownVideoIds.has(video.id)) return false;
     if (contextControlsTrends && !trendMatchesCreatorContext(video)) return false;
     seen.add(video.id);
     return true;
   }).sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+
+  if (!filteredTrendVideos.length &&
+      nicheVideos.length &&
+      contextControlsTrends &&
+      trendPlan?.queries?.length) {
+    const expandedResults = await Promise.allSettled(
+      trendPlan.queries.slice(0, 4).map(
+        (query) => searchVideosByQuery(accessToken, query, 8, 90)
+      )
+    );
+    filteredTrendVideos = expandedResults
+      .flatMap((result, index) => result.status === "fulfilled"
+        ? result.value.map((video) => ({
+          ...video,
+          trendSource: "Expanded niche YouTube trend search",
+          trendQuery: trendPlan.queries[index]
+        }))
+        : [])
+      .filter((video, index, values) => (
+        video?.id &&
+        !ownVideoIds.has(video.id) &&
+        values.findIndex((candidate) => candidate.id === video.id) === index &&
+        trendMatchesCreatorContext(video)
+      ))
+      .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+  }
+
+  if (!filteredTrendVideos.length) {
+    const categoryFallback = await fetchTrendingVideos(accessToken, videos);
+    filteredTrendVideos = categoryFallback
+      .filter((video, index, values) => (
+        video?.id &&
+        !ownVideoIds.has(video.id) &&
+        values.findIndex((candidate) => candidate.id === video.id) === index
+      ))
+      .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+  }
+
   const trendVideos = diversifyTrendVideos(filteredTrendVideos, trendPlan?.queries || []);
   trendVideos.channelLane = trendPlan?.lane
     || (nicheResult.status === "fulfilled" ? nicheResult.value.lane : null)
@@ -840,7 +902,8 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
   trendVideos.contentInterpretations = trendPlan?.contentInterpretations || [];
   trendVideos.outsideTrendVideos = selectOutsideTopicTrends(
     outsideResult.status === "fulfilled" ? outsideResult.value : [],
-    ownVideoIds
+    ownVideoIds,
+    new Set(channelVideoCategoryIds(videos))
   );
   return trendVideos;
 }
@@ -866,7 +929,7 @@ function trendMomentumScore(video) {
   const ageDays = trendAgeDays(video);
   const dailyViews = views / ageDays;
   const engagementRate = views ? (likes + comments * 2) / views : 0;
-  const nicheBoost = video.trendSource === "Niche YouTube trend search" ? 1.35 : 1;
+  const nicheBoost = /niche YouTube trend search$/.test(video.trendSource || "") ? 1.35 : 1;
   return dailyViews * (1 + Math.min(engagementRate * 20, 1.5)) * nicheBoost;
 }
 
@@ -924,7 +987,11 @@ function diversifyTrendVideos(videos, queries = []) {
   return selected;
 }
 
-function selectOutsideTopicTrends(videos, ownVideoIds = new Set()) {
+function selectOutsideTopicTrends(
+  videos,
+  ownVideoIds = new Set(),
+  ownCategoryIds = new Set()
+) {
   const selected = [];
   const selectedCategories = new Set();
   const hasCreatorContext = meaningfulCreatorContextWords().length > 0;
@@ -947,6 +1014,32 @@ function selectOutsideTopicTrends(videos, ownVideoIds = new Set()) {
     if (selected.length >= 3 || selected.some((item) => item.id === video.id || trendTitlesOverlap(item, video))) return;
     selected.push(video);
   });
+
+  videos
+    .filter((video) => {
+      const categoryId = String(video?.snippet?.categoryId || "");
+      return video?.id &&
+        !ownVideoIds.has(video.id) &&
+        categoryId &&
+        !ownCategoryIds.has(categoryId);
+    })
+    .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a))
+    .forEach((video) => {
+      if (selected.length >= 3 ||
+          selected.some((item) => item.id === video.id ||
+            trendTitlesOverlap(item, video))) return;
+      selected.push(video);
+    });
+
+  videos
+    .filter((video) => video?.id && !ownVideoIds.has(video.id))
+    .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a))
+    .forEach((video) => {
+      if (selected.length >= 3 ||
+          selected.some((item) => item.id === video.id ||
+            trendTitlesOverlap(item, video))) return;
+      selected.push(video);
+    });
 
   return selected;
 }
@@ -1149,7 +1242,7 @@ function trendReferenceText(trendVideos = []) {
   return [
     ...(trendVideos.trendQueries || []),
     ...trendVideos
-      .filter((video) => video.trendSource === "Niche YouTube trend search")
+      .filter((video) => /niche YouTube trend search$/.test(video.trendSource || ""))
       .slice(0, 20)
       .map((video) => video.snippet?.title || "")
   ].join(" ");
