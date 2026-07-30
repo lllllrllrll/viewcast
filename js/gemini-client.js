@@ -2,12 +2,9 @@ import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
 import { firebaseConfig, firebaseConfigured, geminiModel } from "./firebase-config.js";
 
-const fallbackGeminiModel = "gemini-2.5-flash";
+const fallbackGeminiModel = "gemini-3.1-flash-lite";
 const allowedGeminiModels = new Set([
-  "gemini-3.5-flash",
-  "gemini-3.1-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite"
+  "gemini-3.1-flash-lite"
 ]);
 
 function geminiText(payload = {}) {

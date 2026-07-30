@@ -28,6 +28,8 @@ let latestAnalysis = null;
 let thumbnailChatHistory = [];
 const comparisonFiles = {v1: null, v2: null};
 const comparisonUrls = {v1: "", v2: ""};
+const thumbnailCachePrefix = "viewcastThumbnailAnalysis:";
+const comparisonCachePrefix = "viewcastThumbnailComparison:";
 
 function imageMimeType(file) {
   if (ALLOWED_TYPES.has(file?.type)) return file.type;
@@ -115,6 +117,23 @@ function fileToBase64(file) {
   });
 }
 
+function fileFingerprint(file) {
+  return [file?.name || "", file?.size || 0, file?.lastModified || 0].join(":");
+}
+
+function readSessionResult(key) {
+  try {
+    return JSON.parse(sessionStorage.getItem(key) || "null");
+  } catch {
+    sessionStorage.removeItem(key);
+    return null;
+  }
+}
+
+function saveSessionResult(key, value) {
+  if (value) sessionStorage.setItem(key, JSON.stringify(value));
+}
+
 function parseJson(text) {
   const cleaned = String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   return JSON.parse(cleaned);
@@ -178,17 +197,15 @@ thumbnailChatForm.addEventListener("submit", async (event) => {
   thumbnailChatStatus.textContent = "Gemini is thinking…";
   thumbnailChatStatus.dataset.type = "loading";
   try {
-    const base64 = await fileToBase64(selectedFile);
     const recentConversation = thumbnailChatHistory.slice(-7)
       .map((message) => `${message.role === "user" ? "User" : "Gemini"}: ${message.text}`)
       .join("\n");
     const reply = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist answering follow-up questions about your prior visual analysis. Be concise, specific, honest about uncertainty, and ground every answer in the supplied thumbnail and analysis.",
       contents: [{role: "user", parts: [
-        {text: `Original thumbnail analysis:\n${JSON.stringify(latestAnalysis)}\n\nVideo title: ${thumbnailTitle.value.trim()}\n\nRecent conversation:\n${recentConversation}\n\nAnswer the user's latest question directly. Do not return JSON.`},
-        {inlineData: {data: base64, mimeType: imageMimeType(selectedFile)}}
+        {text: `Use the completed visual analysis below; do not re-analyze the image.\nAnalysis:${JSON.stringify(latestAnalysis)}\nTitle:${thumbnailTitle.value.trim()}\nConversation:${recentConversation}\nAnswer the latest question directly.`}
       ]}],
-      generationConfig: {temperature: 0.45, maxOutputTokens: 700}
+      generationConfig: {temperature: 0.35, maxOutputTokens: 320}
     });
     const answer = reply || "I could not produce a useful answer for that question.";
     appendThumbnailChatMessage("assistant", answer);
@@ -248,8 +265,16 @@ form.addEventListener("submit", async (event) => {
   analyzeButton.classList.add("is-loading");
   setStatus("Gemini is reviewing your thumbnail…", "loading");
   try {
-    const base64 = await fileToBase64(selectedFile);
     const videoTitle = thumbnailTitle.value.trim();
+    const cacheKey = `${thumbnailCachePrefix}${fileFingerprint(selectedFile)}:${videoTitle}`;
+    const cachedAnalysis = readSessionResult(cacheKey);
+    if (cachedAnalysis) {
+      renderAnalysis(cachedAnalysis);
+      setStatus("Showing this session's saved analysis.", "success");
+      return;
+    }
+
+    const base64 = await fileToBase64(selectedFile);
     const response = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist. Give specific, candid, visually grounded feedback. Return only valid JSON, without markdown.",
       contents: [{
@@ -259,9 +284,11 @@ form.addEventListener("submit", async (event) => {
           { inlineData: { data: base64, mimeType: imageMimeType(selectedFile) } }
         ]
       }],
-      generationConfig: { temperature: 0.35, maxOutputTokens: 1200, responseMimeType: "application/json" }
+      generationConfig: { temperature: 0.35, maxOutputTokens: 850, responseMimeType: "application/json" }
     });
-    renderAnalysis(parseJson(response));
+    const analysis = parseJson(response);
+    saveSessionResult(cacheKey, analysis);
+    renderAnalysis(analysis);
     setStatus("Analysis complete.", "success");
   } catch (error) {
     console.error("Thumbnail analysis failed.", error);
@@ -396,11 +423,19 @@ comparisonForm.addEventListener("submit", async (event) => {
   comparisonButton.classList.add("is-loading");
   setComparisonStatus("Gemini is comparing both versions…", "loading");
   try {
+    const videoTitle = comparisonTitle.value.trim();
+    const cacheKey = `${comparisonCachePrefix}${fileFingerprint(comparisonFiles.v1)}:${fileFingerprint(comparisonFiles.v2)}:${videoTitle}`;
+    const cachedComparison = readSessionResult(cacheKey);
+    if (cachedComparison) {
+      renderComparison(cachedComparison);
+      setComparisonStatus("Showing this session's saved comparison.", "success");
+      return;
+    }
+
     const [version1Data, version2Data] = await Promise.all([
       fileToBase64(comparisonFiles.v1),
       fileToBase64(comparisonFiles.v2)
     ]);
-    const videoTitle = comparisonTitle.value.trim();
     const response = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist. Compare the two labeled images objectively and return only valid JSON, without markdown.",
       contents: [{role: "user", parts: [
@@ -410,9 +445,11 @@ comparisonForm.addEventListener("submit", async (event) => {
         {inlineData: {data: version2Data, mimeType: imageMimeType(comparisonFiles.v2)}},
         {text: 'Return this exact JSON shape: {"winner":"Version 1, Version 2, or Tie","version1Score":0.0,"version2Score":0.0,"summary":"2-3 sentence comparison tied to the title","winnerReasons":["reason","reason","reason"],"feedback":["specific Version 1 feedback","specific Version 2 feedback","shared lesson"],"recommendation":"best combined redesign direction for this title"}'}
       ]}],
-      generationConfig: {temperature: 0.3, maxOutputTokens: 1400, responseMimeType: "application/json"}
+      generationConfig: {temperature: 0.3, maxOutputTokens: 900, responseMimeType: "application/json"}
     });
-    renderComparison(parseJson(response));
+    const comparison = parseJson(response);
+    saveSessionResult(cacheKey, comparison);
+    renderComparison(comparison);
     setComparisonStatus("Comparison complete.", "success");
   } catch (error) {
     console.error("Thumbnail comparison failed.", error);

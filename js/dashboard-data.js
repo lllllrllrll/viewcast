@@ -16,6 +16,8 @@ const allConnectionsKey = "viewcastYouTubeAllConnections";
 const channelStorageKey = "viewcastYouTubeChannel";
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const overviewStorageKeyPrefix = "viewcastOverviewData:";
+const insightsStorageKeyPrefix = "viewcastAiInsights:";
+const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 
 const trafficSourceLabels = {
@@ -532,21 +534,58 @@ function renderHealth(connection, overviewData) {
   setProgress("subscribers", Math.min(100, Math.max(0, subscribers) / Math.max(1, views) * 10000), wholeNumber(subscribers));
 }
 
-function renderActivity(connection, overviewData) {
-  const container = document.querySelector("[data-overview-activity]");
-  if (!container || !connection) return;
-  const channel = connection.channel || {};
-  const analyticsSummary = connection.analyticsSummary || {};
-  const videos = overviewData?.videos || [];
-  const dailySummary = summarizeDaily(overviewData?.daily || []);
-  const items = [
-    [channel.title || "Linked channel", "Channel totals and saved analytics are connected.", "Live"],
-    ["28-day views", dailySummary.views || analyticsSummary.views ? `${wholeNumber(dailySummary.views || analyticsSummary.views)} verified views.` : "Views sync pending.", "Views"],
-    ["Watch time", dailySummary.watchMinutes || analyticsSummary.estimatedMinutesWatched ? `${watchHours(dailySummary.watchMinutes || analyticsSummary.estimatedMinutesWatched)} watch hours.` : "Watch time pending.", "Watch"],
-    videos[0] ? ["Latest upload", `${videos[0].snippet?.title || "Recent video"} is loaded.`, "Video"] : ["Recent uploads", "Refresh access if recent uploads are missing.", "Refresh"]
-  ];
-  container.innerHTML = items.map(([t, b, l]) => `
-    <div class="activity-item"><i class="dot"></i><div><b>${escapeHtml(t)}</b><span>${escapeHtml(b)}</span></div><time>${escapeHtml(l)}</time></div>
+function readRecentTrends(user) {
+  if (!user?.uid) return null;
+  const feedKey = `${recentTrendsStorageKeyPrefix}${user.uid}`;
+  try {
+    const feed = JSON.parse(localStorage.getItem(feedKey) || "null");
+    if (feed?.trends) return feed;
+
+    const legacy = JSON.parse(
+      localStorage.getItem(`${insightsStorageKeyPrefix}${user.uid}:channel`) || "null"
+    );
+    if (!legacy?.summary) return null;
+    const summary = legacy.summary;
+    return {
+      trends: [
+        ...(summary.geminiInsights?.validatedTrends || []),
+        ...(summary.currentTrends || [])
+      ],
+      category: summary.channelLane?.specificCategory ||
+        summary.channelLane?.primaryCategory ||
+        "Channel trend",
+      savedAt: legacy.savedAt
+    };
+  } catch {
+    localStorage.removeItem(feedKey);
+    return null;
+  }
+}
+
+function renderRecentTrends(user) {
+  const container = document.querySelector("[data-overview-trends]");
+  if (!container) return;
+  const cached = readRecentTrends(user);
+  const trends = (cached?.trends || []).slice(0, 4);
+
+  if (!trends.length) {
+    container.innerHTML = `
+      <div class="activity-item">
+        <i class="dot"></i>
+        <div><b>No saved trends yet</b><span>Generate Trend Suggestions in AI Insights to populate this section.</span></div>
+        <time>Insights</time>
+      </div>`;
+    return;
+  }
+
+  const category = cached.category || "Channel trend";
+  const savedLabel = cached?.savedAt ? timeAgo(cached.savedAt) : "Recent";
+  container.innerHTML = trends.map((trend) => `
+    <div class="activity-item">
+      <i class="dot"></i>
+      <div><b>${escapeHtml(trend)}</b><span>${escapeHtml(category)}</span></div>
+      <time>${escapeHtml(savedLabel)}</time>
+    </div>
   `).join("");
 }
 
@@ -560,7 +599,20 @@ function videoFormat(video) {
 function renderVideoTable(overviewData) {
   const tbody = document.querySelector("[data-overview-videos]");
   if (!tbody) return;
-  const videos = (overviewData?.videos || []).slice(0, 4);
+  const videos = [...(overviewData?.videos || [])]
+    .sort((a, b) => {
+      const viewDifference = (numberValue(b.statistics?.viewCount) || 0) -
+        (numberValue(a.statistics?.viewCount) || 0);
+      if (viewDifference) return viewDifference;
+
+      const likeDifference = (numberValue(b.statistics?.likeCount) || 0) -
+        (numberValue(a.statistics?.likeCount) || 0);
+      if (likeDifference) return likeDifference;
+
+      return (numberValue(b.statistics?.commentCount) || 0) -
+        (numberValue(a.statistics?.commentCount) || 0);
+    })
+    .slice(0, 4);
   if (!videos.length) { tbody.innerHTML = Array.from({length: 4}, () => `<tr>${"<td>" + emptyValue + "</td>".repeat(6)}</tr>`).join(""); return; }
   tbody.innerHTML = videos.map((video) => {
     const stats = video.statistics || {};
@@ -586,7 +638,7 @@ function renderPerformanceNotifications(overviewData) {
   }
 }
 
-function renderOverviewData(connection, overviewData = null) {
+function renderOverviewData(connection, overviewData = null, user = null) {
   const analyticsSummary = connection?.analyticsSummary || {};
   const channel = connection?.channel || {};
   const dailySummary = summarizeDaily(overviewData?.daily || []);
@@ -607,7 +659,7 @@ function renderOverviewData(connection, overviewData = null) {
   renderSparklineData(overviewData);
   renderTrafficSources(overviewData);
   renderHealth(connection, overviewData);
-  renderActivity(connection, overviewData);
+  renderRecentTrends(user);
   renderVideoTable(overviewData);
   renderPerformanceNotifications(overviewData);
   renderSubscribersTrend(connection, overviewData);
@@ -616,21 +668,21 @@ function renderOverviewData(connection, overviewData = null) {
 
 function escapeHtml(value) { return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
-function applyYouTubeData(connection, overviewData = null) {
+function applyYouTubeData(connection, overviewData = null, user = null) {
   const values = fieldValues(connection);
   document.querySelectorAll("[data-youtube-field]").forEach((element) => { element.textContent = values[element.dataset.youtubeField] || emptyValue; });
-  if (!connection) { renderInsights(null); renderOverviewData(null, null); return; }
+  if (!connection) { renderInsights(null); renderOverviewData(null, null, user); return; }
   const summary = `Showing saved YouTube data for ${connection.channel.title}.`;
   document.querySelectorAll("[data-youtube-summary]").forEach((element) => { element.textContent = summary; });
   renderInsights(connection);
-  renderOverviewData(connection, overviewData);
+  renderOverviewData(connection, overviewData, user);
 }
 
 async function loadYouTubeData(user, db, days = 30) {
   const shouldLoadChannelHistory = Boolean(document.getElementById("subsChart"));
   if (shouldLoadChannelHistory) days = Math.max(days, 180);
   const activeConnection = readActiveConnection();
-  applyYouTubeData(activeConnection, readCachedOverview(user, activeConnection?.channel?.id));
+  applyYouTubeData(activeConnection, readCachedOverview(user, activeConnection?.channel?.id), user);
 
   const snapshot = await getDoc(doc(db, "users", user.uid));
   const data = snapshot.exists() ? snapshot.data() : {};
@@ -647,7 +699,7 @@ async function loadYouTubeData(user, db, days = 30) {
   try {
     const liveOverview = await fetchLiveOverview(accessToken, days);
     saveCachedOverview(user, currentActive.channel.id, liveOverview);
-    applyYouTubeData(currentActive, liveOverview);
+    applyYouTubeData(currentActive, liveOverview, user);
   } catch (error) { console.warn(error); }
 }
 
@@ -675,12 +727,12 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
 
   window.addEventListener("viewcast:youtube-connected", (event) => {
     saveCachedConnection(event.detail);
-    applyYouTubeData(event.detail);
     const auth = getAuth();
+    applyYouTubeData(event.detail, null, auth.currentUser);
     if (auth.currentUser?.emailVerified) loadYouTubeData(auth.currentUser, getFirestore());
   });
 
   window.addEventListener("viewcast:youtube-unlinked", () => {
-    applyYouTubeData(null);
+    applyYouTubeData(null, null, getAuth().currentUser);
   });
 }

@@ -39,9 +39,10 @@ const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
+const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
 const insightsCacheVersion = 10;
-const insightsCacheMaxAge = 15 * 60 * 1000;
+const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
 let auth = null;
@@ -288,11 +289,34 @@ function readCachedInsights(videos, focusVideoId = "") {
 function saveCachedInsights(summary, videos, focusVideoId = "") {
   const key = insightsStorageKey(focusVideoId);
   if (!key || !summary) return;
+  const savedAt = Date.now();
   localStorage.setItem(key, JSON.stringify({
     fingerprint: insightsFingerprint(videos, focusVideoId),
     summary,
-    savedAt: Date.now()
+    savedAt
   }));
+
+  const trends = [
+    ...(summary.geminiInsights?.validatedTrends || []),
+    ...(summary.currentTrends || []),
+    ...currentTrendSignals(summary.trendVideos || [])
+  ].filter((trend, index, values) => {
+    const normalized = String(trend || "").trim().toLowerCase();
+    return normalized && values.findIndex(
+      (candidate) => String(candidate || "").trim().toLowerCase() === normalized
+    ) === index;
+  }).slice(0, 4);
+
+  localStorage.setItem(
+    `${recentTrendsStorageKeyPrefix}${currentUser.uid}`,
+    JSON.stringify({
+      trends,
+      category: summary.channelLane?.specificCategory ||
+        summary.channelLane?.primaryCategory ||
+        "Channel trend",
+      savedAt
+    })
+  );
 }
 
 function setLibraryStatus(message) {
@@ -1674,13 +1698,13 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
     `{"categoryKey":"","primaryCategory":"","specificCategory":"","categoryLabel":"","categorySeed":"","categoryConfidence":"high","contentInterpretations":[{"title":"","mediaReferences":[""],"premise":"","audienceAppeal":"","confidence":"high"}],"queries":["","",""]}`,
     "",
     "Channel profile:",
-    JSON.stringify(channelProfile || {}, null, 2),
+    JSON.stringify(channelProfile || {}),
     "",
     "Creator-provided channel topic and context (use this as the primary niche guidance):",
-    JSON.stringify(savedChannelContext, null, 2),
+    JSON.stringify(savedChannelContext),
     "",
     "Channel uploads:",
-    JSON.stringify(channelVideoContext(videos), null, 2)
+    JSON.stringify(channelVideoContext(videos))
   ].join("\n");
 
   try {
@@ -1693,7 +1717,7 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 3072
+        maxOutputTokens: 1800
       }
     });
     const text = payload.candidates?.[0]?.content?.parts
@@ -1963,7 +1987,7 @@ async function buildGeminiPageInsights(summary, videos) {
     `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"validatedTrends":["","",""],"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"crossoverTrends":[{"title":"","body":"","label":"Targeted crossover","tone":"good"},{"title":"","body":"","label":"Targeted crossover","tone":"good"},{"title":"","body":"","label":"Targeted crossover","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
     "Channel data:",
-    JSON.stringify(geminiPageContext(summary, videos), null, 2)
+    JSON.stringify(geminiPageContext(summary, videos))
   ].join("\n");
 
   try {
@@ -1976,7 +2000,7 @@ async function buildGeminiPageInsights(summary, videos) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 2048
+        maxOutputTokens: 1600
       }
     });
 
@@ -2004,7 +2028,7 @@ async function buildGeminiChatReply(question, summary) {
     "Keep the answer to 2-4 short sentences.",
     "",
     "Channel context:",
-    summary ? JSON.stringify(geminiContext(summary), null, 2) : "No channel data analyzed yet. Ask the user questions to understand their goals and niche."
+    summary ? JSON.stringify(geminiContext(summary)) : "No channel data analyzed yet. Ask the user questions to understand their goals and niche."
   ].join("\n");
 
   try {
@@ -2012,7 +2036,7 @@ async function buildGeminiChatReply(question, summary) {
       contents: chatHistory.slice(-6),
       systemInstruction,
       generationConfig: {
-        maxOutputTokens: 420
+        maxOutputTokens: 240
       }
     });
 

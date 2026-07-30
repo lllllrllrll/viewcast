@@ -10,13 +10,12 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 // Allowed models to prevent abuse with expensive models
 const ALLOWED_MODELS = [
   "gemini-3.1-flash-lite",
-  "gemini-3.5-flash",
 ];
 const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite";
 const MAX_TEXT_CHARS = 60000;
 const MAX_INLINE_DATA_CHARS = 7 * 1024 * 1024;
 const MAX_SYSTEM_CHARS = 12000;
-const MAX_OUTPUT_TOKENS = 4096;
+const MAX_OUTPUT_TOKENS = 2048;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_REQUESTS = 12;
 const recentRequests = new Map();

@@ -113,8 +113,11 @@ function clearCreatorDataCaches() {
     "viewcastYouTubeVideos:",
     "viewcastOverviewData:",
     "viewcastAiInsights:",
+    "viewcastRecentTrends:",
     "viewcastGeminiVideoAnalysis:",
     "viewcastChannelContext:",
+    "viewcastThumbnailAnalysis:",
+    "viewcastThumbnailComparison:",
   ];
   [localStorage, sessionStorage].forEach((storage) => {
     Object.keys(storage)
