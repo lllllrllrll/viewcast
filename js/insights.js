@@ -32,6 +32,8 @@ const insightChannelEmpty = document.getElementById("insightChannelEmpty");
 const chatMessages = document.getElementById("chatMessages");
 const chatForm = document.getElementById("insightChatForm");
 const chatInput = document.getElementById("insightChatInput");
+const insightTabs = [...document.querySelectorAll("[data-insights-tab]")];
+const insightTabPanels = [...document.querySelectorAll("[data-insights-panel]")];
 
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
@@ -343,21 +345,22 @@ function renderVideoLibrary(videos = channelVideos) {
 }
 
 function readCachedAccessToken() {
+  localStorage.removeItem(tokenStorageKey);
   try {
-    const saved = JSON.parse(localStorage.getItem(tokenStorageKey) || "null");
+    const saved = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
     if (saved?.accessToken && saved.uid === currentUser?.uid && saved.expiresAt > Date.now() + 60 * 1000) {
       return saved.accessToken;
     }
   } catch (error) {
     // Fall through and clear bad token cache below.
   }
-  localStorage.removeItem(tokenStorageKey);
+  sessionStorage.removeItem(tokenStorageKey);
   return "";
 }
 
 function saveCachedAccessToken(accessToken) {
   if (!accessToken || !currentUser) return;
-  localStorage.setItem(tokenStorageKey, JSON.stringify({
+  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
     expiresAt: Date.now() + 50 * 60 * 1000
@@ -366,6 +369,7 @@ function saveCachedAccessToken(accessToken) {
 
 function clearCachedAccessToken() {
   localStorage.removeItem(tokenStorageKey);
+  sessionStorage.removeItem(tokenStorageKey);
 }
 
 function loadGoogleIdentityServices() {
@@ -1339,7 +1343,7 @@ function setTrendMetric(values = [], detail = "", trendClass = "good") {
   }
 }
 
-function updateActivityItems(selector, items) {
+function updateActivityItems(selector, items, relatedVideoGroups = []) {
   document.querySelectorAll(selector).forEach((item, index) => {
     const hasInsight = Boolean(items[index]);
     item.hidden = !hasInsight;
@@ -1348,7 +1352,9 @@ function updateActivityItems(selector, items) {
     const bodyEl = item.querySelector("span");
     const contentEl = item.querySelector("div");
     const existingToggle = item.querySelector(".read-more-button");
+    const existingExamples = item.querySelector(".trend-video-examples");
     if (existingToggle) existingToggle.remove();
+    if (existingExamples) existingExamples.remove();
 
     item.querySelector("b").textContent = insight.title;
     bodyEl.textContent = insight.body;
@@ -1358,6 +1364,38 @@ function updateActivityItems(selector, items) {
     item.classList.remove("is-expanded");
     item.classList.add("is-collapsible");
     if (contentEl) {
+      const relatedVideos = relatedVideoGroups[index] || [];
+      if (relatedVideos.length) {
+        const examples = document.createElement("div");
+        examples.className = "trend-video-examples";
+        const heading = document.createElement("small");
+        heading.textContent = "Videos from other creators";
+        examples.append(heading);
+
+        relatedVideos.slice(0, 3).forEach((video) => {
+          const link = document.createElement("a");
+          link.className = "trend-video-example";
+          link.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+
+          const thumbnail = bestThumbnail(video.snippet?.thumbnails);
+          if (thumbnail) {
+            const image = document.createElement("img");
+            image.src = thumbnail;
+            image.alt = "";
+            image.loading = "lazy";
+            link.append(image);
+          }
+
+          const title = document.createElement("span");
+          title.textContent = video.snippet?.title || "Watch on YouTube";
+          link.append(title);
+          examples.append(link);
+        });
+        contentEl.append(examples);
+      }
+
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "read-more-button";
@@ -1384,8 +1422,33 @@ function updateRecommendations(items) {
   updateActivityItems(".search-terms-panel .activity-item", items);
 }
 
-function updateNextVideoSuggestions(items) {
-  updateActivityItems("#nextVideoSuggestions .activity-item", items);
+function relatedVideosForSuggestions(items = [], trendVideos = []) {
+  return items.map((item, index) => {
+    if (!/trend/i.test(item?.label || "")) return [];
+    const suggestionText = `${item.title || ""} ${item.body || ""}`.toLowerCase();
+    const referencedVideo = trendVideos.find((video) => {
+      const title = String(video.snippet?.title || "").trim().toLowerCase();
+      return title && suggestionText.includes(title);
+    }) || trendVideos[index];
+    if (!referencedVideo) return [];
+
+    const sameQuery = trendVideos.filter((video) => (
+      video.trendQuery
+      && video.trendQuery === referencedVideo.trendQuery
+      && video.id !== referencedVideo.id
+    ));
+    return [referencedVideo, ...sameQuery]
+      .filter((video, videoIndex, values) => values.findIndex((candidate) => candidate.id === video.id) === videoIndex)
+      .slice(0, 3);
+  });
+}
+
+function updateNextVideoSuggestions(items, trendVideos = []) {
+  updateActivityItems(
+    "#nextVideoSuggestions .activity-item",
+    items,
+    relatedVideosForSuggestions(items, trendVideos)
+  );
 }
 
 function updateOutsideTopicTrends(videos = []) {
@@ -1411,8 +1474,16 @@ function updateOutsideTopicTrends(videos = []) {
   updateActivityItems("#outsideTopicTrends .activity-item", items);
 }
 
-function updateCrossoverTrends(items = []) {
-  updateActivityItems("#targetedCrossoverTrends .activity-item", items);
+function updateCrossoverTrends(items = [], outsideTrendVideos = []) {
+  const relatedVideos = items.map((item, index) => {
+    const text = `${item?.title || ""} ${item?.body || ""}`.toLowerCase();
+    const referencedVideo = outsideTrendVideos.find((video) => {
+      const title = String(video.snippet?.title || "").trim().toLowerCase();
+      return title && text.includes(title);
+    }) || outsideTrendVideos[index];
+    return referencedVideo ? [referencedVideo] : [];
+  });
+  updateActivityItems("#targetedCrossoverTrends .activity-item", items, relatedVideos);
 }
 
 function setChatSeedMessage(message = "Hi! I'm your ViewCast assistant. To give you the best advice, should we focus on growing your views, increasing your subscribers, or improving your retention today?") {
@@ -1962,6 +2033,32 @@ function setAnalyzerResultsVisible(isVisible) {
   setRefreshButtonPlacement(!isVisible);
 }
 
+function activateInsightsTab(tabName, {focus = false} = {}) {
+  const activeName = tabName === "trends" ? "trends" : "analysis";
+  insightTabs.forEach((tab) => {
+    const isActive = tab.dataset.insightsTab === activeName;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
+    if (isActive && focus) tab.focus();
+  });
+  insightTabPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.insightsPanel !== activeName;
+  });
+}
+
+function handleInsightsTabKeydown(event) {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const currentIndex = Math.max(0, insightTabs.indexOf(event.currentTarget));
+  const nextIndex = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? insightTabs.length - 1
+      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + insightTabs.length) % insightTabs.length;
+  activateInsightsTab(insightTabs[nextIndex]?.dataset.insightsTab, {focus: true});
+}
+
 function setRefreshButtonPlacement(centered, target = insightRefreshEmptyContent) {
   if (!refreshInsightsPageButton) return;
   const destination = centered ? target : insightsHeaderActions;
@@ -2063,10 +2160,14 @@ function renderChannelInsights(summary) {
     cards.topTopicSignal?.detail || `${summary.channelLane?.specificCategory || summary.channelLane?.primaryCategory || "Niche"} trends`,
     cards.topTopicSignal?.tone || bestTone
   );
-  updateNextVideoSuggestions(geminiInsights?.nextVideoSuggestions || summary.nextVideoSuggestions);
+  const nextVideoSuggestions = geminiInsights?.nextVideoSuggestions || summary.nextVideoSuggestions;
+  updateNextVideoSuggestions(nextVideoSuggestions, summary.trendVideos);
   updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
   updateOutsideTopicTrends(summary.outsideTrendVideos);
-  updateCrossoverTrends(geminiInsights?.crossoverTrends || buildCrossoverTrendSuggestions(summary));
+  updateCrossoverTrends(
+    geminiInsights?.crossoverTrends || buildCrossoverTrendSuggestions(summary),
+    summary.outsideTrendVideos
+  );
   setChatSeedMessage(geminiInsights?.chatIntro || compactAdviceSummary(summary));
 }
 
@@ -2267,6 +2368,7 @@ function handleReadMoreClick(event) {
 }
 
 clearAnalyzerResults();
+activateInsightsTab("analysis");
 
 if (form && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
@@ -2324,6 +2426,10 @@ if (form && firebaseConfigured) {
     button.addEventListener("click", () => sendChatQuestion(button.dataset.chatPrompt || button.textContent.trim()));
   });
   analyzerDashboard?.addEventListener("click", handleReadMoreClick);
+  insightTabs.forEach((tab) => {
+    tab.addEventListener("click", () => activateInsightsTab(tab.dataset.insightsTab));
+    tab.addEventListener("keydown", handleInsightsTabKeydown);
+  });
   videoLibrary?.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : event.target?.parentElement;
     const card = target?.closest("[data-video-id]");

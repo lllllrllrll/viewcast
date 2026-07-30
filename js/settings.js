@@ -22,7 +22,6 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
   const defaults = {
     darkMode: "off",
     emailNotifications: "enabled",
-    refreshRate: "hourly",
     plan: "basic"
   };
 
@@ -30,17 +29,20 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     basic: {
       label: "Basic",
       videos: 5,
-      channels: 1
+      channels: 1,
+      aiAnalyses: 5
     },
     pro: {
       label: "Pro",
       videos: Infinity,
-      channels: 1
+      channels: 1,
+      aiAnalyses: Infinity
     },
     premium: {
       label: "Premium",
       videos: Infinity,
-      channels: 10
+      channels: 10,
+      aiAnalyses: Infinity
     }
   };
 
@@ -48,24 +50,24 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
   const upgradeButton = document.getElementById("upgradePlan");
   const planModal = document.getElementById("planModal");
   const closeModal = document.getElementById("closeModal");
-  const refreshRate = document.getElementById("refreshRate");
   const toggles = document.querySelectorAll("[data-setting]");
   const currentPlanLabels = document.querySelectorAll("[data-current-plan]");
   const planCards = document.querySelectorAll("[data-plan-card]");
   const planButtons = document.querySelectorAll("[data-plan-choice]");
   const usageLabels = {
     videos: document.querySelector("[data-usage-label='videos']"),
-    channels: document.querySelector("[data-usage-label='channels']")
+    channels: document.querySelector("[data-usage-label='channels']"),
+    aiAnalyses: document.querySelector("[data-usage-label='aiAnalyses']")
   };
   const usageBars = {
     videos: document.querySelector("[data-usage-bar='videos']"),
-    channels: document.querySelector("[data-usage-bar='channels']")
+    channels: document.querySelector("[data-usage-bar='channels']"),
+    aiAnalyses: document.querySelector("[data-usage-bar='aiAnalyses']")
   };
   const deleteModal = document.getElementById("deleteAccountModal");
   const deleteForm = document.getElementById("deleteAccountForm");
   const deletePasswordField = document.getElementById("deletePasswordField");
   const deletePassword = document.getElementById("deleteAccountPassword");
-  const deleteConfirmation = document.getElementById("deleteAccountConfirmation");
   const deleteStatus = document.getElementById("deleteAccountStatus");
   const confirmDeleteButton = document.getElementById("confirmDeleteAccount");
   let shouldOpenDeleteAccount = new URLSearchParams(window.location.search).get("delete") === "1";
@@ -95,6 +97,16 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
       return usage?.day === currentUsageDay() ? Number(usage.count) || 0 : 0;
     } catch (error) {
       localStorage.removeItem("viewcastVideosAnalyzed");
+      return 0;
+    }
+  }
+
+  function readAiAnalysesUsed() {
+    try {
+      const usage = JSON.parse(localStorage.getItem("viewcastAiAnalysesUsed") || "null");
+      return usage?.day === currentUsageDay() ? Number(usage.count) || 0 : 0;
+    } catch (error) {
+      localStorage.removeItem("viewcastAiAnalysesUsed");
       return 0;
     }
   }
@@ -130,6 +142,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     const plan = planLimits[planKey];
     const videosAnalyzed = readVideosAnalyzed();
     const channelsConnected = readChannelsConnected();
+    const aiAnalysesUsed = readAiAnalysesUsed();
 
     currentPlanLabels.forEach((element) => {
       element.textContent = plan.label;
@@ -164,6 +177,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
     updateUsageBar("videos", videosAnalyzed, plan.videos);
     updateUsageBar("channels", channelsConnected, plan.channels);
+    updateUsageBar("aiAnalyses", aiAnalysesUsed, plan.aiAnalyses);
   }
 
   function showStatus(message) {
@@ -192,7 +206,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     deletePassword.required = usesPasswordProvider;
     deleteModal.hidden = false;
     document.body.classList.add("verification-locked");
-    deleteConfirmation.focus();
+    if (usesPasswordProvider) deletePassword.focus();
   }
 
   function clearLocalAccountData() {
@@ -252,14 +266,6 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     });
   });
 
-  if (refreshRate) {
-    refreshRate.value = readSetting("refreshRate");
-    refreshRate.addEventListener("change", () => {
-      writeSetting("refreshRate", refreshRate.value);
-      showStatus("Refresh rate updated.");
-    });
-  }
-
   updatePlanDisplay();
 
   planButtons.forEach((button) => {
@@ -274,6 +280,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
   window.addEventListener("storage", (event) => {
     if (
       event.key === "viewcastVideosAnalyzed"
+      || event.key === "viewcastAiAnalysesUsed"
       || event.key === "viewcastYouTubeConnection"
       || event.key === "viewcastYouTubeChannel"
       || event.key === "viewcast:plan"
@@ -281,6 +288,8 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
       updatePlanDisplay();
     }
   });
+
+  window.addEventListener("viewcast:ai-usage-updated", updatePlanDisplay);
 
   upgradeButton?.addEventListener("click", () => {
     if (typeof window.showPlanModal === "function") {
@@ -301,12 +310,11 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
       setDeleteStatus("Your signed-in account could not be loaded.", "error");
       return;
     }
-    if (deleteConfirmation.value.trim() !== "DELETE") {
-      setDeleteStatus("Type DELETE exactly to confirm account deletion.", "error");
-      deleteConfirmation.focus();
+    if (usesPasswordProvider && !deletePassword.value) {
+      setDeleteStatus("Enter your current password to delete your account.", "error");
+      deletePassword.focus();
       return;
     }
-
     confirmDeleteButton.disabled = true;
     setDeleteStatus("Confirming your identity…", "info");
     try {

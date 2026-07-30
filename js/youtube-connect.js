@@ -18,7 +18,8 @@ import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./fireb
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
-  "https://www.googleapis.com/auth/yt-analytics.readonly"
+  "https://www.googleapis.com/auth/yt-analytics.readonly",
+  "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
 ];
 
 const connectButton = document.getElementById("connectYouTube");
@@ -65,9 +66,13 @@ function updateUI() {
 
   if (connections.length > 0) {
     channelSelectorWrap.hidden = false;
-    channelSelector.innerHTML = connections.map(conn =>
-      `<option value="${conn.channel.id}" ${active?.channel?.id === conn.channel.id ? 'selected' : ''}>${conn.channel.title}</option>`
-    ).join("");
+    channelSelector.replaceChildren(...connections.map((connection) => {
+      const option = document.createElement("option");
+      option.value = String(connection.channel?.id || "");
+      option.textContent = String(connection.channel?.title || "Untitled channel");
+      option.selected = active?.channel?.id === connection.channel?.id;
+      return option;
+    }));
 
     setUnlinkButton({visible: true, disabled: false});
     setButton("Link New Channel");
@@ -127,7 +132,8 @@ function saveConnections(connections, activeId = null) {
 
 function saveCachedAccessToken(accessToken) {
   if (!accessToken || !currentUser) return;
-  localStorage.setItem(tokenStorageKey, JSON.stringify({
+  localStorage.removeItem(tokenStorageKey);
+  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
     expiresAt: Date.now() + 50 * 60 * 1000
@@ -317,7 +323,16 @@ async function fetchAnalyticsSummary(accessToken) {
   try {
     const payload = await fetchJson(url, accessToken);
     const [views, minutes, avd, subs] = payload.rows?.[0] || [];
-    return { views: views || 0, estimatedMinutesWatched: minutes || 0, averageViewDuration: avd || 0, subscribersGained: subs || 0 };
+    const summary = { views: views || 0, estimatedMinutesWatched: minutes || 0, averageViewDuration: avd || 0, subscribersGained: subs || 0 };
+    const revenueUrl = new URL(url);
+    revenueUrl.searchParams.set("metrics", "estimatedRevenue");
+    try {
+      const revenuePayload = await fetchJson(revenueUrl, accessToken);
+      summary.estimatedRevenue = revenuePayload.rows?.[0]?.[0] ?? null;
+    } catch (error) {
+      console.warn("Revenue data is unavailable for this channel.", error);
+    }
+    return summary;
   } catch (e) { return null; }
 }
 
@@ -335,7 +350,12 @@ async function connectYouTube() {
     const connections = readAllConnections();
     const existingIdx = connections.findIndex(c => c.channel.id === channel.id);
     if (existingIdx > -1) connections[existingIdx] = newConn;
-    else connections.push(newConn);
+    else {
+      if (connections.length >= 10) {
+        throw new Error("A maximum of 10 YouTube channels can be linked.");
+      }
+      connections.push(newConn);
+    }
 
     await setDoc(doc(db, "users", currentUser.uid), {
       youtubeConnections: connections,
@@ -368,6 +388,8 @@ async function unlinkYouTube() {
       youtubeConnections: connections,
       updatedAt: serverTimestamp()
     });
+    sessionStorage.removeItem(tokenStorageKey);
+    localStorage.removeItem(tokenStorageKey);
     saveConnections(connections);
     window.dispatchEvent(new CustomEvent("viewcast:youtube-unlinked"));
   } catch (error) {

@@ -61,6 +61,16 @@ function wholeNumber(value) {
   return new Intl.NumberFormat("en").format(Math.round(number));
 }
 
+function currency(value) {
+  const number = numberValue(value);
+  if (number === null) return "";
+  return new Intl.NumberFormat("en", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2
+  }).format(number);
+}
+
 function watchHours(minutes) {
   const number = numberValue(minutes);
   if (number === null) return "";
@@ -118,14 +128,15 @@ function secondsFromIso(value = "") {
 }
 
 function readCachedAccessToken(user) {
+  localStorage.removeItem(tokenStorageKey);
   try {
-    const token = JSON.parse(localStorage.getItem(tokenStorageKey) || "null");
+    const token = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
     if (!token?.accessToken || !token.expiresAt) return "";
     if (user?.uid && token.uid && token.uid !== user.uid) return "";
     if (Date.now() >= token.expiresAt) return "";
     return token.accessToken;
   } catch (error) {
-    localStorage.removeItem(tokenStorageKey);
+    sessionStorage.removeItem(tokenStorageKey);
     return "";
   }
 }
@@ -205,7 +216,8 @@ function fieldValues(connection) {
     "period-views": compactNumber(analyticsSummary.views),
     "watch-hours": watchHours(analyticsSummary.estimatedMinutesWatched),
     "average-view-duration": duration(analyticsSummary.averageViewDuration),
-    "subscribers-gained": wholeNumber(analyticsSummary.subscribersGained)
+    "subscribers-gained": wholeNumber(analyticsSummary.subscribersGained),
+    "estimated-revenue": currency(analyticsSummary.estimatedRevenue)
   };
 }
 
@@ -249,15 +261,17 @@ async function fetchRecentVideos(accessToken) {
 }
 
 async function fetchLiveOverview(accessToken, days = 30) {
-  const [dailyResult, trafficResult, videosResult] = await Promise.allSettled([
+  const [dailyResult, trafficResult, videosResult, revenueResult] = await Promise.allSettled([
     fetchAnalyticsRows(accessToken, { metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained", dimensions: "day", sort: "day", days: days }),
     fetchAnalyticsRows(accessToken, { metrics: "views", dimensions: "insightTrafficSourceType", sort: "-views", maxResults: 5, days: days }),
-    fetchRecentVideos(accessToken)
+    fetchRecentVideos(accessToken),
+    fetchAnalyticsRows(accessToken, { metrics: "estimatedRevenue", days: 28 })
   ]);
   return {
     daily: dailyResult.status === "fulfilled" ? dailyResult.value : [],
     traffic: trafficResult.status === "fulfilled" ? trafficResult.value : [],
     videos: videosResult.status === "fulfilled" ? videosResult.value : [],
+    estimatedRevenue: revenueResult.status === "fulfilled" ? revenueResult.value?.[0]?.[0] ?? null : null,
     latestVideoScannedAt: new Date().toISOString()
   };
 }
@@ -580,8 +594,10 @@ function renderOverviewData(connection, overviewData = null) {
   const subscribers = numberValue(channel.subscriberCount);
   const videos = numberValue(channel.videoCount);
   const avgDuration = dailySummary.durationCount ? dailySummary.durationTotal / dailySummary.durationCount : numberValue(analyticsSummary.averageViewDuration);
+  const estimatedRevenue = numberValue(overviewData?.estimatedRevenue) ?? numberValue(analyticsSummary.estimatedRevenue);
 
   setElementText("[data-overview-status]", connection ? "Overview is using verified channel totals." : "Connect your YouTube channel to populate Overview.");
+  setElementText("[data-youtube-field=\"estimated-revenue\"]", currency(estimatedRevenue));
   setTrend("total-views", totalViews !== null ? "Lifetime" : "");
   setTrend("subscriber-count", subscribers !== null ? "Total" : "");
   setTrend("video-count", videos !== null ? "Uploads" : "", "warn");

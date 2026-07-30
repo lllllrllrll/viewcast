@@ -57,7 +57,12 @@
             </div>
           </article>
 
-          <article class="metric-card analyzer-result">
+          <div class="insights-tabs analyzer-result" role="tablist" aria-label="AI Insights sections">
+            <button class="insights-tab active" id="analysisInsightsTab" type="button" role="tab" aria-selected="true" data-insights-tab="analysis">Channel Analysis</button>
+            <button class="insights-tab" id="trendInsightsTab" type="button" role="tab" aria-selected="false" data-insights-tab="trends">Trend Suggestions</button>
+          </div>
+
+          <article class="metric-card analyzer-result" data-insights-panel="analysis">
             <div class="metric-head">
               <div class="metric-icon teal"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></div>
               <span class="trend good">&nbsp;</span>
@@ -69,7 +74,7 @@
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="metric-card analyzer-result">
+          <article class="metric-card analyzer-result" data-insights-panel="analysis">
             <div class="metric-head">
               <div class="metric-icon blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
               <span class="trend good">&nbsp;</span>
@@ -81,7 +86,7 @@
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="metric-card analyzer-result">
+          <article class="metric-card analyzer-result" data-insights-panel="analysis">
             <div class="metric-head">
               <div class="metric-icon amber"><svg viewBox="0 0 24 24"><path d="M1 4h6v16H1zM17 4h6v16h-6zM9 9h6v11H9z"></path></svg></div>
               <span class="trend warn">&nbsp;</span>
@@ -93,7 +98,7 @@
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="metric-card analyzer-result insights-trends-card">
+          <article class="metric-card analyzer-result insights-trends-card" data-insights-panel="trends" hidden>
             <div class="metric-head">
               <div class="metric-icon rose"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
               <span class="trend good">&nbsp;</span>
@@ -105,7 +110,7 @@
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="panel large analyzer-result">
+          <article class="panel large analyzer-result" data-insights-panel="trends" hidden>
             <div class="panel-head">
               <div>
                 <h3>Next Video Suggestions</h3>
@@ -119,7 +124,7 @@
             </div>
           </article>
 
-          <article class="panel side search-terms-panel analyzer-result">
+          <article class="panel side search-terms-panel analyzer-result" data-insights-panel="analysis">
             <div class="panel-head">
               <div>
                 <h3>What To Do Next</h3>
@@ -133,7 +138,7 @@
             </div>
           </article>
 
-          <article class="panel full analyzer-result outside-trends-panel">
+          <article class="panel full analyzer-result outside-trends-panel" data-insights-panel="trends" hidden>
             <div class="panel-head">
               <div>
                 <h3>Popular YouTube Trends — Outside Your Topic</h3>
@@ -147,7 +152,7 @@
             </div>
           </article>
 
-          <article class="panel full analyzer-result crossover-trends-panel">
+          <article class="panel full analyzer-result crossover-trends-panel" data-insights-panel="trends" hidden>
             <div class="panel-head">
               <div>
                 <h3>Targeted Crossover Trends — Outside Your Topic</h3>
@@ -161,7 +166,7 @@
             </div>
           </article>
 
-          <article class="panel full analyzer-result">
+          <article class="panel full analyzer-result" data-insights-panel="analysis">
             <div class="panel-head">
               <div>
                 <h3>Advice Chat</h3>

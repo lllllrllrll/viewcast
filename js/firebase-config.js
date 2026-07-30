@@ -15,10 +15,7 @@ export const firebaseConfig = {
 // Keep channel links in Firestore instead of linking Google providers to Firebase Auth.
 export const googleOAuthClientId = "351557961377-ocbt4u5dm00n0mqfjvf808rpakc0b5bt.apps.googleusercontent.com";
 
-// Gemini is called through Firebase Functions using the GEMINI_API_KEY secret.
-// PASTE YOUR KEY BELOW FOR TESTING.
-// Comment it out (set to "") when you want to switch back to secure Firebase Functions.
-export const geminiApiKey = "";
+// Gemini is called only through Firebase Functions. Never place its API key in client code.
 export const geminiModel = "gemini-3.1-flash-lite";
 
 export const firebaseConfigured = Boolean(

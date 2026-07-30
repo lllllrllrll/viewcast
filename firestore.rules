@@ -13,8 +13,8 @@ rules_version = '2';
 //   - updatedAt: timestamp (required, set by the server)
 //   - lastSignInAt: timestamp (required)
 //   - createdAt: timestamp (optional, immutable after creation)
-//   - youtubeConnections: list (optional, at most 25 connections)
-//   - youtubeConnection: map (optional legacy connection)
+//   - youtubeConnections: list (optional, at most 10 validated connections)
+//   - youtubeConnection: map (optional validated legacy connection)
 //   - channelTopic: string (optional, at most 120 characters)
 //   - channelContext: string (optional, at most 1000 characters)
 //
@@ -42,12 +42,115 @@ service cloud.firestore {
       return request.resource.data.uid == resource.data.uid;
     }
 
+    function isBoundedString(value, minSize, maxSize) {
+      return value is string
+        && value.size() >= minSize
+        && value.size() <= maxSize;
+    }
+
+    function isValidChannel(data) {
+      return data is map
+        && data.keys().hasOnly([
+          'id',
+          'title',
+          'url',
+          'thumbnail',
+          'subscriberCount',
+          'viewCount',
+          'videoCount'
+        ])
+        && data.keys().hasAll([
+          'id',
+          'title',
+          'url',
+          'thumbnail',
+          'subscriberCount',
+          'viewCount',
+          'videoCount'
+        ])
+        && isBoundedString(data.id, 1, 128)
+        && isBoundedString(data.title, 0, 200)
+        && isBoundedString(data.url, 1, 500)
+        && data.url.matches('^https://www\\.youtube\\.com/channel/.*$')
+        && isBoundedString(data.thumbnail, 0, 1000)
+        && (data.thumbnail == ''
+          || data.thumbnail.matches('^https://.*$'))
+        && isBoundedString(data.subscriberCount, 0, 32)
+        && isBoundedString(data.viewCount, 0, 32)
+        && isBoundedString(data.videoCount, 0, 32);
+    }
+
+    function isValidAnalyticsSummary(data) {
+      return data is map
+        && data.keys().hasOnly([
+          'views',
+          'estimatedMinutesWatched',
+          'averageViewDuration',
+          'subscribersGained',
+          'estimatedRevenue'
+        ])
+        && data.keys().hasAll([
+          'views',
+          'estimatedMinutesWatched',
+          'averageViewDuration',
+          'subscribersGained'
+        ])
+        && data.views is number
+        && data.views >= 0
+        && data.estimatedMinutesWatched is number
+        && data.estimatedMinutesWatched >= 0
+        && data.averageViewDuration is number
+        && data.averageViewDuration >= 0
+        && data.subscribersGained is number
+        && (!('estimatedRevenue' in data)
+          || data.estimatedRevenue == null
+          || data.estimatedRevenue is number);
+    }
+
+    function isValidConnection(data) {
+      return data is map
+        && data.keys().hasOnly([
+          'channel',
+          'analyticsSummary',
+          'connectedAt'
+        ])
+        && data.keys().hasAll([
+          'channel',
+          'analyticsSummary',
+          'connectedAt'
+        ])
+        && isValidChannel(data.channel)
+        && (data.analyticsSummary == null
+          || isValidAnalyticsSummary(data.analyticsSummary))
+        && data.connectedAt is int
+        && data.connectedAt > 0;
+    }
+
+    function isValidConnectionAt(connections, index) {
+      return connections.size() <= index
+        || isValidConnection(connections[index]);
+    }
+
+    function isValidConnections(connections) {
+      return connections is list
+        && connections.size() <= 10
+        && isValidConnectionAt(connections, 0)
+        && isValidConnectionAt(connections, 1)
+        && isValidConnectionAt(connections, 2)
+        && isValidConnectionAt(connections, 3)
+        && isValidConnectionAt(connections, 4)
+        && isValidConnectionAt(connections, 5)
+        && isValidConnectionAt(connections, 6)
+        && isValidConnectionAt(connections, 7)
+        && isValidConnectionAt(connections, 8)
+        && isValidConnectionAt(connections, 9);
+    }
+
     function hasValidOptionalConnectionFields(data) {
       return (!('youtubeConnections' in data)
-          || (data.youtubeConnections is list
-            && data.youtubeConnections.size() <= 25))
+          || isValidConnections(data.youtubeConnections))
         && (!('youtubeConnection' in data)
-          || data.youtubeConnection is map);
+          || isValidConnection(data.youtubeConnection));
     }
 
     function hasValidOptionalChannelContext(data) {

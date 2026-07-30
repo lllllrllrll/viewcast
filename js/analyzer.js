@@ -347,21 +347,22 @@ function createProvider() {
 }
 
 function readCachedAccessToken() {
+  localStorage.removeItem(tokenStorageKey);
   try {
-    const saved = JSON.parse(localStorage.getItem(tokenStorageKey) || "null");
+    const saved = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
     if (saved?.accessToken && saved.uid === currentUser?.uid && saved.expiresAt > Date.now() + 60 * 1000) {
       return saved.accessToken;
     }
   } catch (error) {
     // Fall through and clear bad token cache below.
   }
-  localStorage.removeItem(tokenStorageKey);
+  sessionStorage.removeItem(tokenStorageKey);
   return "";
 }
 
 function saveCachedAccessToken(accessToken) {
   if (!accessToken || !currentUser) return;
-  localStorage.setItem(tokenStorageKey, JSON.stringify({
+  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
     expiresAt: Date.now() + 50 * 60 * 1000
@@ -370,6 +371,7 @@ function saveCachedAccessToken(accessToken) {
 
 function clearCachedAccessToken() {
   localStorage.removeItem(tokenStorageKey);
+  sessionStorage.removeItem(tokenStorageKey);
 }
 
 function userHasGoogleProvider(user) {
