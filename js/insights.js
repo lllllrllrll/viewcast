@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 13;
+const insightsCacheVersion = 14;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -2400,7 +2400,23 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
     const trendPlan = await buildGeminiTrendPlan(videos, channelProfile);
     if (requestId !== analysisRequestId) return;
     setStatus("Searching trends chosen by Gemini...");
-    const trendVideos = accessToken ? await fetchTrendReferenceVideos(accessToken, videos, trendPlan) : [];
+    let trendVideos = accessToken
+      ? await fetchTrendReferenceVideos(accessToken, videos, trendPlan)
+      : [];
+    if (accessToken &&
+        !trendVideos.length &&
+        !trendVideos.outsideTrendVideos?.length &&
+        allowPrompt) {
+      clearCachedAccessToken();
+      setStatus("Renewing YouTube access to load current trends...");
+      accessToken = await requestAccessToken();
+      if (requestId !== analysisRequestId) return;
+      trendVideos = await fetchTrendReferenceVideos(
+        accessToken,
+        videos,
+        trendPlan
+      );
+    }
     if (requestId !== analysisRequestId) return;
 
     const orderedVideos = focusVideoId
@@ -2412,7 +2428,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
     if (!summary.geminiInsights) throw new Error("AI_INSIGHTS_GENERATION_FAILED");
     if (requestId !== analysisRequestId) return;
     renderChannelInsights(summary);
-    if (trendVideos.length || trendVideos.outsideTrendVideos?.length) {
+    if (trendVideos.length && trendVideos.outsideTrendVideos?.length) {
       saveCachedInsights(summary, videos, focusVideoId);
     }
     setAnalyzerLoading(false);
