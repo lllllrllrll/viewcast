@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 20;
+const insightsCacheVersion = 21;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -1859,24 +1859,106 @@ function opportunityItems(groups, summary) {
   }));
 }
 
+function trendSectionFallbackItems(type, summary) {
+  const contextLabel = creatorContextLabel(summary);
+  if (type === "platform") {
+    return [
+      {
+        title: "Gaming releases and challenge formats",
+        body: "Track new releases, major updates, and creator challenges gaining several high-velocity uploads during the 30-day window.",
+        label: "Platform signal",
+        tone: "warn"
+      },
+      {
+        title: "Music releases and performance formats",
+        body: "Watch release reactions, live performances, remixes, and process videos with fast views-per-day growth and strong engagement.",
+        label: "Platform signal",
+        tone: "warn"
+      },
+      {
+        title: "Sports and entertainment event reactions",
+        body: "Monitor time-sensitive reactions, predictions, and breakdowns published around major events and announcements.",
+        label: "Platform signal",
+        tone: "warn"
+      }
+    ];
+  }
+  if (type === "niche") {
+    return [
+      {
+        title: `${contextLabel}: new releases and announcements`,
+        body: `Monitor fresh videos about releases, updates, or news directly connected to ${contextLabel}.`,
+        label: "Niche watchlist",
+        tone: "warn"
+      },
+      {
+        title: `${contextLabel}: comparisons and ranked choices`,
+        body: `Look for repeated A-versus-B, ranking, review, and “best option” formats within ${contextLabel}.`,
+        label: "Niche watchlist",
+        tone: "warn"
+      },
+      {
+        title: `${contextLabel}: challenges and reaction formats`,
+        body: `Track challenge, experiment, reaction, and transformation videos that are appearing across multiple ${contextLabel} creators.`,
+        label: "Niche watchlist",
+        tone: "warn"
+      }
+    ];
+  }
+  return [
+    {
+      title: `Publish a timely ${contextLabel} response`,
+      body: "Choose one fresh release, update, or announcement and publish while audience attention is concentrated.",
+      label: "Opportunity",
+      tone: "warn"
+    },
+    {
+      title: `Test a searchable ${contextLabel} comparison`,
+      body: "Package one clear decision as A versus B, rank the alternatives, and make the winner visible in the payoff.",
+      label: "Opportunity",
+      tone: "warn"
+    },
+    {
+      title: `Turn a ${contextLabel} trend into a repeatable format`,
+      body: "Pilot one challenge, reaction, or experiment, then compare click-through rate and retention with the channel median before building a series.",
+      label: "Opportunity",
+      tone: "warn"
+    }
+  ];
+}
+
 function renderTrendSections(summary) {
   const platformGroups = buildTrendGroups(summary.globalTrendVideos || []);
   const nicheGroups = buildTrendGroups(summary.trendVideos || []);
+  const platformItems = platformGroups.length
+    ? trendGroupItems(platformGroups, "Platform-wide")
+    : trendSectionFallbackItems("platform", summary);
+  const nicheItems = nicheGroups.length
+    ? trendGroupItems(nicheGroups, "Your niche")
+    : trendSectionFallbackItems("niche", summary);
+  const opportunities = nicheGroups.length
+    ? opportunityItems(nicheGroups, summary)
+    : trendSectionFallbackItems("opportunities", summary);
   updateActivityItems(
     "#platformWideTrends .activity-item",
-    trendGroupItems(platformGroups, "Platform-wide"),
+    platformItems,
     platformGroups.map((group) => group.videos)
   );
   updateActivityItems(
     "#nicheTrends .activity-item",
-    trendGroupItems(nicheGroups, "Your niche"),
+    nicheItems,
     nicheGroups.map((group) => group.videos)
   );
   updateActivityItems(
     "#trendOpportunities .activity-item",
-    opportunityItems(nicheGroups, summary),
+    opportunities,
     nicheGroups.map((group) => group.videos)
   );
+}
+
+function hasLiveTrendResults(summary) {
+  return buildTrendGroups(summary?.globalTrendVideos || []).length > 0 &&
+    buildTrendGroups(summary?.trendVideos || []).length > 0;
 }
 
 function orderExpansionVideosByCrossover(videos = [], items = []) {
@@ -2857,7 +2939,20 @@ if (form && firebaseConfigured) {
   });
   analyzerDashboard?.addEventListener("click", handleReadMoreClick);
   insightTabs.forEach((tab) => {
-    tab.addEventListener("click", () => activateInsightsTab(tab.dataset.insightsTab));
+    tab.addEventListener("click", async () => {
+      const tabName = tab.dataset.insightsTab;
+      activateInsightsTab(tabName);
+      if (tabName === "trends" &&
+          currentUser &&
+          hasLinkedChannel() &&
+          !hasLiveTrendResults(latestChannelSummary)) {
+        await generateChannelInsights({
+          allowPrompt: true,
+          forceRefresh: true
+        });
+        activateInsightsTab("trends");
+      }
+    });
     tab.addEventListener("keydown", handleInsightsTabKeydown);
   });
   videoLibrary?.addEventListener("click", (event) => {
