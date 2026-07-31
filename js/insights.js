@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 16;
+const insightsCacheVersion = 17;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -991,6 +991,29 @@ function trendMatchesCreatorContext(video) {
   return matches >= requiredMatches;
 }
 
+function outsideContextBridgeMultiplier(video) {
+  const context = meaningfulCreatorContextWords();
+  if (!context.length) return 1;
+  const categoryId = String(video.snippet?.categoryId || "");
+  const affinities = {
+    "1": ["story", "animation", "film", "character", "visual"],
+    "10": ["meme", "edit", "reaction", "culture", "artist", "audio"],
+    "17": ["reaction", "competition", "challenge", "commentary", "debate"],
+    "20": ["meme", "challenge", "reaction", "character", "story", "community"],
+    "23": ["meme", "funny", "reaction", "commentary", "entertainment"],
+    "24": ["meme", "reaction", "story", "culture", "character", "commentary"],
+    "27": ["analysis", "guide", "history", "explain", "education", "tutorial"],
+    "28": ["analysis", "tool", "review", "experiment", "technology", "tutorial"]
+  };
+  const bridgeWords = affinities[categoryId] || [];
+  const matches = context.filter((word) => bridgeWords.includes(word)).length;
+  return 1 + Math.min(0.6, matches * 0.2);
+}
+
+function outsideTrendRank(video) {
+  return trendMomentumScore(video) * outsideContextBridgeMultiplier(video);
+}
+
 function trendTitlesOverlap(first, second) {
   const firstWords = new Set(importantWords(first?.snippet?.title || ""));
   const secondWords = new Set(importantWords(second?.snippet?.title || ""));
@@ -1032,7 +1055,7 @@ function selectOutsideTopicTrends(
   const candidates = videos
     .filter((video) => video?.id && !ownVideoIds.has(video.id))
     .filter((video) => !hasCreatorContext || !trendMatchesCreatorContext(video))
-    .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+    .sort((a, b) => outsideTrendRank(b) - outsideTrendRank(a));
 
   candidates.forEach((video) => {
     if (selected.length >= 3) return;
@@ -1056,7 +1079,7 @@ function selectOutsideTopicTrends(
         categoryId &&
         !ownCategoryIds.has(categoryId);
     })
-    .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a))
+    .sort((a, b) => outsideTrendRank(b) - outsideTrendRank(a))
     .forEach((video) => {
       if (selected.length >= 3 ||
           selected.some((item) => item.id === video.id ||
@@ -1066,7 +1089,7 @@ function selectOutsideTopicTrends(
 
   videos
     .filter((video) => video?.id && !ownVideoIds.has(video.id))
-    .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a))
+    .sort((a, b) => outsideTrendRank(b) - outsideTrendRank(a))
     .forEach((video) => {
       if (selected.length >= 3 ||
           selected.some((item) => item.id === video.id ||
@@ -1395,6 +1418,7 @@ function buildCrossoverTrendSuggestions(summary) {
     || "your current audience";
   const performance = uploadPerformanceContext(summary.recent || []);
   const preferredFormat = performance.shortAverageViews > performance.videoAverageViews ? "Short" : "video";
+  const contextLabel = creatorContextLabel(summary);
 
   return (summary.outsideTrendVideos || []).slice(0, 3).map((video) => {
     const evidence = trendEvidence(video);
@@ -1402,11 +1426,23 @@ function buildCrossoverTrendSuggestions(summary) {
     const dailyViews = compactNumber(evidence?.viewsPerDay || 0);
     return {
       title: `${outsideCategory} crossover: ${shortText(evidence?.title || "popular trend", 72)}`,
-      body: `${evidence?.title || "This popular video"} is drawing about ${dailyViews} views per day. Test the outside subject in a ${preferredFormat}, but connect the opening question, pacing, and payoff to what your ${category} audience already responds to. Treat it as a low-risk pilot before changing the channel direction.`,
+      body: `${evidence?.title || "This popular video"} is drawing about ${dailyViews} views per day. For ${contextLabel}, test the outside subject in a ${preferredFormat}, but preserve the pacing, humor, expertise, or payoff your ${category} audience expects. Treat it as one measurable pilot before changing the channel direction.`,
       label: "Targeted crossover",
       tone: "good"
     };
   });
+}
+
+function creatorContextLabel(summary) {
+  const supplied = summary.creatorProvidedContext || savedChannelContext;
+  return shortText(
+    supplied?.channelTopic ||
+    supplied?.channelContext ||
+    summary.channelLane?.specificCategory ||
+    summary.channelLane?.primaryCategory ||
+    "this channel",
+    80
+  );
 }
 
 function effectiveExpansionTrendVideos(summary) {
@@ -1437,39 +1473,53 @@ function expansionTrendFallbacks(summary) {
     {
       category: "Gaming",
       title: "New-release challenge and first-reaction videos",
+      bridgeWords: ["meme", "funny", "reaction", "challenge", "character", "story", "gaming"],
       body: "Gaming audiences respond to timely challenges built around a new release, update, character, or competitive rule. Study how creators explain the stakes immediately, show the result early, and turn one challenge into a repeatable series."
     },
     {
       category: "Science & Technology",
       title: "AI tool tests and side-by-side product comparisons",
+      bridgeWords: ["analysis", "review", "tool", "experiment", "tutorial", "education", "tech"],
       body: "Practical AI experiments and clear A-versus-B comparisons give viewers an immediate reason to click. Use a visible test, measurable result, and decisive recommendation instead of a broad product overview."
     },
     {
       category: "Sports",
       title: "Major-event reactions, predictions, and rapid breakdowns",
+      bridgeWords: ["reaction", "competition", "challenge", "commentary", "debate", "sports"],
       body: "Event-led videos perform best when the creator publishes while attention is concentrated. Lead with one strong prediction or disputed moment, support it with evidence, and invite viewers to take a side."
     },
     {
       category: "Music",
       title: "Song breakdowns, remixes, and process reveals",
+      bridgeWords: ["meme", "edit", "reaction", "artist", "audio", "music", "remix"],
       body: "Music discovery expands through recognizable songs paired with a transformation or behind-the-scenes process. Show the before-and-after result first, then explain the creative decisions that produced it."
     },
     {
       category: "Education",
       title: "Fast visual explainers built around one surprising question",
+      bridgeWords: ["analysis", "guide", "history", "explain", "education", "tutorial", "story"],
       body: "Focused explainers package a complex subject as one concrete question with a visual payoff. Keep the title specific, establish why the answer matters, and remove background that delays the explanation."
     },
     {
       category: "Entertainment",
       title: "Trailer, announcement, and pop-culture reaction formats",
+      bridgeWords: ["meme", "funny", "reaction", "story", "culture", "character", "commentary"],
       body: "Entertainment reactions gain momentum when they add a clear interpretation instead of only summarizing the news. Choose one reveal, explain what it changes, and make the creator's perspective the reason to watch."
     }
   ];
+  const contextWords = meaningfulCreatorContextWords();
+  const contextLabel = creatorContextLabel(summary);
   return options
     .filter((item) => !channelCategory.includes(item.category.toLowerCase()))
+    .sort((a, b) => (
+      contextWords.filter((word) => b.bridgeWords.includes(word)).length -
+      contextWords.filter((word) => a.bridgeWords.includes(word)).length
+    ))
     .slice(0, 3)
     .map((item) => ({
-      ...item,
+      category: item.category,
+      title: item.title,
+      body: `${item.body} For ${contextLabel}, carry over the channel's established voice and audience promise rather than copying the outside creator.`,
       label: `${item.category} expansion`,
       tone: "warn"
     }));
@@ -1483,9 +1533,10 @@ function crossoverFallbacks(summary) {
   const performance = uploadPerformanceContext(summary.recent || []);
   const preferredFormat = performance.shortAverageViews >
     performance.videoAverageViews ? "Short" : "video";
+  const contextLabel = creatorContextLabel(summary);
   return expansionTrendFallbacks(summary).map((trend) => ({
     title: `${trend.category} crossover for ${channelCategory}`,
-    body: `Use the “${trend.title}” format as a ${preferredFormat}. Keep ${trend.category} as the main subject, but introduce it through the pacing, humor, expertise, or viewer problem your ${channelCategory} audience already recognizes. Test one pilot and compare its click-through and retention with your channel median before making a series.`,
+    body: `Use the “${trend.title}” format as a ${preferredFormat} for ${contextLabel}. Keep ${trend.category} as the main subject, but introduce it through the pacing, humor, expertise, or viewer problem your ${channelCategory} audience already recognizes. Test one pilot and compare its click-through and retention with your channel median before making a series.`,
     label: "Targeted crossover",
     tone: "good"
   }));
@@ -1681,13 +1732,14 @@ function updateNextVideoSuggestions(items, trendVideos = []) {
 }
 
 function updateOutsideTopicTrends(videos = [], summary = {}) {
+  const contextLabel = creatorContextLabel(summary);
   const items = videos.slice(0, 3).map((video) => {
     const evidence = trendEvidence(video);
     const category = youtubeCategoryName(video.snippet?.categoryId) || "Popular video";
     const format = isShort(video) ? "Short" : "video";
     return {
       title: evidence?.title || "Popular YouTube video",
-      body: `${category} · ${evidence?.publishedLabel || "Recently published"} · ${compactNumber(evidence?.views || 0)} views · about ${compactNumber(evidence?.viewsPerDay || 0)} views per day. Study this ${format}'s opening promise, pacing, thumbnail hierarchy, and payoff before testing the format with your audience.`,
+      body: `${category} · ${evidence?.publishedLabel || "Recently published"} · ${compactNumber(evidence?.views || 0)} views · about ${compactNumber(evidence?.viewsPerDay || 0)} views per day. For ${contextLabel}, study this ${format}'s opening promise, pacing, thumbnail hierarchy, and payoff, then adapt those mechanics to the channel's existing voice and viewer expectations.`,
       label: "Outside your topic",
       tone: "warn"
     };
