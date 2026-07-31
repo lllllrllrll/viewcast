@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 17;
+const insightsCacheVersion = 19;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -575,13 +575,10 @@ async function fetchMostPopularVideos(accessToken, maxResults = 50) {
   }));
 }
 
-async function fetchOutsideCategoryTrends(accessToken, ownCategoryIds) {
-  const expansionCategoryIds = ["20", "10", "17", "24", "28", "27", "23", "1"];
-  const categories = expansionCategoryIds
-    .filter((categoryId) => !ownCategoryIds.has(categoryId))
-    .slice(0, 5);
+async function fetchOutsideCategoryTrends(accessToken) {
+  const fallbackCategoryIds = ["20", "10", "17", "24", "28", "27", "23", "1"];
   const results = await Promise.allSettled(
-    categories.map((categoryId) =>
+    fallbackCategoryIds.map((categoryId) =>
       fetchMostPopularVideosByCategory(accessToken, categoryId, 6)
     )
   );
@@ -864,7 +861,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     contextControlsTrends ? Promise.resolve([]) : fetchSimilarTrendVideos(accessToken, videos),
     contextControlsTrends ? Promise.resolve({lane: null, videos: []}) : fetchLaneTrendVideos(accessToken, videos),
     fetchMostPopularVideos(accessToken),
-    fetchOutsideCategoryTrends(accessToken, ownCategoryIds)
+    fetchOutsideCategoryTrends(accessToken)
   ]);
   const nicheVideos = nicheResult.status === "fulfilled" ? nicheResult.value.videos : [];
   const merged = [
@@ -936,7 +933,11 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
   trendVideos.outsideTrendVideos = selectOutsideTopicTrends(
     outsideCandidates,
     ownVideoIds,
-    ownCategoryIds
+    ownCategoryIds,
+    trendPlan?.expansionCategoryIds || []
+  );
+  trendVideos.globalTrendVideos = selectGlobalPopularTrends(
+    outsideCandidates
   );
   return trendVideos;
 }
@@ -1046,16 +1047,25 @@ function diversifyTrendVideos(videos, queries = []) {
 function selectOutsideTopicTrends(
   videos,
   ownVideoIds = new Set(),
-  ownCategoryIds = new Set()
+  ownCategoryIds = new Set(),
+  preferredCategoryIds = []
 ) {
   const selected = [];
   const selectedCategories = new Set();
   const hasCreatorContext = meaningfulCreatorContextWords().length > 0;
+  const contextualRank = (video) => {
+    const categoryId = String(video.snippet?.categoryId || "");
+    const preferredIndex = preferredCategoryIds.indexOf(categoryId);
+    const preferenceBoost = preferredIndex < 0
+      ? 1
+      : 1.5 - Math.min(0.4, preferredIndex * 0.1);
+    return outsideTrendRank(video) * preferenceBoost;
+  };
 
   const candidates = videos
     .filter((video) => video?.id && !ownVideoIds.has(video.id))
     .filter((video) => !hasCreatorContext || !trendMatchesCreatorContext(video))
-    .sort((a, b) => outsideTrendRank(b) - outsideTrendRank(a));
+    .sort((a, b) => contextualRank(b) - contextualRank(a));
 
   candidates.forEach((video) => {
     if (selected.length >= 3) return;
@@ -1079,7 +1089,7 @@ function selectOutsideTopicTrends(
         categoryId &&
         !ownCategoryIds.has(categoryId);
     })
-    .sort((a, b) => outsideTrendRank(b) - outsideTrendRank(a))
+    .sort((a, b) => contextualRank(b) - contextualRank(a))
     .forEach((video) => {
       if (selected.length >= 3 ||
           selected.some((item) => item.id === video.id ||
@@ -1089,7 +1099,7 @@ function selectOutsideTopicTrends(
 
   videos
     .filter((video) => video?.id && !ownVideoIds.has(video.id))
-    .sort((a, b) => outsideTrendRank(b) - outsideTrendRank(a))
+    .sort((a, b) => contextualRank(b) - contextualRank(a))
     .forEach((video) => {
       if (selected.length >= 3 ||
           selected.some((item) => item.id === video.id ||
@@ -1097,6 +1107,32 @@ function selectOutsideTopicTrends(
       selected.push(video);
     });
 
+  return selected;
+}
+
+function selectGlobalPopularTrends(videos = []) {
+  const selected = [];
+  const selectedCategories = new Set();
+  const candidates = videos
+    .filter((video, index, values) => (
+      video?.id &&
+      values.findIndex((candidate) => candidate.id === video.id) === index
+    ))
+    .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+
+  candidates.forEach((video) => {
+    if (selected.length >= 3) return;
+    const categoryId = String(video.snippet?.categoryId || "");
+    if (categoryId && selectedCategories.has(categoryId)) return;
+    if (selected.some((item) => trendTitlesOverlap(item, video))) return;
+    selected.push(video);
+    if (categoryId) selectedCategories.add(categoryId);
+  });
+  candidates.forEach((video) => {
+    if (selected.length >= 3 ||
+        selected.some((item) => item.id === video.id)) return;
+    selected.push(video);
+  });
   return selected;
 }
 
@@ -1568,6 +1604,7 @@ function buildChannelSummary(videos, trendVideos, channelProfile = null) {
     topSignal: topics[0] || currentTrend || "Current trends",
     currentTrend,
     currentTrends,
+    globalTrendVideos: trendVideos.globalTrendVideos || [],
     channelLane,
     contentInterpretations: trendVideos.contentInterpretations || [],
     outsideTrendVideos: trendVideos.outsideTrendVideos || [],
@@ -1577,14 +1614,6 @@ function buildChannelSummary(videos, trendVideos, channelProfile = null) {
     topicIdeas: buildTopicIdeas(videos, trendVideos),
     trendVideos
   };
-}
-
-function toneForRatio(value, baseline) {
-  if (!baseline || !value) return "warn";
-  const ratio = value / baseline;
-  if (ratio >= 1.1) return "good";
-  if (ratio >= 0.75) return "warn";
-  return "bad";
 }
 
 function setMetric(index, value, trend = "", trendClass = "") {
@@ -1763,6 +1792,26 @@ function updateCrossoverTrends(items = [], outsideTrendVideos = []) {
   updateActivityItems("#targetedCrossoverTrends .activity-item", items, relatedVideos);
 }
 
+function orderExpansionVideosByCrossover(videos = [], items = []) {
+  const ordered = [];
+  items.forEach((item) => {
+    const text = `${item?.title || ""} ${item?.body || ""}`.toLowerCase();
+    const match = videos.find((video) => {
+      const title = String(video.snippet?.title || "").trim().toLowerCase();
+      return title && text.includes(title);
+    });
+    if (match && !ordered.some((video) => video.id === match.id)) {
+      ordered.push(match);
+    }
+  });
+  videos.forEach((video) => {
+    if (!ordered.some((candidate) => candidate.id === video.id)) {
+      ordered.push(video);
+    }
+  });
+  return ordered.slice(0, 3);
+}
+
 function setChatSeedMessage(message = "Hi! I'm your ViewCast assistant. To give you the best advice, should we focus on growing your views, increasing your subscribers, or improving your retention today?") {
   if (!chatMessages) return;
   chatMessages.innerHTML = "";
@@ -1908,6 +1957,18 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
       confidence: ["high", "medium", "low"].includes(item?.confidence) ? item.confidence : "low"
     }))
     .filter((item) => item.title && item.premise);
+  const allowedExpansionCategoryIds = new Set([
+    "1", "10", "17", "20", "23", "24", "27", "28"
+  ]);
+  const expansionCategoryIds = (Array.isArray(value.expansionCategoryIds)
+    ? value.expansionCategoryIds
+    : [])
+    .map((categoryId) => String(categoryId || ""))
+    .filter((categoryId, index, values) => (
+      allowedExpansionCategoryIds.has(categoryId) &&
+      values.indexOf(categoryId) === index
+    ))
+    .slice(0, 5);
 
   return {
     lane: {
@@ -1919,7 +1980,8 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
       confidence: String(value.categoryConfidence || "medium").slice(0, 20)
     },
     queries,
-    contentInterpretations
+    contentInterpretations,
+    expansionCategoryIds
   };
 }
 
@@ -1929,7 +1991,8 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
     return {
       lane: fallbackLane,
       queries: trendQueriesForLane(fallbackLane),
-      contentInterpretations: []
+      contentInterpretations: [],
+      expansionCategoryIds: []
     };
   }
 
@@ -1947,8 +2010,10 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
     "Never invent a media reference. If a reference is ambiguous, use an empty mediaReferences list, explain the likely premise conservatively, and set confidence to low.",
     "Then choose exactly 4 trend-search queries from the resolved media references and premises, not by copying full upload titles. The queries must cover 4 meaningfully different subtopics within the same category—not synonyms, rephrasings, or the same event/person/title. For example, a gaming category could cover a new release, a competitive meta, a creator challenge format, and an industry event.",
     "When creator-provided context exists, ignore resolved upload media references while choosing queries and use only that creator context. Each query must contain at least one meaningful term written in the creator context.",
+    "Also choose exactly 5 expansionCategoryIds for popular trends outside the current topic. Choose from Film & Animation=1, Music=10, Sports=17, Gaming=20, Comedy=23, Entertainment=24, Education=27, and Science & Technology=28.",
+    "The expansion categories must remain outside the creator's current topic, but they must offer a credible bridge to the audience interests, tone, skills, goals, or presentation style explicitly described in creator-provided context. Rank the strongest bridge first.",
     "Return JSON only with this shape. No trailing commas:",
-    `{"categoryKey":"","primaryCategory":"","specificCategory":"","categoryLabel":"","categorySeed":"","categoryConfidence":"high","contentInterpretations":[{"title":"","mediaReferences":[""],"premise":"","audienceAppeal":"","confidence":"high"}],"queries":["","",""]}`,
+    `{"categoryKey":"","primaryCategory":"","specificCategory":"","categoryLabel":"","categorySeed":"","categoryConfidence":"high","contentInterpretations":[{"title":"","mediaReferences":[""],"premise":"","audienceAppeal":"","confidence":"high"}],"queries":["","","",""],"expansionCategoryIds":["","","","",""]}`,
     "",
     "Channel profile:",
     JSON.stringify(channelProfile || {}),
@@ -1980,14 +2045,16 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
     return normalizeGeminiTrendPlan(safeJsonParse(text), fallbackLane) || {
       lane: fallbackLane,
       queries: trendQueriesForLane(fallbackLane),
-      contentInterpretations: []
+      contentInterpretations: [],
+      expansionCategoryIds: []
     };
   } catch (error) {
     console.warn("Gemini trend plan failed.", error);
     return {
       lane: fallbackLane,
       queries: trendQueriesForLane(fallbackLane),
-      contentInterpretations: []
+      contentInterpretations: [],
+      expansionCategoryIds: []
     };
   }
 }
@@ -2397,7 +2464,6 @@ function clearAnalyzerResults() {
 
 function renderChannelInsights(summary) {
   latestChannelSummary = summary;
-  const bestTone = toneForRatio(summary.bestViews, summary.avgViews);
   const geminiInsights = summary.geminiInsights
     ? normalizeGeminiInsights(summary.geminiInsights, summary)
     : null;
@@ -2420,35 +2486,39 @@ function renderChannelInsights(summary) {
     cards.nextShortLength?.detail || summary.shortUploadTime,
     cards.nextShortLength?.tone || "warn"
   );
-  const generatedTrend = cards.topTopicSignal?.value;
-  const groundedGeneratedTrend = isGroundedTrendLabel(generatedTrend, summary.trendVideos)
-    ? generatedTrend
-    : "";
-  const externalTrends = geminiInsights
-    ? (geminiInsights.validatedTrends.length
-      ? geminiInsights.validatedTrends
-      : (summary.currentTrends || currentTrendSignals(summary.trendVideos)))
-    : (summary.currentTrends || currentTrendSignals(summary.trendVideos));
-  const displayedTrends = [
-    ...externalTrends,
-    ...(!externalTrends.length && groundedGeneratedTrend ? [groundedGeneratedTrend] : [])
-  ].filter((trend, index, values) => trend && values.findIndex(
-    (candidate) => candidate.toLowerCase() === trend.toLowerCase()
-  ) === index).slice(0, 3);
+  const displayedTrends = (summary.globalTrendVideos || [])
+    .map((video) => String(video.snippet?.title || "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  const generalTrendFallbacks = [
+    "Popular gaming releases and challenge videos",
+    "Major music releases and performance videos",
+    "Sports reactions and event breakdowns"
+  ];
+  generalTrendFallbacks.forEach((fallback) => {
+    if (displayedTrends.length < 3) displayedTrends.push(fallback);
+  });
   setTrendMetric(
     displayedTrends,
-    cards.topTopicSignal?.detail || `${summary.channelLane?.specificCategory || summary.channelLane?.primaryCategory || "Niche"} trends`,
-    cards.topTopicSignal?.tone || bestTone
+    "US most-popular videos",
+    "good"
   );
   const nextVideoSuggestions = geminiInsights?.nextVideoSuggestions || summary.nextVideoSuggestions;
   updateNextVideoSuggestions(nextVideoSuggestions, summary.trendVideos);
   updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
-  const expansionTrendVideos = effectiveExpansionTrendVideos(summary);
+  let expansionTrendVideos = effectiveExpansionTrendVideos(summary);
+  const contextualCrossoverItems = geminiInsights?.crossoverTrends || [];
+  expansionTrendVideos = orderExpansionVideosByCrossover(
+    expansionTrendVideos,
+    contextualCrossoverItems
+  );
   updateOutsideTopicTrends(expansionTrendVideos, summary);
-  const crossoverItems = buildCrossoverTrendSuggestions({
-    ...summary,
-    outsideTrendVideos: expansionTrendVideos
-  });
+  const crossoverItems = contextualCrossoverItems.length
+    ? [...contextualCrossoverItems]
+    : buildCrossoverTrendSuggestions({
+      ...summary,
+      outsideTrendVideos: expansionTrendVideos
+    });
   crossoverFallbacks(summary).forEach((fallback) => {
     if (crossoverItems.length < 3) crossoverItems.push(fallback);
   });
