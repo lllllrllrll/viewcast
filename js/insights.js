@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 22;
+const insightsCacheVersion = 23;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -1950,15 +1950,33 @@ function trendGroupItems(groups, label) {
   }));
 }
 
+function opportunityGroups(platformGroups = [], nicheGroups = []) {
+  const contextWords = new Set(meaningfulCreatorContextWords());
+  const nicheWords = new Set(nicheGroups.flatMap((group) =>
+    importantWords(group.title || "")
+  ));
+  const outsideGroups = platformGroups.filter((group) => {
+    const words = importantWords(group.title || "");
+    const contextOverlap = words.filter((word) => contextWords.has(word)).length;
+    const nicheOverlap = words.filter((word) => nicheWords.has(word)).length;
+    return contextOverlap === 0 && nicheOverlap < Math.max(1, words.length / 2);
+  });
+  return [...outsideGroups, ...platformGroups]
+    .filter((group, index, groups) =>
+      groups.findIndex((candidate) => candidate.title === group.title) === index
+    )
+    .slice(0, 3);
+}
+
 function opportunityItems(groups, summary) {
   const contextLabel = creatorContextLabel(summary);
   const performance = uploadPerformanceContext(summary.recent || []);
   const preferredFormat = performance.shortAverageViews >
     performance.videoAverageViews ? "Short" : "video";
-  return groups.map((group) => ({
-    title: `Opportunity: ${group.title}`,
-    body: `Create a ${preferredFormat} for ${contextLabel} that answers the same viewer demand without copying the example videos. Lead with one specific promise, show the payoff early, and compare its click-through rate and retention with the channel median. Signal: ${compactNumber(group.averageViewsPerDay)} views per day and ${group.engagementRate.toFixed(1)}% engagement.`,
-    label: "Actionable trend",
+  return groups.map((group, index) => ({
+    title: `Bridge ${contextLabel} with ${group.title}`,
+    body: `Borrow the outside trend’s ${index === 0 ? "hook and pacing" : index === 1 ? "format and visual language" : "audience-participation mechanic"} for a ${preferredFormat}, while keeping roughly 70% of the idea grounded in ${contextLabel} and 30% exploratory. Introduce it through a problem, comparison, reaction, or challenge your current viewers already understand. Test one pilot before making it a series. Outside signal: ${compactNumber(group.averageViewsPerDay)} views per day across ${group.channelCount || group.videos.length} channels.`,
+    label: "Crossover opportunity",
     tone: "warn"
   }));
 }
@@ -2011,21 +2029,21 @@ function trendSectionFallbackItems(type, summary) {
   }
   return [
     {
-      title: `Publish a timely ${contextLabel} response`,
-      body: "Choose one fresh release, update, or announcement and publish while audience attention is concentrated.",
-      label: "Opportunity",
+      title: `Bring challenge storytelling into ${contextLabel}`,
+      body: `Keep the subject rooted in ${contextLabel}, but add a visible constraint, countdown, or measurable goal borrowed from challenge content. Treat this as a 70% familiar, 30% exploratory pilot.`,
+      label: "Crossover opportunity",
       tone: "warn"
     },
     {
-      title: `Test a searchable ${contextLabel} comparison`,
-      body: "Package one clear decision as A versus B, rank the alternatives, and make the winner visible in the payoff.",
-      label: "Opportunity",
+      title: `Use documentary-style transformation in ${contextLabel}`,
+      body: `Frame a ${contextLabel} video around a before-and-after journey, showing setbacks and progress instead of delivering only an explanation or result.`,
+      label: "Crossover opportunity",
       tone: "warn"
     },
     {
-      title: `Turn a ${contextLabel} trend into a repeatable format`,
-      body: "Pilot one challenge, reaction, or experiment, then compare click-through rate and retention with the channel median before building a series.",
-      label: "Opportunity",
+      title: `Add audience participation to ${contextLabel}`,
+      body: `Borrow polls, viewer submissions, brackets, or comment-driven decisions from community formats, then use the response to shape a follow-up ${contextLabel} video.`,
+      label: "Crossover opportunity",
       tone: "warn"
     }
   ];
@@ -2034,14 +2052,15 @@ function trendSectionFallbackItems(type, summary) {
 function renderTrendSections(summary) {
   const platformGroups = buildPlatformTrendGroups(summary.globalTrendVideos || []);
   const nicheGroups = buildTrendGroups(summary.trendVideos || []);
+  const crossoverGroups = opportunityGroups(platformGroups, nicheGroups);
   const platformItems = platformGroups.length
     ? trendGroupItems(platformGroups, "Platform-wide")
     : trendSectionFallbackItems("platform", summary);
   const nicheItems = nicheGroups.length
     ? trendGroupItems(nicheGroups, "Your niche")
     : trendSectionFallbackItems("niche", summary);
-  const opportunities = nicheGroups.length
-    ? opportunityItems(nicheGroups, summary)
+  const opportunities = crossoverGroups.length
+    ? opportunityItems(crossoverGroups, summary)
     : trendSectionFallbackItems("opportunities", summary);
   updateActivityItems(
     "#platformWideTrends .activity-item",
@@ -2056,7 +2075,7 @@ function renderTrendSections(summary) {
   updateActivityItems(
     "#trendOpportunities .activity-item",
     opportunities,
-    nicheGroups.map((group) => group.videos)
+    crossoverGroups.map((group) => group.videos)
   );
 }
 
