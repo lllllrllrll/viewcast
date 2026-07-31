@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 15;
+const insightsCacheVersion = 16;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -1427,6 +1427,70 @@ function effectiveExpansionTrendVideos(summary) {
     .slice(0, 3);
 }
 
+function expansionTrendFallbacks(summary) {
+  const channelCategory = String(
+    summary.channelLane?.primaryCategory ||
+    summary.channelLane?.label ||
+    ""
+  ).toLowerCase();
+  const options = [
+    {
+      category: "Gaming",
+      title: "New-release challenge and first-reaction videos",
+      body: "Gaming audiences respond to timely challenges built around a new release, update, character, or competitive rule. Study how creators explain the stakes immediately, show the result early, and turn one challenge into a repeatable series."
+    },
+    {
+      category: "Science & Technology",
+      title: "AI tool tests and side-by-side product comparisons",
+      body: "Practical AI experiments and clear A-versus-B comparisons give viewers an immediate reason to click. Use a visible test, measurable result, and decisive recommendation instead of a broad product overview."
+    },
+    {
+      category: "Sports",
+      title: "Major-event reactions, predictions, and rapid breakdowns",
+      body: "Event-led videos perform best when the creator publishes while attention is concentrated. Lead with one strong prediction or disputed moment, support it with evidence, and invite viewers to take a side."
+    },
+    {
+      category: "Music",
+      title: "Song breakdowns, remixes, and process reveals",
+      body: "Music discovery expands through recognizable songs paired with a transformation or behind-the-scenes process. Show the before-and-after result first, then explain the creative decisions that produced it."
+    },
+    {
+      category: "Education",
+      title: "Fast visual explainers built around one surprising question",
+      body: "Focused explainers package a complex subject as one concrete question with a visual payoff. Keep the title specific, establish why the answer matters, and remove background that delays the explanation."
+    },
+    {
+      category: "Entertainment",
+      title: "Trailer, announcement, and pop-culture reaction formats",
+      body: "Entertainment reactions gain momentum when they add a clear interpretation instead of only summarizing the news. Choose one reveal, explain what it changes, and make the creator's perspective the reason to watch."
+    }
+  ];
+  return options
+    .filter((item) => !channelCategory.includes(item.category.toLowerCase()))
+    .slice(0, 3)
+    .map((item) => ({
+      ...item,
+      label: `${item.category} expansion`,
+      tone: "warn"
+    }));
+}
+
+function crossoverFallbacks(summary) {
+  const channelCategory = summary.channelLane?.specificCategory ||
+    summary.channelLane?.primaryCategory ||
+    summary.channelLane?.label ||
+    "your audience";
+  const performance = uploadPerformanceContext(summary.recent || []);
+  const preferredFormat = performance.shortAverageViews >
+    performance.videoAverageViews ? "Short" : "video";
+  return expansionTrendFallbacks(summary).map((trend) => ({
+    title: `${trend.category} crossover for ${channelCategory}`,
+    body: `Use the “${trend.title}” format as a ${preferredFormat}. Keep ${trend.category} as the main subject, but introduce it through the pacing, humor, expertise, or viewer problem your ${channelCategory} audience already recognizes. Test one pilot and compare its click-through and retention with your channel median before making a series.`,
+    label: "Targeted crossover",
+    tone: "good"
+  }));
+}
+
 function buildChannelSummary(videos, trendVideos, channelProfile = null) {
   const recent = videos.slice(0, 20);
   const longVideos = videos.filter((video) => !isShort(video));
@@ -1616,7 +1680,7 @@ function updateNextVideoSuggestions(items, trendVideos = []) {
   );
 }
 
-function updateOutsideTopicTrends(videos = []) {
+function updateOutsideTopicTrends(videos = [], summary = {}) {
   const items = videos.slice(0, 3).map((video) => {
     const evidence = trendEvidence(video);
     const category = youtubeCategoryName(video.snippet?.categoryId) || "Popular video";
@@ -1629,6 +1693,9 @@ function updateOutsideTopicTrends(videos = []) {
     };
   });
 
+  expansionTrendFallbacks(summary).forEach((fallback) => {
+    if (items.length < 3) items.push(fallback);
+  });
   updateActivityItems("#outsideTopicTrends .activity-item", items);
 }
 
@@ -2325,12 +2392,16 @@ function renderChannelInsights(summary) {
   updateNextVideoSuggestions(nextVideoSuggestions, summary.trendVideos);
   updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
   const expansionTrendVideos = effectiveExpansionTrendVideos(summary);
-  updateOutsideTopicTrends(expansionTrendVideos);
+  updateOutsideTopicTrends(expansionTrendVideos, summary);
+  const crossoverItems = buildCrossoverTrendSuggestions({
+    ...summary,
+    outsideTrendVideos: expansionTrendVideos
+  });
+  crossoverFallbacks(summary).forEach((fallback) => {
+    if (crossoverItems.length < 3) crossoverItems.push(fallback);
+  });
   updateCrossoverTrends(
-    buildCrossoverTrendSuggestions({
-      ...summary,
-      outsideTrendVideos: expansionTrendVideos
-    }),
+    crossoverItems,
     expansionTrendVideos
   );
   setChatSeedMessage(geminiInsights?.chatIntro || compactAdviceSummary(summary));
