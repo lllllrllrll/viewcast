@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 24;
+const insightsCacheVersion = 25;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -747,7 +747,8 @@ async function searchVideosByQuery(
   accessToken,
   query,
   maxResults = 8,
-  maxAgeDays = 30
+  maxAgeDays = 30,
+  shortsOnly = false
 ) {
   const publishedAfter = new Date(
     Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
@@ -761,12 +762,37 @@ async function searchVideosByQuery(
   url.searchParams.set("publishedAfter", publishedAfter);
   url.searchParams.set("regionCode", "US");
   url.searchParams.set("relevanceLanguage", "en");
+  if (shortsOnly) url.searchParams.set("videoDuration", "short");
 
   const payload = await fetchJson(url, accessToken);
   const ids = (payload.items || [])
     .map((item) => item.id?.videoId)
     .filter(Boolean);
-  return ids.length ? fetchVideosByIds(ids, accessToken) : [];
+  const videos = ids.length ? await fetchVideosByIds(ids, accessToken) : [];
+  return shortsOnly ? videos.filter(isShortTrendVideo) : videos;
+}
+
+async function fetchPlatformShortVideos(accessToken) {
+  const queries = [
+    "viral YouTube Shorts",
+    "trending YouTube Shorts"
+  ];
+  const results = await Promise.allSettled(
+    queries.map((query) => searchVideosByQuery(
+      accessToken,
+      query,
+      25,
+      30,
+      true
+    ))
+  );
+  return results.flatMap((result, index) => result.status === "fulfilled"
+    ? result.value.map((video) => ({
+      ...video,
+      trendSource: "Platform-wide YouTube Shorts search",
+      shortsDiscoveryQuery: queries[index]
+    }))
+    : []);
 }
 
 async function fetchLaneTrendVideos(accessToken, videos) {
@@ -785,7 +811,9 @@ async function fetchLaneTrendVideos(accessToken, videos) {
 async function fetchGeminiTrendVideos(accessToken, trendPlan) {
   if (!trendPlan?.queries?.length) return {lane: null, videos: []};
   const recentResults = await Promise.allSettled(
-    trendPlan.queries.slice(0, 2).map((query) => searchVideosByQuery(accessToken, query, 8))
+    trendPlan.queries.slice(0, 2).map((query) =>
+      searchVideosByQuery(accessToken, `${query} shorts`, 12, 30, true)
+    )
   );
   let videos = recentResults.flatMap((result, index) => result.status === "fulfilled"
     ? result.value.map((video) => ({
@@ -798,7 +826,13 @@ async function fetchGeminiTrendVideos(accessToken, trendPlan) {
   if (!videos.length) {
     const fallbackResults = await Promise.allSettled(
       trendPlan.queries.slice(0, 2).map(
-        (query) => searchVideosByQuery(accessToken, query, 10, 90)
+        (query) => searchVideosByQuery(
+          accessToken,
+          `${query} shorts`,
+          12,
+          90,
+          true
+        )
       )
     );
     videos = fallbackResults.flatMap((result, index) => result.status === "fulfilled"
@@ -853,6 +887,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     popularResult,
     similarResult,
     laneResult,
+    platformShortsResult,
     outsideResult,
     outsideCategoryResult
   ] = await Promise.allSettled([
@@ -860,6 +895,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     contextControlsTrends ? Promise.resolve([]) : fetchTrendingVideos(accessToken, videos),
     contextControlsTrends ? Promise.resolve([]) : fetchSimilarTrendVideos(accessToken, videos),
     contextControlsTrends ? Promise.resolve({lane: null, videos: []}) : fetchLaneTrendVideos(accessToken, videos),
+    fetchPlatformShortVideos(accessToken),
     fetchMostPopularVideos(accessToken),
     fetchOutsideCategoryTrends(accessToken)
   ]);
@@ -876,6 +912,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
   const ownVideoIds = new Set(videos.map((video) => video.id).filter(Boolean));
   let filteredTrendVideos = merged.filter((video) => {
     if (!video?.id || seen.has(video.id) || ownVideoIds.has(video.id)) return false;
+    if (!isShortTrendVideo(video)) return false;
     if (contextControlsTrends && !trendMatchesCreatorContext(video)) return false;
     seen.add(video.id);
     return true;
@@ -887,7 +924,13 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
       trendPlan?.queries?.length) {
     const expandedResults = await Promise.allSettled(
       trendPlan.queries.slice(0, 2).map(
-        (query) => searchVideosByQuery(accessToken, query, 10, 90)
+        (query) => searchVideosByQuery(
+          accessToken,
+          `${query} shorts`,
+          12,
+          90,
+          true
+        )
       )
     );
     filteredTrendVideos = expandedResults
@@ -912,6 +955,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     filteredTrendVideos = categoryFallback
       .filter((video, index, values) => (
         video?.id &&
+        isShortTrendVideo(video) &&
         !ownVideoIds.has(video.id) &&
         values.findIndex((candidate) => candidate.id === video.id) === index
       ))
@@ -925,6 +969,9 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
   trendVideos.trendQueries = trendPlan?.queries || trendQueriesForLane(trendVideos.channelLane);
   trendVideos.contentInterpretations = trendPlan?.contentInterpretations || [];
   const outsideCandidates = [
+    ...(platformShortsResult.status === "fulfilled"
+      ? platformShortsResult.value
+      : []),
     ...(outsideResult.status === "fulfilled" ? outsideResult.value : []),
     ...(outsideCategoryResult.status === "fulfilled"
       ? outsideCategoryResult.value
@@ -937,7 +984,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     trendPlan?.expansionCategoryIds || []
   );
   trendVideos.globalTrendVideos = selectGlobalPopularTrends(
-    outsideCandidates
+    outsideCandidates.filter(isShortTrendVideo)
   );
   return trendVideos;
 }
@@ -1143,6 +1190,11 @@ function trendEvidence(video) {
 function isShort(video) {
   const seconds = secondsFromIso(video.contentDetails?.duration);
   return seconds !== null && seconds <= 75;
+}
+
+function isShortTrendVideo(video) {
+  const seconds = secondsFromIso(video.contentDetails?.duration);
+  return seconds !== null && seconds <= 180;
 }
 
 function topVideos(videos, count = 8) {
@@ -1821,14 +1873,15 @@ function platformTrendLabel(terms, videos) {
   const categoryAddsContext = category &&
     !terms.some((term) => category.toLowerCase().includes(term));
   return categoryAddsContext && terms.length === 1
-    ? `${topic} ${category} videos`
-    : `${topic} videos`;
+    ? `${topic} ${category} Shorts`
+    : `${topic} Shorts`;
 }
 
 function buildPlatformTrendGroups(videos = []) {
   const recent = videos
     .filter((video, index, values) => (
       video?.id &&
+      isShortTrendVideo(video) &&
       trendAgeDays(video) <= 30 &&
       values.findIndex((candidate) => candidate.id === video.id) === index
     ))
@@ -1899,7 +1952,7 @@ function buildPlatformTrendGroups(videos = []) {
 
 function buildTrendGroups(videos = []) {
   const recent = videos
-    .filter((video) => video?.id && trendAgeDays(video) <= 30)
+    .filter((video) => video?.id && isShortTrendVideo(video) && trendAgeDays(video) <= 30)
     .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
   const usedIds = new Set();
   const groups = [];
@@ -1944,7 +1997,7 @@ function buildTrendGroups(videos = []) {
 function trendGroupItems(groups, label) {
   return groups.map((group) => ({
     title: group.title,
-    body: `${group.videoCount ? `${group.videoCount} recent videos across ${group.channelCount} channels · ` : ""}${compactNumber(group.averageViewsPerDay)} average views per day · ${group.engagementRate.toFixed(1)}% engagement · ${group.searchMomentum}. Metrics use videos published during the past 30 days.`,
+    body: `${group.videoCount ? `${group.videoCount} recent Shorts across ${group.channelCount} channels · ` : ""}${compactNumber(group.averageViewsPerDay)} average views per day · ${group.engagementRate.toFixed(1)}% engagement · ${group.searchMomentum}. Metrics use Shorts published during the past 30 days.`,
     label,
     tone: "good"
   }));
@@ -1970,36 +2023,34 @@ function opportunityGroups(platformGroups = [], nicheGroups = []) {
 
 function opportunityItems(groups, summary) {
   const contextLabel = creatorContextLabel(summary);
-  const performance = uploadPerformanceContext(summary.recent || []);
-  const preferredFormat = performance.shortAverageViews >
-    performance.videoAverageViews ? "Short" : "video";
+  const preferredFormat = "Short";
   const strategies = [
     {
       angle: `Turn the outside trend into a challenge governed by ${contextLabel} rules`,
       concept: `I Tried ${groupTitlePlaceholder(0)} Using Only ${contextLabel} Rules`,
-      execution: "Open with the final result, state one constraint in the first 15 seconds, and let the familiar channel expertise drive the experiment."
+      execution: "Show the payoff in the first two seconds, state one constraint immediately, and let the familiar channel expertise drive a 20–45 second experiment."
     },
     {
       angle: `Translate the outside trend for a ${contextLabel} audience`,
       concept: `What ${contextLabel} Creators Can Learn From ${groupTitlePlaceholder(1)}`,
-      execution: "Show one recognizable example, identify three transferable techniques, and demonstrate one of them inside the channel’s normal format."
+      execution: "Show one recognizable example, name one transferable technique, and demonstrate it in the channel’s normal style before the halfway point."
     },
     {
       angle: `Let viewers decide how the outside trend enters ${contextLabel}`,
       concept: `${groupTitlePlaceholder(2)}, Rebuilt for ${contextLabel} Viewers`,
-      execution: "Offer two crossover directions through a poll or comments, create the winning version, and use the audience decision as the hook for a follow-up."
+      execution: "Offer two crossover directions in on-screen text, ask viewers to choose in comments, and turn the winning option into the next Short."
     }
   ];
   return groups.map((group, index) => {
     const strategy = strategies[index] || strategies[0];
-    const trendName = group.title.replace(/\s+videos$/i, "");
+    const trendName = group.title.replace(/\s+(videos|shorts)$/i, "");
     const concept = strategy.concept.replace(
       groupTitlePlaceholder(index),
       trendName
     );
     return {
       title: strategy.angle,
-      body: `Suggested video: “${concept}.” How to bridge it: ${strategy.execution} Keep roughly 70% of the video grounded in ${contextLabel} and use the remaining 30% to test ${trendName}. If click-through and retention beat the channel median, develop it into a series. Evidence: ${compactNumber(group.averageViewsPerDay)} views per day across ${group.channelCount || group.videos.length} channels.`,
+      body: `Suggested Short: “${concept}.” How to bridge it: ${strategy.execution} Keep roughly 70% of the Short grounded in ${contextLabel} and use the remaining 30% to test ${trendName}. If viewed-versus-swiped-away and retention beat the channel median, develop it into a series. Evidence: ${compactNumber(group.averageViewsPerDay)} views per day across ${group.channelCount || group.videos.length} channels.`,
       label: "Crossover playbook",
       tone: "warn"
     };
@@ -2015,21 +2066,21 @@ function trendSectionFallbackItems(type, summary) {
   if (type === "platform") {
     return [
       {
-        title: "Gaming releases and challenge formats",
-        body: "Track new releases, major updates, and creator challenges gaining several high-velocity uploads during the 30-day window.",
-        label: "Platform signal",
+        title: "Fast-payoff challenge Shorts",
+        body: "Look for repeatable challenges that reveal the result in the opening two seconds, establish one rule, and reach a visible payoff within 60 seconds.",
+        label: "Shorts signal",
         tone: "warn"
       },
       {
-        title: "Music releases and performance formats",
-        body: "Watch release reactions, live performances, remixes, and process videos with fast views-per-day growth and strong engagement.",
-        label: "Platform signal",
+        title: "Transformation and before-after Shorts",
+        body: "Track fast visual transformations, progress reveals, and process edits repeated across multiple Shorts creators with strong completion and engagement signals.",
+        label: "Shorts signal",
         tone: "warn"
       },
       {
-        title: "Sports and entertainment event reactions",
-        body: "Monitor time-sensitive reactions, predictions, and breakdowns published around major events and announcements.",
-        label: "Platform signal",
+        title: "Comment-driven reaction Shorts",
+        body: "Watch concise reactions, rankings, and viewer-response formats that create a clear opinion and invite a specific comment or follow-up request.",
+        label: "Shorts signal",
         tone: "warn"
       }
     ];
@@ -2037,21 +2088,21 @@ function trendSectionFallbackItems(type, summary) {
   if (type === "niche") {
     return [
       {
-        title: `${contextLabel}: new releases and announcements`,
-        body: `Monitor fresh videos about releases, updates, or news directly connected to ${contextLabel}.`,
-        label: "Niche watchlist",
+        title: `${contextLabel}: instant update Shorts`,
+        body: `Monitor 15–45 second Shorts that turn a fresh ${contextLabel} release, update, or announcement into one immediate takeaway.`,
+        label: "Niche Shorts",
         tone: "warn"
       },
       {
-        title: `${contextLabel}: comparisons and ranked choices`,
-        body: `Look for repeated A-versus-B, ranking, review, and “best option” formats within ${contextLabel}.`,
-        label: "Niche watchlist",
+        title: `${contextLabel}: rapid comparisons`,
+        body: `Look for repeated A-versus-B, ranking, and “best option” Shorts that make the choice understandable without long-form setup.`,
+        label: "Niche Shorts",
         tone: "warn"
       },
       {
-        title: `${contextLabel}: challenges and reaction formats`,
-        body: `Track challenge, experiment, reaction, and transformation videos that are appearing across multiple ${contextLabel} creators.`,
-        label: "Niche watchlist",
+        title: `${contextLabel}: loopable challenges and reactions`,
+        body: `Track challenge, reaction, and transformation Shorts with an opening that naturally connects back to the ending and encourages a rewatch.`,
+        label: "Niche Shorts",
         tone: "warn"
       }
     ];
@@ -2059,20 +2110,20 @@ function trendSectionFallbackItems(type, summary) {
   return [
     {
       title: `Bring challenge storytelling into ${contextLabel}`,
-      body: `Suggested video: “I Tried My Hardest ${contextLabel} Goal With One Major Constraint.” Open with the result, explain the rule in the first 15 seconds, and build toward a measurable payoff. Treat this as a 70% familiar, 30% exploratory pilot.`,
-      label: "Crossover opportunity",
+      body: `Suggested Short: “I Tried My Hardest ${contextLabel} Goal With One Major Constraint.” Show the result in the first two seconds, state the rule immediately, and reach a measurable payoff in 20–45 seconds.`,
+      label: "Shorts crossover",
       tone: "warn"
     },
     {
       title: `Use documentary-style transformation in ${contextLabel}`,
-      body: `Suggested video: “I Changed My ${contextLabel} Process for 30 Days—Here’s What Happened.” Establish the before state, show two setbacks, and make the final comparison visible instead of delivering only an explanation.`,
-      label: "Crossover opportunity",
+      body: `Suggested Short: “I Changed My ${contextLabel} Process—Here’s the Before and After.” Start with a split-screen comparison, show one setback, and finish on the same framing so the Short loops cleanly.`,
+      label: "Shorts crossover",
       tone: "warn"
     },
     {
       title: `Add audience participation to ${contextLabel}`,
-      body: `Suggested video: “My Viewers Control My Next ${contextLabel} Project.” Use a poll, submissions, bracket, or comment-driven decision, then show how the winning choice changes the outcome and tees up a follow-up video.`,
-      label: "Crossover opportunity",
+      body: `Suggested Short: “You Control My Next ${contextLabel} Project.” Put two choices on screen, ask for a one-word comment, and make the winning option the hook for the next Short.`,
+      label: "Shorts crossover",
       tone: "warn"
     }
   ];
@@ -2083,10 +2134,10 @@ function renderTrendSections(summary) {
   const nicheGroups = buildTrendGroups(summary.trendVideos || []);
   const crossoverGroups = opportunityGroups(platformGroups, nicheGroups);
   const platformItems = platformGroups.length
-    ? trendGroupItems(platformGroups, "Platform-wide")
+    ? trendGroupItems(platformGroups, "Platform Shorts")
     : trendSectionFallbackItems("platform", summary);
   const nicheItems = nicheGroups.length
-    ? trendGroupItems(nicheGroups, "Your niche")
+    ? trendGroupItems(nicheGroups, "Niche Shorts")
     : trendSectionFallbackItems("niche", summary);
   const opportunities = crossoverGroups.length
     ? opportunityItems(crossoverGroups, summary)
