@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 19;
+const insightsCacheVersion = 20;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -1111,29 +1111,14 @@ function selectOutsideTopicTrends(
 }
 
 function selectGlobalPopularTrends(videos = []) {
-  const selected = [];
-  const selectedCategories = new Set();
   const candidates = videos
     .filter((video, index, values) => (
       video?.id &&
+      trendAgeDays(video) <= 30 &&
       values.findIndex((candidate) => candidate.id === video.id) === index
     ))
     .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
-
-  candidates.forEach((video) => {
-    if (selected.length >= 3) return;
-    const categoryId = String(video.snippet?.categoryId || "");
-    if (categoryId && selectedCategories.has(categoryId)) return;
-    if (selected.some((item) => trendTitlesOverlap(item, video))) return;
-    selected.push(video);
-    if (categoryId) selectedCategories.add(categoryId);
-  });
-  candidates.forEach((video) => {
-    if (selected.length >= 3 ||
-        selected.some((item) => item.id === video.id)) return;
-    selected.push(video);
-  });
-  return selected;
+  return candidates.slice(0, 30);
 }
 
 function trendEvidence(video) {
@@ -1790,6 +1775,108 @@ function updateCrossoverTrends(items = [], outsideTrendVideos = []) {
     return referencedVideo ? [referencedVideo] : [];
   });
   updateActivityItems("#targetedCrossoverTrends .activity-item", items, relatedVideos);
+}
+
+function videoEngagementRate(video) {
+  const views = numberValue(video.statistics?.viewCount) || 0;
+  if (!views) return 0;
+  const likes = numberValue(video.statistics?.likeCount) || 0;
+  const comments = numberValue(video.statistics?.commentCount) || 0;
+  return ((likes + comments) / views) * 100;
+}
+
+function videosShareTrend(first, second) {
+  if (first.trendQuery && first.trendQuery === second.trendQuery) return true;
+  const firstWords = new Set(importantWords(first.snippet?.title || ""));
+  const secondWords = new Set(importantWords(second.snippet?.title || ""));
+  const shared = [...firstWords].filter((word) => secondWords.has(word)).length;
+  return shared >= 2;
+}
+
+function buildTrendGroups(videos = []) {
+  const recent = videos
+    .filter((video) => video?.id && trendAgeDays(video) <= 30)
+    .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+  const usedIds = new Set();
+  const groups = [];
+
+  recent.forEach((seed) => {
+    if (groups.length >= 3 || usedIds.has(seed.id)) return;
+    const matches = recent
+      .filter((video) => !usedIds.has(video.id) && videosShareTrend(seed, video))
+      .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a))
+      .slice(0, 3);
+    const groupVideos = matches.length ? matches : [seed];
+    groupVideos.forEach((video) => usedIds.add(video.id));
+    const averageViewsPerDay = Math.round(average(
+      groupVideos.map((video) => (
+        (numberValue(video.statistics?.viewCount) || 0) /
+        Math.max(1, trendAgeDays(video))
+      ))
+    ) || 0);
+    const engagementRate = average(
+      groupVideos.map(videoEngagementRate)
+    ) || 0;
+    const searchMomentum = groupVideos.length >= 3
+      ? "High search momentum"
+      : groupVideos.length === 2
+        ? "Rising search momentum"
+        : "Early search signal";
+    const queryTitle = readableTrendQuery(seed.trendQuery || "");
+    groups.push({
+      title: queryTitle || shortText(seed.snippet?.title || "YouTube trend", 80),
+      videos: groupVideos,
+      averageViewsPerDay,
+      engagementRate,
+      searchMomentum,
+      score: averageViewsPerDay * (1 + engagementRate / 10) *
+        (1 + (groupVideos.length - 1) * 0.2)
+    });
+  });
+
+  return groups.sort((a, b) => b.score - a.score).slice(0, 3);
+}
+
+function trendGroupItems(groups, label) {
+  return groups.map((group) => ({
+    title: group.title,
+    body: `${compactNumber(group.averageViewsPerDay)} average views per day · ${group.engagementRate.toFixed(1)}% engagement · ${group.searchMomentum}. Metrics use videos published during the past 30 days.`,
+    label,
+    tone: "good"
+  }));
+}
+
+function opportunityItems(groups, summary) {
+  const contextLabel = creatorContextLabel(summary);
+  const performance = uploadPerformanceContext(summary.recent || []);
+  const preferredFormat = performance.shortAverageViews >
+    performance.videoAverageViews ? "Short" : "video";
+  return groups.map((group) => ({
+    title: `Opportunity: ${group.title}`,
+    body: `Create a ${preferredFormat} for ${contextLabel} that answers the same viewer demand without copying the example videos. Lead with one specific promise, show the payoff early, and compare its click-through rate and retention with the channel median. Signal: ${compactNumber(group.averageViewsPerDay)} views per day and ${group.engagementRate.toFixed(1)}% engagement.`,
+    label: "Actionable trend",
+    tone: "warn"
+  }));
+}
+
+function renderTrendSections(summary) {
+  const platformGroups = buildTrendGroups(summary.globalTrendVideos || []);
+  const nicheGroups = buildTrendGroups(summary.trendVideos || []);
+  updateActivityItems(
+    "#platformWideTrends .activity-item",
+    trendGroupItems(platformGroups, "Platform-wide"),
+    platformGroups.map((group) => group.videos)
+  );
+  updateActivityItems(
+    "#nicheTrends .activity-item",
+    trendGroupItems(nicheGroups, "Your niche"),
+    nicheGroups.map((group) => group.videos)
+  );
+  updateActivityItems(
+    "#trendOpportunities .activity-item",
+    opportunityItems(nicheGroups, summary),
+    nicheGroups.map((group) => group.videos)
+  );
 }
 
 function orderExpansionVideosByCrossover(videos = [], items = []) {
@@ -2486,46 +2573,8 @@ function renderChannelInsights(summary) {
     cards.nextShortLength?.detail || summary.shortUploadTime,
     cards.nextShortLength?.tone || "warn"
   );
-  const displayedTrends = (summary.globalTrendVideos || [])
-    .map((video) => String(video.snippet?.title || "").trim())
-    .filter(Boolean)
-    .slice(0, 3);
-  const generalTrendFallbacks = [
-    "Popular gaming releases and challenge videos",
-    "Major music releases and performance videos",
-    "Sports reactions and event breakdowns"
-  ];
-  generalTrendFallbacks.forEach((fallback) => {
-    if (displayedTrends.length < 3) displayedTrends.push(fallback);
-  });
-  setTrendMetric(
-    displayedTrends,
-    "US most-popular videos",
-    "good"
-  );
-  const nextVideoSuggestions = geminiInsights?.nextVideoSuggestions || summary.nextVideoSuggestions;
-  updateNextVideoSuggestions(nextVideoSuggestions, summary.trendVideos);
   updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
-  let expansionTrendVideos = effectiveExpansionTrendVideos(summary);
-  const contextualCrossoverItems = geminiInsights?.crossoverTrends || [];
-  expansionTrendVideos = orderExpansionVideosByCrossover(
-    expansionTrendVideos,
-    contextualCrossoverItems
-  );
-  updateOutsideTopicTrends(expansionTrendVideos, summary);
-  const crossoverItems = contextualCrossoverItems.length
-    ? [...contextualCrossoverItems]
-    : buildCrossoverTrendSuggestions({
-      ...summary,
-      outsideTrendVideos: expansionTrendVideos
-    });
-  crossoverFallbacks(summary).forEach((fallback) => {
-    if (crossoverItems.length < 3) crossoverItems.push(fallback);
-  });
-  updateCrossoverTrends(
-    crossoverItems,
-    expansionTrendVideos
-  );
+  renderTrendSections(summary);
   setChatSeedMessage(geminiInsights?.chatIntro || compactAdviceSummary(summary));
 }
 

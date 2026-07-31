@@ -98,26 +98,28 @@
             <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
-          <article class="metric-card analyzer-result insights-trends-card" data-insights-panel="trends" hidden>
-            <div class="metric-head">
-              <div class="metric-icon rose"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
-              <span class="trend good">&nbsp;</span>
-            </div>
-            <div>
-              <h3>Current YouTube Trends</h3>
-              <div class="metric-value">&nbsp;</div>
-            </div>
-            <canvas class="sparkline" data-empty-graph="true"></canvas>
-          </article>
-
-          <article class="panel large analyzer-result" data-insights-panel="trends" hidden>
+          <article class="panel full analyzer-result" data-insights-panel="trends" hidden>
             <div class="panel-head">
               <div>
-                <h3>Next Video Suggestions</h3>
-                <p>Ideas interpret the media and premise behind your uploads, then combine that meaning with fresh YouTube trends and channel performance.</p>
+                <h3>Platform-Wide YouTube Trends</h3>
+                <p>Popular US YouTube patterns from the past 30 days, ranked without using channel context.</p>
               </div>
             </div>
-            <div class="activity" id="nextVideoSuggestions">
+            <div class="activity" id="platformWideTrends">
+              <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
+              <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
+              <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
+            </div>
+          </article>
+
+          <article class="panel full analyzer-result" data-insights-panel="trends" hidden>
+            <div class="panel-head">
+              <div>
+                <h3>Trends in Your Niche</h3>
+                <p>Thirty-day YouTube trends selected from the topic and description saved in My Channel.</p>
+              </div>
+            </div>
+            <div class="activity" id="nicheTrends">
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
@@ -138,28 +140,14 @@
             </div>
           </article>
 
-          <article class="panel full analyzer-result outside-trends-panel" data-insights-panel="trends" hidden>
+          <article class="panel full analyzer-result" data-insights-panel="trends" hidden>
             <div class="panel-head">
               <div>
-                <h3>Popular YouTube Trends — Outside Your Topic</h3>
-                <p>Optional expansion ideas from YouTube’s US most-popular videos. These are intentionally unrelated to your current channel context.</p>
+                <h3>Opportunities You Can Take</h3>
+                <p>Specific ways to apply the strongest niche trends using your audience context and best-performing format.</p>
               </div>
             </div>
-            <div class="activity" id="outsideTopicTrends">
-              <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
-              <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
-              <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
-            </div>
-          </article>
-
-          <article class="panel full analyzer-result crossover-trends-panel" data-insights-panel="trends" hidden>
-            <div class="panel-head">
-              <div>
-                <h3>Targeted Crossover Trends — Outside Your Topic</h3>
-                <p>Popular outside subjects matched to your audience, strongest formats, and content style for a more intentional expansion.</p>
-              </div>
-            </div>
-            <div class="activity" id="targetedCrossoverTrends">
+            <div class="activity" id="trendOpportunities">
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
               <div class="activity-item"><i class="dot"></i><div><b>&nbsp;</b><span>&nbsp;</span></div><time>&nbsp;</time></div>
@@ -194,6 +182,6 @@
     <script src="../components/sidebar.js"></script>
     <script src="../components/plan-modal.js"></script>
     <script src="../js/script.js?v=2"></script>
-    <script type="module" src="../js/insights.js?v=26"></script>
+    <script type="module" src="../js/insights.js?v=27"></script>
   </body>
 </html>
