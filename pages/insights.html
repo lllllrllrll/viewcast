@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ViewCast - AI Insights</title>
-    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/style.css?v=3">
   </head>
   <body class="insights-page">
     <div class="app">
@@ -25,6 +25,11 @@
             </form>
           </div>
         </header>
+
+        <div class="insights-tabs" role="tablist" aria-label="AI Insights sections">
+          <button class="insights-tab active" id="analysisInsightsTab" type="button" role="tab" aria-selected="true" data-insights-tab="analysis">Channel Analysis</button>
+          <button class="insights-tab" id="trendInsightsTab" type="button" role="tab" aria-selected="false" data-insights-tab="trends">Trend Suggestions</button>
+        </div>
 
         <section class="dashboard-grid analyzer-results-hidden" id="analyzerDashboard">
           <article class="panel full insight-refresh-empty" id="insightRefreshEmpty">
@@ -56,11 +61,6 @@
               <p>AI Insights could not be generated right now. Check your configuration and try again.</p>
             </div>
           </article>
-
-          <div class="insights-tabs analyzer-result" role="tablist" aria-label="AI Insights sections">
-            <button class="insights-tab active" id="analysisInsightsTab" type="button" role="tab" aria-selected="true" data-insights-tab="analysis">Channel Analysis</button>
-            <button class="insights-tab" id="trendInsightsTab" type="button" role="tab" aria-selected="false" data-insights-tab="trends">Trend Suggestions</button>
-          </div>
 
           <article class="metric-card analyzer-result" data-insights-panel="analysis">
             <div class="metric-head">
@@ -144,7 +144,7 @@
             <div class="panel-head">
               <div>
                 <h3>Opportunities You Can Take</h3>
-                <p>Specific ways to apply the strongest niche trends using your audience context and best-performing format.</p>
+                <p>Specific crossover playbooks that connect outside trends to your audience and best-performing format.</p>
               </div>
             </div>
             <div class="activity" id="trendOpportunities">
@@ -182,6 +182,6 @@
     <script src="../components/sidebar.js"></script>
     <script src="../components/plan-modal.js"></script>
     <script src="../js/script.js?v=2"></script>
-    <script type="module" src="../js/insights.js?v=29"></script>
+    <script type="module" src="../js/insights.js?v=30"></script>
   </body>
 </html>

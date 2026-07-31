@@ -1939,11 +1939,12 @@ body.insights-page .insights-trends-card {
 }
 
 body.insights-page .insights-tabs {
-  grid-column: 1 / -1;
-  display: inline-grid;
+  display: grid;
   grid-auto-flow: column;
-  justify-self: start;
+  width: max-content;
+  max-width: 100%;
   gap: 4px;
+  margin: 0 0 16px;
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 9px;

@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 23;
+const insightsCacheVersion = 24;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -1973,12 +1973,41 @@ function opportunityItems(groups, summary) {
   const performance = uploadPerformanceContext(summary.recent || []);
   const preferredFormat = performance.shortAverageViews >
     performance.videoAverageViews ? "Short" : "video";
-  return groups.map((group, index) => ({
-    title: `Bridge ${contextLabel} with ${group.title}`,
-    body: `Borrow the outside trend’s ${index === 0 ? "hook and pacing" : index === 1 ? "format and visual language" : "audience-participation mechanic"} for a ${preferredFormat}, while keeping roughly 70% of the idea grounded in ${contextLabel} and 30% exploratory. Introduce it through a problem, comparison, reaction, or challenge your current viewers already understand. Test one pilot before making it a series. Outside signal: ${compactNumber(group.averageViewsPerDay)} views per day across ${group.channelCount || group.videos.length} channels.`,
-    label: "Crossover opportunity",
-    tone: "warn"
-  }));
+  const strategies = [
+    {
+      angle: `Turn the outside trend into a challenge governed by ${contextLabel} rules`,
+      concept: `I Tried ${groupTitlePlaceholder(0)} Using Only ${contextLabel} Rules`,
+      execution: "Open with the final result, state one constraint in the first 15 seconds, and let the familiar channel expertise drive the experiment."
+    },
+    {
+      angle: `Translate the outside trend for a ${contextLabel} audience`,
+      concept: `What ${contextLabel} Creators Can Learn From ${groupTitlePlaceholder(1)}`,
+      execution: "Show one recognizable example, identify three transferable techniques, and demonstrate one of them inside the channel’s normal format."
+    },
+    {
+      angle: `Let viewers decide how the outside trend enters ${contextLabel}`,
+      concept: `${groupTitlePlaceholder(2)}, Rebuilt for ${contextLabel} Viewers`,
+      execution: "Offer two crossover directions through a poll or comments, create the winning version, and use the audience decision as the hook for a follow-up."
+    }
+  ];
+  return groups.map((group, index) => {
+    const strategy = strategies[index] || strategies[0];
+    const trendName = group.title.replace(/\s+videos$/i, "");
+    const concept = strategy.concept.replace(
+      groupTitlePlaceholder(index),
+      trendName
+    );
+    return {
+      title: strategy.angle,
+      body: `Suggested video: “${concept}.” How to bridge it: ${strategy.execution} Keep roughly 70% of the video grounded in ${contextLabel} and use the remaining 30% to test ${trendName}. If click-through and retention beat the channel median, develop it into a series. Evidence: ${compactNumber(group.averageViewsPerDay)} views per day across ${group.channelCount || group.videos.length} channels.`,
+      label: "Crossover playbook",
+      tone: "warn"
+    };
+  });
+}
+
+function groupTitlePlaceholder(index) {
+  return `__OUTSIDE_TREND_${index}__`;
 }
 
 function trendSectionFallbackItems(type, summary) {
@@ -2030,19 +2059,19 @@ function trendSectionFallbackItems(type, summary) {
   return [
     {
       title: `Bring challenge storytelling into ${contextLabel}`,
-      body: `Keep the subject rooted in ${contextLabel}, but add a visible constraint, countdown, or measurable goal borrowed from challenge content. Treat this as a 70% familiar, 30% exploratory pilot.`,
+      body: `Suggested video: “I Tried My Hardest ${contextLabel} Goal With One Major Constraint.” Open with the result, explain the rule in the first 15 seconds, and build toward a measurable payoff. Treat this as a 70% familiar, 30% exploratory pilot.`,
       label: "Crossover opportunity",
       tone: "warn"
     },
     {
       title: `Use documentary-style transformation in ${contextLabel}`,
-      body: `Frame a ${contextLabel} video around a before-and-after journey, showing setbacks and progress instead of delivering only an explanation or result.`,
+      body: `Suggested video: “I Changed My ${contextLabel} Process for 30 Days—Here’s What Happened.” Establish the before state, show two setbacks, and make the final comparison visible instead of delivering only an explanation.`,
       label: "Crossover opportunity",
       tone: "warn"
     },
     {
       title: `Add audience participation to ${contextLabel}`,
-      body: `Borrow polls, viewer submissions, brackets, or comment-driven decisions from community formats, then use the response to shape a follow-up ${contextLabel} video.`,
+      body: `Suggested video: “My Viewers Control My Next ${contextLabel} Project.” Use a poll, submissions, bracket, or comment-driven decision, then show how the winning choice changes the outcome and tees up a follow-up video.`,
       label: "Crossover opportunity",
       tone: "warn"
     }
