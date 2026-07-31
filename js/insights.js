@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 25;
+const insightsCacheVersion = 26;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -769,7 +769,11 @@ async function searchVideosByQuery(
     .map((item) => item.id?.videoId)
     .filter(Boolean);
   const videos = ids.length ? await fetchVideosByIds(ids, accessToken) : [];
-  return shortsOnly ? videos.filter(isShortTrendVideo) : videos;
+  return shortsOnly
+    ? videos.filter((video) =>
+      isShortTrendVideo(video) && isEnglishTrendVideo(video)
+    )
+    : videos;
 }
 
 async function fetchPlatformShortVideos(accessToken) {
@@ -913,6 +917,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
   let filteredTrendVideos = merged.filter((video) => {
     if (!video?.id || seen.has(video.id) || ownVideoIds.has(video.id)) return false;
     if (!isShortTrendVideo(video)) return false;
+    if (!isEnglishTrendVideo(video)) return false;
     if (contextControlsTrends && !trendMatchesCreatorContext(video)) return false;
     seen.add(video.id);
     return true;
@@ -956,6 +961,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
       .filter((video, index, values) => (
         video?.id &&
         isShortTrendVideo(video) &&
+        isEnglishTrendVideo(video) &&
         !ownVideoIds.has(video.id) &&
         values.findIndex((candidate) => candidate.id === video.id) === index
       ))
@@ -1195,6 +1201,23 @@ function isShort(video) {
 function isShortTrendVideo(video) {
   const seconds = secondsFromIso(video.contentDetails?.duration);
   return seconds !== null && seconds <= 180;
+}
+
+function isEnglishTrendVideo(video) {
+  const declaredLanguage = String(
+    video.snippet?.defaultAudioLanguage ||
+    video.snippet?.defaultLanguage ||
+    ""
+  ).trim().toLowerCase();
+  if (declaredLanguage && !declaredLanguage.startsWith("en")) return false;
+
+  const text = `${video.snippet?.title || ""} ${video.snippet?.description || ""}`
+    .replace(/https?:\/\/\S+/gi, " ")
+    .slice(0, 600);
+  const letters = text.match(/\p{L}/gu) || [];
+  if (!letters.length) return true;
+  const latinLetters = text.match(/\p{Script=Latin}/gu) || [];
+  return latinLetters.length / letters.length >= 0.9;
 }
 
 function topVideos(videos, count = 8) {
@@ -1882,6 +1905,7 @@ function buildPlatformTrendGroups(videos = []) {
     .filter((video, index, values) => (
       video?.id &&
       isShortTrendVideo(video) &&
+      isEnglishTrendVideo(video) &&
       trendAgeDays(video) <= 30 &&
       values.findIndex((candidate) => candidate.id === video.id) === index
     ))
@@ -1952,7 +1976,12 @@ function buildPlatformTrendGroups(videos = []) {
 
 function buildTrendGroups(videos = []) {
   const recent = videos
-    .filter((video) => video?.id && isShortTrendVideo(video) && trendAgeDays(video) <= 30)
+    .filter((video) => (
+      video?.id &&
+      isShortTrendVideo(video) &&
+      isEnglishTrendVideo(video) &&
+      trendAgeDays(video) <= 30
+    ))
     .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
   const usedIds = new Set();
   const groups = [];
