@@ -41,7 +41,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 21;
+const insightsCacheVersion = 22;
 const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -1118,7 +1118,9 @@ function selectGlobalPopularTrends(videos = []) {
       values.findIndex((candidate) => candidate.id === video.id) === index
     ))
     .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
-  return candidates.slice(0, 30);
+  // Keep a broad sample so platform trends can be proven by repeated uploads
+  // instead of mistaking the first high-performing video for a trend.
+  return candidates.slice(0, 80);
 }
 
 function trendEvidence(video) {
@@ -1793,6 +1795,108 @@ function videosShareTrend(first, second) {
   return shared >= 2;
 }
 
+const platformTrendNoiseWords = new Set([
+  "episode", "season", "today", "watch", "every", "thing", "really",
+  "could", "would", "should", "people", "world", "time", "years",
+  "million", "hours", "minutes", "day", "week"
+]);
+
+function platformTrendTerms(video) {
+  return [...new Set(importantWords(video.snippet?.title || "")
+    .filter((word) => !platformTrendNoiseWords.has(word) && !/^\d+$/.test(word)))];
+}
+
+function titleCaseTrend(value) {
+  return String(value || "").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function platformTrendLabel(terms, videos) {
+  const categoryCounts = new Map();
+  videos.forEach((video) => {
+    const category = youtubeCategoryName(video.snippet?.categoryId);
+    if (category) categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+  });
+  const category = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+  const topic = titleCaseTrend(terms.join(" "));
+  const categoryAddsContext = category &&
+    !terms.some((term) => category.toLowerCase().includes(term));
+  return categoryAddsContext && terms.length === 1
+    ? `${topic} ${category} videos`
+    : `${topic} videos`;
+}
+
+function buildPlatformTrendGroups(videos = []) {
+  const recent = videos
+    .filter((video, index, values) => (
+      video?.id &&
+      trendAgeDays(video) <= 30 &&
+      values.findIndex((candidate) => candidate.id === video.id) === index
+    ))
+    .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+  const candidates = new Map();
+
+  recent.forEach((video) => {
+    const terms = platformTrendTerms(video);
+    const keys = [];
+    for (let first = 0; first < terms.length; first += 1) {
+      keys.push(terms[first]);
+      for (let second = first + 1; second < terms.length; second += 1) {
+        keys.push([terms[first], terms[second]].sort().join(" "));
+      }
+    }
+    [...new Set(keys)].forEach((key) => {
+      if (!candidates.has(key)) candidates.set(key, []);
+      candidates.get(key).push(video);
+    });
+  });
+
+  const groups = [...candidates.entries()]
+    .map(([key, matches]) => {
+      const channelCount = new Set(matches.map((video) =>
+        video.snippet?.channelId || video.snippet?.channelTitle
+      ).filter(Boolean)).size;
+      if (matches.length < 3 || channelCount < 3) return null;
+      const groupVideos = [...matches]
+        .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a))
+        .slice(0, 5);
+      const averageViewsPerDay = Math.round(average(groupVideos.map((video) =>
+        (numberValue(video.statistics?.viewCount) || 0) /
+        Math.max(1, trendAgeDays(video))
+      )) || 0);
+      const engagementRate = average(groupVideos.map(videoEngagementRate)) || 0;
+      const terms = key.split(" ");
+      return {
+        key,
+        title: platformTrendLabel(terms, groupVideos),
+        videos: groupVideos,
+        videoCount: matches.length,
+        channelCount,
+        averageViewsPerDay,
+        engagementRate,
+        searchMomentum: matches.length >= 4
+          ? "Widespread creator adoption"
+          : "Growing creator adoption",
+        score: averageViewsPerDay * (1 + engagementRate / 10) *
+          (1 + Math.min(matches.length, 8) * 0.18) *
+          (terms.length === 2 ? 1.3 : 1)
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+
+  const selected = [];
+  groups.forEach((group) => {
+    if (selected.length >= 3) return;
+    const groupIds = new Set(group.videos.map((video) => video.id));
+    const overlaps = selected.some((existing) => {
+      const sharedVideos = existing.videos.filter((video) => groupIds.has(video.id)).length;
+      return sharedVideos / Math.min(existing.videos.length, group.videos.length) >= 0.6;
+    });
+    if (!overlaps) selected.push(group);
+  });
+  return selected;
+}
+
 function buildTrendGroups(videos = []) {
   const recent = videos
     .filter((video) => video?.id && trendAgeDays(video) <= 30)
@@ -1840,7 +1944,7 @@ function buildTrendGroups(videos = []) {
 function trendGroupItems(groups, label) {
   return groups.map((group) => ({
     title: group.title,
-    body: `${compactNumber(group.averageViewsPerDay)} average views per day · ${group.engagementRate.toFixed(1)}% engagement · ${group.searchMomentum}. Metrics use videos published during the past 30 days.`,
+    body: `${group.videoCount ? `${group.videoCount} recent videos across ${group.channelCount} channels · ` : ""}${compactNumber(group.averageViewsPerDay)} average views per day · ${group.engagementRate.toFixed(1)}% engagement · ${group.searchMomentum}. Metrics use videos published during the past 30 days.`,
     label,
     tone: "good"
   }));
@@ -1928,7 +2032,7 @@ function trendSectionFallbackItems(type, summary) {
 }
 
 function renderTrendSections(summary) {
-  const platformGroups = buildTrendGroups(summary.globalTrendVideos || []);
+  const platformGroups = buildPlatformTrendGroups(summary.globalTrendVideos || []);
   const nicheGroups = buildTrendGroups(summary.trendVideos || []);
   const platformItems = platformGroups.length
     ? trendGroupItems(platformGroups, "Platform-wide")
@@ -1957,7 +2061,7 @@ function renderTrendSections(summary) {
 }
 
 function hasLiveTrendResults(summary) {
-  return buildTrendGroups(summary?.globalTrendVideos || []).length > 0 &&
+  return buildPlatformTrendGroups(summary?.globalTrendVideos || []).length > 0 &&
     buildTrendGroups(summary?.trendVideos || []).length > 0;
 }
 
