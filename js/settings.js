@@ -3,7 +3,6 @@ import {
   initializeApp
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {
-  deleteUser,
   EmailAuthProvider,
   getAuth,
   GoogleAuthProvider,
@@ -12,10 +11,9 @@ import {
   reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {
-  deleteDoc,
-  doc,
-  getFirestore
-} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
+  getFunctions,
+  httpsCallable
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 (function () {
@@ -320,10 +318,12 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     try {
       const user = accountUser;
       await reauthenticateForDeletion(user);
-      setDeleteStatus("Deleting your saved ViewCast data…", "info");
-      await deleteDoc(doc(getFirestore(), "users", user.uid));
       setDeleteStatus("Deleting your account…", "info");
-      await deleteUser(user);
+      const app = getApps().length
+        ? getApps()[0]
+        : initializeApp(firebaseConfig);
+      const deleteAccount = httpsCallable(getFunctions(app), "deleteAccount");
+      await deleteAccount();
       clearLocalAccountData();
       window.location.replace("../login.html?deleted=1");
     } catch (error) {

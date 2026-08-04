@@ -1,7 +1,12 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
 const {GoogleGenerativeAI} = require("@google/generative-ai");
+const {getApps, initializeApp} = require("firebase-admin/app");
+const {getAuth} = require("firebase-admin/auth");
+const {getFirestore} = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
+
+if (!getApps().length) initializeApp();
 
 // Define the secret for the Gemini API Key
 // Set using: firebase functions:secrets:set GEMINI_API_KEY
@@ -18,6 +23,7 @@ const MAX_SYSTEM_CHARS = 12000;
 const MAX_OUTPUT_TOKENS = 2048;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_REQUESTS = 12;
+const MAX_RATE_LIMIT_USERS = 5000;
 const recentRequests = new Map();
 
 /**
@@ -38,7 +44,57 @@ function enforceRateLimit(uid) {
   }
   timestamps.push(now);
   recentRequests.set(uid, timestamps);
+
+  // Keep long-lived warm instances from retaining inactive user IDs forever.
+  if (recentRequests.size > MAX_RATE_LIMIT_USERS) {
+    for (const [userId, requests] of recentRequests) {
+      if (!requests.some((timestamp) => timestamp > cutoff)) {
+        recentRequests.delete(userId);
+      }
+    }
+  }
 }
+
+/**
+ * Deletes the caller's profile and Firebase Authentication account together.
+ * The client must reauthenticate immediately before invoking this function.
+ */
+exports.deleteAccount = onCall(
+    {
+      region: "us-central1",
+      timeoutSeconds: 30,
+    },
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError(
+            "unauthenticated",
+            "Sign in before deleting your account.",
+        );
+      }
+
+      const authTimeSeconds = Number(request.auth.token.auth_time || 0);
+      if (!authTimeSeconds || Date.now() / 1000 - authTimeSeconds > 5 * 60) {
+        throw new HttpsError(
+            "failed-precondition",
+            "Reauthenticate before deleting your account.",
+        );
+      }
+
+      const uid = request.auth.uid;
+      try {
+        await getFirestore().doc(`users/${uid}`).delete();
+        await getAuth().deleteUser(uid);
+        logger.info("Deleted ViewCast account", {uid});
+        return {deleted: true};
+      } catch (error) {
+        logger.error("Account deletion failed", {uid, error});
+        throw new HttpsError(
+            "internal",
+            "The account could not be deleted. Please try again.",
+        );
+      }
+    },
+);
 
 /**
  * Validates Gemini message and image payloads.

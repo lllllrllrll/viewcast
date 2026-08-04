@@ -213,8 +213,9 @@ service cloud.firestore {
         && (!('createdAt' in resource.data)
           || request.resource.data.createdAt == resource.data.createdAt);
 
-      // Account deletion remains available before email verification.
-      allow delete: if isAuthenticated() && request.auth.uid == userId;
+      // Account deletion is handled by the authenticated Cloud Function so
+      // profile data and the Firebase Authentication account stay consistent.
+      allow delete: if false;
     }
   }
 }
