@@ -1,12 +1,31 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
-import { firebaseConfig, firebaseConfigured, geminiModel } from "./firebase-config.js";
+import {
+  firebaseAppCheckSiteKey,
+  firebaseConfig,
+  firebaseConfigured,
+  geminiModel
+} from "./firebase-config.js";
+import {
+  initializeAppCheck,
+  ReCaptchaEnterpriseProvider
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app-check.js";
 
 const fallbackGeminiModel = "gemini-3.1-flash-lite";
 const allowedGeminiModels = new Set([
   "gemini-3.1-flash-lite"
 ]);
 const pendingRequests = new Map();
+let appCheckInitialized = false;
+
+function ensureAppCheck(app) {
+  if (appCheckInitialized || !firebaseAppCheckSiteKey) return;
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(firebaseAppCheckSiteKey),
+    isTokenAutoRefreshEnabled: true
+  });
+  appCheckInitialized = true;
+}
 
 function geminiText(payload = {}) {
   return payload.candidates?.[0]?.content?.parts
@@ -40,6 +59,7 @@ function recordAiAnalysis() {
 async function requestGeminiFunction({contents, systemInstruction, generationConfig, modelName}) {
   if (!firebaseConfigured) throw new Error("Firebase is not configured.");
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  ensureAppCheck(app);
   const callGenerateGeminiContent = httpsCallable(getFunctions(app), "generateGeminiContent");
   const result = await callGenerateGeminiContent({
     contents,

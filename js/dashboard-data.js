@@ -8,6 +8,7 @@ import {
   getDoc,
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
+import { readNotifications } from "./notifications.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const emptyValue = "\u00a0";
@@ -149,16 +150,16 @@ function overviewStorageKey(user, channelId = "guest") {
 
 function readCachedOverview(user, channelId) {
   try {
-    return JSON.parse(localStorage.getItem(overviewStorageKey(user, channelId)) || "null");
+    return JSON.parse(sessionStorage.getItem(overviewStorageKey(user, channelId)) || "null");
   } catch (error) {
-    localStorage.removeItem(overviewStorageKey(user, channelId));
+    sessionStorage.removeItem(overviewStorageKey(user, channelId));
     return null;
   }
 }
 
 function saveCachedOverview(user, channelId, data) {
   if (!data) return;
-  localStorage.setItem(overviewStorageKey(user, channelId), JSON.stringify({
+  sessionStorage.setItem(overviewStorageKey(user, channelId), JSON.stringify({
     ...data,
     cachedAt: Date.now()
   }));
@@ -542,7 +543,7 @@ function readRecentTrends(user) {
     if (feed?.trends) return feed;
 
     const legacy = JSON.parse(
-      localStorage.getItem(`${insightsStorageKeyPrefix}${user.uid}:channel`) || "null"
+      sessionStorage.getItem(`${insightsStorageKeyPrefix}${user.uid}:channel`) || "null"
     );
     if (!legacy?.summary) return null;
     const summary = legacy.summary;
@@ -624,18 +625,65 @@ function renderVideoTable(overviewData) {
 function renderPerformanceNotifications(overviewData) {
   const container = document.querySelector("[data-performance-notifications]");
   if (!container) return;
+  const notifications = readNotifications();
   const videos = overviewData?.videos || [];
-  if (videos.length < 2) return;
-  const latestVideo = videos[0];
-  const views = numberValue(latestVideo.statistics?.viewCount);
-  const average = videos.slice(1).reduce((sum, v) => sum + (numberValue(v.statistics?.viewCount) || 0), 0) / (videos.length - 1);
-  if (views === null || !average) return;
-  const ratio = views / average;
-  if (ratio >= 1.15 || ratio <= 0.85) {
-    const tone = ratio >= 1.15 ? "teal" : "rose";
-    const title = ratio >= 1.15 ? "Above Average" : "Below Average";
-    container.innerHTML = `<a class="notif-item unread" href="pages/analyzer.html?video=${encodeURIComponent(latestVideo.id)}"><div class="notif-icon ${tone}"><svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg></div><div class="notif-body"><p><strong>${title}</strong>: ${escapeHtml(latestVideo.snippet?.title)}</p><time>Just scanned</time></div></a>`;
+  if (videos.length >= 2) {
+    const latestVideo = videos[0];
+    const views = numberValue(latestVideo.statistics?.viewCount);
+    const average = videos.slice(1).reduce((sum, v) => sum + (numberValue(v.statistics?.viewCount) || 0), 0) / (videos.length - 1);
+    const ratio = views !== null && average ? views / average : 1;
+    if (ratio >= 1.15 || ratio <= 0.85) {
+      const tone = ratio >= 1.15 ? "teal" : "rose";
+      const title = ratio >= 1.15 ? "Above Average" : "Below Average";
+      const publishedAt = new Date(latestVideo.snippet?.publishedAt || "").getTime();
+      notifications.unshift({
+        id: `performance:${latestVideo.id}`,
+        title,
+        message: latestVideo.snippet?.title || "Latest upload",
+        href: `pages/analyzer.html?video=${encodeURIComponent(latestVideo.id)}`,
+        tone,
+        createdAt: Number.isFinite(publishedAt) ? publishedAt : Date.now()
+      });
+    }
   }
+
+  const unique = notifications.filter((item, index, values) =>
+    values.findIndex((candidate) => candidate.id === item.id) === index).slice(0, 7);
+  container.replaceChildren(...unique.map((item) => {
+    const link = document.createElement("a");
+    link.className = "notif-item unread";
+    link.href = /^pages\/[a-z-]+\.html(?:\?.*)?$/.test(item.href)
+      ? item.href
+      : "index.html";
+    const icon = document.createElement("div");
+    icon.className = `notif-icon ${item.tone || "blue"}`;
+    icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>';
+    const body = document.createElement("div");
+    body.className = "notif-body";
+    const text = document.createElement("p");
+    const strong = document.createElement("strong");
+    strong.textContent = item.title;
+    text.append(strong, document.createTextNode(`: ${item.message || "View result"}`));
+    const time = document.createElement("time");
+    time.textContent = item.createdAt ? timeAgo(item.createdAt) : "Recent";
+    body.append(text, time);
+    link.append(icon, body);
+    return link;
+  }));
+
+  if (!unique.length) {
+    const empty = document.createElement("div");
+    empty.className = "notif-empty";
+    empty.textContent = "No analysis results yet.";
+    container.append(empty);
+  }
+  const readAt = Number(localStorage.getItem("viewcastNotificationsRead") || 0);
+  const hasUnread = unique.some((item) => Number(item.createdAt || 0) > readAt);
+  const badge = document.querySelector(".notif-badge");
+  const markRead = document.getElementById("markRead");
+  if (badge) badge.hidden = !hasUnread;
+  if (markRead) markRead.hidden = !hasUnread;
+  if (!hasUnread) container.querySelectorAll(".unread").forEach((item) => item.classList.remove("unread"));
 }
 
 function renderOverviewData(connection, overviewData = null, user = null) {

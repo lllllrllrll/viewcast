@@ -28,7 +28,7 @@ Then open the Hosting URL printed by the emulator, usually `http://localhost:500
 2. Add a Web app from **Project settings > Your apps**.
 3. In **Authentication > Sign-in method**, enable **Email/Password**.
 4. Copy the Firebase web configuration into `js/firebase-config.js`.
-5. In **Authentication > Settings > Authorized domains**, add the domain where ViewCast will be hosted.
+5. Keep the production hostnames in `firebase.json` under `auth.authorizedDomains`. The checked-in list allows only `localhost`, `viewcast-a6f31.firebaseapp.com`, and `viewcast-a6f31.web.app`; add a custom hostname there before deploying it.
 6. Open **Firestore Database**, create the default database, and choose a production location.
 7. In **Firestore Database > Rules**, publish the contents of `firestore.rules`.
 
@@ -66,6 +66,22 @@ Setup completed for this Firebase project:
 - YouTube Analytics API is enabled.
 
 The dashboard requests these scopes: `youtube.readonly`, `yt-analytics.readonly`, and `yt-analytics-monetary.readonly`. Use the **My Channel** page to connect or unlink a YouTube channel. Estimated revenue is shown when the connected channel has monetization data available.
+
+YouTube access tokens are kept in session storage, cleared on sign-out, and sent to Google's revocation endpoint when a channel is unlinked or the user signs out. Creator analytics and AI results are also session-only; only small, non-sensitive usage counters and dashboard summaries persist between browser sessions.
+
+## App Check and AI quotas
+
+The callable Gemini backend has both a short-window instance limit and durable per-user/project daily limits. Firebase App Check support is wired in but intentionally fail-open until a reCAPTCHA Enterprise key is configured, so enabling it cannot accidentally lock every user out.
+
+To enforce App Check in production:
+
+1. Create a reCAPTCHA Enterprise website key restricted to the exact production hostnames.
+2. Register the web app and that key in **Firebase Console > App Check**.
+3. Put the public site key in `firebaseAppCheckSiteKey` in `js/firebase-config.js` and deploy the client.
+4. Set `ENFORCE_APP_CHECK=true` in the Functions runtime environment and deploy the functions.
+5. Confirm legitimate AI requests succeed, then monitor App Check metrics for rejected traffic.
+
+Never put a reCAPTCHA secret, Gemini API key, or YouTube access token in client configuration. The reCAPTCHA website key is designed to be public; its hostname restrictions provide the important boundary.
 
 ## Customize
 

@@ -15,6 +15,7 @@ import {
   updateDoc
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
+import { revokeYouTubeAccessToken } from "./privacy.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -147,7 +148,7 @@ function channelContextStorageKey(user = currentUser) {
 function cacheChannelContext(user, value) {
   const key = channelContextStorageKey(user);
   if (!key) return;
-  localStorage.setItem(key, JSON.stringify(value));
+  sessionStorage.setItem(key, JSON.stringify(value));
 }
 
 function renderChannelContext(value = {}) {
@@ -158,12 +159,12 @@ function renderChannelContext(value = {}) {
 async function loadChannelContext(user) {
   const key = channelContextStorageKey(user);
   let localValue = {};
-  const hasLocalValue = Boolean(localStorage.getItem(key));
+  const hasLocalValue = Boolean(sessionStorage.getItem(key));
   try {
-    localValue = JSON.parse(localStorage.getItem(key) || "{}");
+    localValue = JSON.parse(sessionStorage.getItem(key) || "{}");
     renderChannelContext(localValue);
   } catch {
-    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
   }
 
   try {
@@ -383,11 +384,18 @@ async function unlinkYouTube() {
   if (!currentUser || !active) return;
   try {
     setUnlinkButton({visible: true, disabled: true});
+    let token = "";
+    try {
+      token = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null")?.accessToken || "";
+    } catch {
+      token = "";
+    }
     const connections = readAllConnections().filter(c => c.channel.id !== active.channel.id);
     await updateDoc(doc(db, "users", currentUser.uid), {
       youtubeConnections: connections,
       updatedAt: serverTimestamp()
     });
+    await revokeYouTubeAccessToken(token);
     sessionStorage.removeItem(tokenStorageKey);
     localStorage.removeItem(tokenStorageKey);
     saveConnections(connections);

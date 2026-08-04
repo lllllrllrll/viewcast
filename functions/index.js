@@ -11,6 +11,7 @@ if (!getApps().length) initializeApp();
 // Define the secret for the Gemini API Key
 // Set using: firebase functions:secrets:set GEMINI_API_KEY
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const enforceAppCheck = process.env.ENFORCE_APP_CHECK === "true";
 
 // Allowed models to prevent abuse with expensive models
 const ALLOWED_MODELS = [
@@ -24,6 +25,8 @@ const MAX_OUTPUT_TOKENS = 2048;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_REQUESTS = 12;
 const MAX_RATE_LIMIT_USERS = 5000;
+const DAILY_USER_REQUESTS = 50;
+const DAILY_PROJECT_REQUESTS = 5000;
 const recentRequests = new Map();
 
 /**
@@ -53,6 +56,40 @@ function enforceRateLimit(uid) {
       }
     }
   }
+}
+
+/**
+ * Enforces durable daily user and project quotas across function instances.
+ * @param {string} uid Firebase Authentication user ID.
+ * @return {Promise<void>}
+ */
+async function enforceDailyQuota(uid) {
+  const day = new Date().toISOString().slice(0, 10);
+  const db = getFirestore();
+  const userRef = db.doc(`_internalAiUsage/user_${uid}`);
+  const projectRef = db.doc("_internalAiUsage/project");
+
+  await db.runTransaction(async (transaction) => {
+    const [userSnapshot, projectSnapshot] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(projectRef),
+    ]);
+    const userData = userSnapshot.data() || {};
+    const projectData = projectSnapshot.data() || {};
+    const userCount = userData.day === day ? Number(userData.count || 0) : 0;
+    const projectCount = projectData.day === day ?
+      Number(projectData.count || 0) :
+      0;
+    if (userCount >= DAILY_USER_REQUESTS ||
+        projectCount >= DAILY_PROJECT_REQUESTS) {
+      throw new HttpsError(
+          "resource-exhausted",
+          "The daily AI usage limit has been reached.",
+      );
+    }
+    transaction.set(userRef, {count: userCount + 1, day});
+    transaction.set(projectRef, {count: projectCount + 1, day});
+  });
 }
 
 /**
@@ -236,6 +273,7 @@ function validatedGenerationConfig(value) {
 exports.generateGeminiContent = onCall(
     {
       secrets: [geminiApiKey],
+      enforceAppCheck,
       maxInstances: 5,
       region: "us-central1",
       timeoutSeconds: 120, // Increased to prevent 504 timeouts
@@ -287,6 +325,8 @@ exports.generateGeminiContent = onCall(
             `Model '${selectedModel}' is not allowed.`,
         );
       }
+
+      await enforceDailyQuota(request.auth.uid);
 
       try {
         const apiKey = geminiApiKey.value();

@@ -25,6 +25,7 @@ import {
   firebaseConfig,
   firebaseConfigured
 } from "./firebase-config.js";
+import { clearCreatorDataCaches, secureSignOut } from "./privacy.js";
 
 const loginUrl = new URL("../login.html", import.meta.url);
 const dashboardUrl = new URL("../index.html", import.meta.url);
@@ -99,32 +100,6 @@ function loginUrlForCurrentPage() {
 
 function requiresEmailVerification(user) {
   return Boolean(user?.email && !user.emailVerified);
-}
-
-function clearCreatorDataCaches() {
-  const exactKeys = new Set([
-    "viewcastYouTubeAccessToken",
-    "viewcastYouTubeConnection",
-    "viewcastYouTubeAllConnections",
-    "viewcastYouTubeChannel",
-    "viewcastPendingAnalyzerVideo",
-  ]);
-  const prefixes = [
-    "viewcastYouTubeVideos:",
-    "viewcastOverviewData:",
-    "viewcastAiInsights:",
-    "viewcastRecentTrends:",
-    "viewcastGeminiVideoAnalysis:",
-    "viewcastChannelContext:",
-    "viewcastThumbnailAnalysis:",
-    "viewcastThumbnailComparison:",
-  ];
-  [localStorage, sessionStorage].forEach((storage) => {
-    Object.keys(storage)
-        .filter((key) => exactKeys.has(key) ||
-          prefixes.some((prefix) => key.startsWith(prefix)))
-        .forEach((key) => storage.removeItem(key));
-  });
 }
 
 function showEmailVerificationGate(user) {
@@ -209,8 +184,7 @@ function showEmailVerificationGate(user) {
 
   refreshButton.addEventListener("click", refreshVerification);
   signOutButton.addEventListener("click", async () => {
-    clearCreatorDataCaches();
-    await signOut(auth);
+    await secureSignOut(auth, signOut);
     window.location.replace(loginUrl.href);
   });
   closeButton.addEventListener("click", closeVerificationGate);
@@ -346,8 +320,7 @@ function addAccountControl(user) {
   wrapper.querySelector(".account-details span").textContent = user.email || "Signed in";
   footer.insertAdjacentElement("beforebegin", wrapper);
   wrapper.querySelector(".account-signout").addEventListener("click", async () => {
-    clearCreatorDataCaches();
-    await signOut(auth);
+    await secureSignOut(auth, signOut);
     window.location.replace(loginUrl.href);
   });
 }
@@ -367,8 +340,7 @@ function updateUserInterface(user) {
     link.href = "#";
     link.addEventListener("click", async (e) => {
       e.preventDefault();
-      clearCreatorDataCaches();
-      await signOut(auth);
+      await secureSignOut(auth, signOut);
       window.location.replace(loginUrl.href);
     });
   });

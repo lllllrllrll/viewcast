@@ -370,7 +370,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (notifButton && notifDropdown) {
     // Check if notifications were previously read
-    if (localStorage.getItem(storageKey) === "true") {
+    if (Number(localStorage.getItem(storageKey) || 0) > 0) {
       if (notifBadge) notifBadge.hidden = true;
       if (markRead) markRead.hidden = true;
       document.querySelectorAll(".notif-item.unread").forEach(item => {
@@ -396,7 +396,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         if (notifBadge) notifBadge.hidden = true;
         markRead.hidden = true;
-        localStorage.setItem(storageKey, "true");
+        localStorage.setItem(storageKey, String(Date.now()));
       });
     }
 

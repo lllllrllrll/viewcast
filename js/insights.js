@@ -10,6 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
 import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js";
+import { addNotifications } from "./notifications.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -197,10 +198,10 @@ function readCachedVideos() {
   const key = videosStorageKey();
   if (!key) return [];
   try {
-    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
     return Array.isArray(saved?.videos) ? saved.videos : [];
   } catch (error) {
-    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
     return [];
   }
 }
@@ -208,7 +209,7 @@ function readCachedVideos() {
 function saveCachedVideos(videos) {
   const key = videosStorageKey();
   if (!key) return;
-  localStorage.setItem(key, JSON.stringify({
+  sessionStorage.setItem(key, JSON.stringify({
     videos,
     savedAt: Date.now()
   }));
@@ -250,12 +251,12 @@ async function loadSavedChannelContext() {
   savedChannelContext = {channelTopic: "", channelContext: ""};
   const key = channelContextStorageKey();
   if (!key) return savedChannelContext;
-  const hasLocalValue = Boolean(localStorage.getItem(key));
+  const hasLocalValue = Boolean(sessionStorage.getItem(key));
 
   try {
-    savedChannelContext = normalizeSavedChannelContext(JSON.parse(localStorage.getItem(key) || "{}"));
+    savedChannelContext = normalizeSavedChannelContext(JSON.parse(sessionStorage.getItem(key) || "{}"));
   } catch {
-    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
   }
 
   if (!db || !currentUser) return savedChannelContext;
@@ -264,7 +265,7 @@ async function loadSavedChannelContext() {
     if (snapshot.exists() && !hasLocalValue) {
       const cloudContext = snapshot.data();
       savedChannelContext = normalizeSavedChannelContext(cloudContext);
-      localStorage.setItem(key, JSON.stringify(savedChannelContext));
+      sessionStorage.setItem(key, JSON.stringify(savedChannelContext));
     }
   } catch (error) {
     console.warn("Could not refresh saved channel context for AI Insights.", error);
@@ -276,12 +277,15 @@ function readCachedInsights(videos, focusVideoId = "") {
   const key = insightsStorageKey(focusVideoId);
   if (!key) return null;
   try {
-    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
     if (!saved?.summary || saved.fingerprint !== insightsFingerprint(videos, focusVideoId)) return null;
-    if (Date.now() - saved.savedAt > insightsCacheMaxAge) return null;
+    if (Date.now() - saved.savedAt > insightsCacheMaxAge) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
     return saved.summary;
   } catch (error) {
-    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
     return null;
   }
 }
@@ -290,7 +294,7 @@ function saveCachedInsights(summary, videos, focusVideoId = "") {
   const key = insightsStorageKey(focusVideoId);
   if (!key || !summary) return;
   const savedAt = Date.now();
-  localStorage.setItem(key, JSON.stringify({
+  sessionStorage.setItem(key, JSON.stringify({
     fingerprint: insightsFingerprint(videos, focusVideoId),
     summary,
     savedAt
@@ -3024,6 +3028,23 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
     if (requestId !== analysisRequestId) return;
     renderChannelInsights(summary);
     saveCachedInsights(summary, videos, focusVideoId);
+    const insightResult = summary.geminiInsights;
+    addNotifications([
+      {
+        id: `insights:${insightsFingerprint(videos, focusVideoId)}:trend`,
+        title: "New trend signal",
+        message: insightResult.cards?.topTopicSignal?.value || summary.currentTrend,
+        href: "pages/insights.html?result=latest",
+        tone: "teal"
+      },
+      ...((insightResult.recommendations || []).slice(0, 2).map((item, index) => ({
+        id: `insights:${insightsFingerprint(videos, focusVideoId)}:recommendation:${index}`,
+        title: item.title || "New channel recommendation",
+        message: item.body,
+        href: "pages/insights.html?result=latest",
+        tone: item.tone === "warn" ? "amber" : "blue"
+      })))
+    ]);
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     setStatus("");
@@ -3148,7 +3169,14 @@ if (form && firebaseConfigured) {
     const cachedVideos = readCachedVideos();
     if (cachedVideos.length) {
       renderVideoLibrary(cachedVideos);
-      setLibraryStatus("Showing saved uploads. Generate insights or refresh for current data.");
+      const cachedSummary = readCachedInsights(cachedVideos);
+      if (cachedSummary) {
+        renderChannelInsights(cachedSummary);
+        setAnalyzerResultsVisible(true);
+        setLibraryStatus("Showing your latest saved AI insights.");
+      } else {
+        setLibraryStatus("Showing saved uploads. Generate insights or refresh for current data.");
+      }
     } else {
       setLibraryStatus("Loading uploads for channel insights...");
     }

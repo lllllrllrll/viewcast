@@ -8,6 +8,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js";
+import { addNotifications } from "./notifications.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -191,10 +192,10 @@ function readCachedVideos() {
   const key = videosStorageKey();
   if (!key) return [];
   try {
-    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
     return Array.isArray(saved?.videos) ? saved.videos : [];
   } catch (error) {
-    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
     return [];
   }
 }
@@ -202,7 +203,7 @@ function readCachedVideos() {
 function saveCachedVideos(videos) {
   const key = videosStorageKey();
   if (!key) return;
-  localStorage.setItem(key, JSON.stringify({
+  sessionStorage.setItem(key, JSON.stringify({
     videos,
     savedAt: Date.now()
   }));
@@ -231,12 +232,15 @@ function readCachedGeminiVideoAnalysis(video, analytics, retentionPoints, search
   const key = videoAnalysisStorageKey(video.id);
   if (!key) return null;
   try {
-    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
     if (!saved?.analysis || saved.fingerprint !== videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms)) return null;
-    if (Date.now() - saved.savedAt > videoAnalysisCacheMaxAge) return null;
+    if (Date.now() - saved.savedAt > videoAnalysisCacheMaxAge) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
     return saved.analysis;
   } catch (error) {
-    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
     return null;
   }
 }
@@ -244,7 +248,7 @@ function readCachedGeminiVideoAnalysis(video, analytics, retentionPoints, search
 function saveCachedGeminiVideoAnalysis(video, analytics, retentionPoints, searchTerms, analysis) {
   const key = videoAnalysisStorageKey(video.id);
   if (!key || !analysis) return;
-  localStorage.setItem(key, JSON.stringify({
+  sessionStorage.setItem(key, JSON.stringify({
     fingerprint: videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms),
     analysis,
     savedAt: Date.now()
@@ -1179,6 +1183,25 @@ async function analyzeVideoById(videoId) {
       ? "Gemini video analysis generated from YouTube data" + period + "."
       : (analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now."));
     setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
+    const notificationPoints = (geminiAnalysis?.timelineInterestPoints || [])
+      .slice(0, 2)
+      .map((point, index) => ({
+        id: `video:${video.id}:point:${index}:${point.timestamp}`,
+        title: `${point.timestamp} · ${point.title}`,
+        message: point.suggestion,
+        href: `pages/analyzer.html?video=${encodeURIComponent(video.id)}`,
+        tone: point.severity === "high" ? "rose" : "amber"
+      }));
+    addNotifications([
+      {
+        id: `video:${video.id}:complete`,
+        title: "Video analysis ready",
+        message: video.snippet?.title || "Your selected video has new recommendations.",
+        href: `pages/analyzer.html?video=${encodeURIComponent(video.id)}`,
+        tone: "teal"
+      },
+      ...notificationPoints
+    ]);
   } catch (error) {
     if (requestId !== analysisRequestId) return;
     setAnalyzerLoading(false);
@@ -1270,6 +1293,13 @@ async function analyzeUploadedVideo(file) {
     recordVideoAnalysis();
     setStatus(`Analysis complete for ${file.name}. Uploaded files do not include YouTube performance metrics.`);
     setLibraryStatus(`Analyzed uploaded file: ${file.name}.`);
+    addNotifications((analysis.timelineInterestPoints || []).slice(0, 2).map((point, index) => ({
+      id: `upload:${file.name}:${file.size}:${index}:${point.timestamp}`,
+      title: `${point.timestamp} · ${point.title}`,
+      message: point.suggestion,
+      href: "pages/analyzer.html",
+      tone: point.severity === "high" ? "rose" : "amber"
+    })));
   } catch (error) {
     if (requestId !== analysisRequestId) return;
     console.error("Could not analyze uploaded video.", error);

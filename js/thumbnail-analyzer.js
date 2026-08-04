@@ -1,4 +1,5 @@
 import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js";
+import { addNotifications } from "./notifications.js";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -30,7 +31,7 @@ const comparisonFiles = {v1: null, v2: null};
 const comparisonUrls = {v1: "", v2: ""};
 const thumbnailCachePrefix = "viewcastThumbnailAnalysis:";
 const comparisonCachePrefix = "viewcastThumbnailComparison:";
-const RESULT_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const RESULT_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
 const MAX_IMAGE_DIMENSION = 1280;
 const IMAGE_QUALITY = 0.84;
 
@@ -157,20 +158,20 @@ function fileFingerprint(file) {
 
 function readSessionResult(key) {
   try {
-    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
     if (!saved?.value || Date.now() - saved.savedAt > RESULT_CACHE_MAX_AGE) {
-      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
       return null;
     }
     return saved.value;
   } catch {
-    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
     return null;
   }
 }
 
 function saveSessionResult(key, value) {
-  if (value) localStorage.setItem(key, JSON.stringify({value, savedAt: Date.now()}));
+  if (value) sessionStorage.setItem(key, JSON.stringify({value, savedAt: Date.now()}));
 }
 
 function parseJson(text) {
@@ -192,6 +193,7 @@ function renderList(element, items) {
 
 function renderAnalysis(analysis) {
   latestAnalysis = analysis;
+  if (analysis._videoTitle) thumbnailTitle.value = analysis._videoTitle;
   const score = Math.max(0, Math.min(10, Number(analysis.score) || 0));
   document.querySelector("#thumbnailScore strong").textContent = Number(score.toFixed(1));
   document.querySelector("#thumbnailVerdict").textContent = cleanText(analysis.verdict || "Thumbnail review", 80);
@@ -333,9 +335,26 @@ form.addEventListener("submit", async (event) => {
       }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 650, responseMimeType: "application/json" }
     });
-    const analysis = parseJson(response);
+    const analysis = {...parseJson(response), _videoTitle: videoTitle};
     saveSessionResult(cacheKey, analysis);
+    sessionStorage.setItem("viewcastLatestThumbnailResult", cacheKey);
     renderAnalysis(analysis);
+    addNotifications([
+      {
+        id: `thumbnail:${cacheKey}:score`,
+        title: `Thumbnail scored ${Number(analysis.score || 0).toFixed(1)}/10`,
+        message: analysis.summary,
+        href: "pages/thumbnail-analyzer.html?result=latest",
+        tone: Number(analysis.score || 0) >= 7 ? "teal" : "amber"
+      },
+      {
+        id: `thumbnail:${cacheKey}:improvement`,
+        title: "Thumbnail improvement",
+        message: analysis.improvements?.[0] || analysis.recommendation,
+        href: "pages/thumbnail-analyzer.html?result=latest",
+        tone: "blue"
+      }
+    ]);
     setStatus("Analysis complete.", "success");
   } catch (error) {
     console.error("Thumbnail analysis failed.", error);
@@ -443,6 +462,7 @@ function selectComparisonFile(slot, file) {
 });
 
 function renderComparison(analysis) {
+  if (analysis._videoTitle) comparisonTitle.value = analysis._videoTitle;
   const winner = String(analysis.winner || "No clear winner");
   document.querySelector("#comparisonWinner").textContent = winner;
   document.querySelector("#comparisonSummary").textContent = String(analysis.summary || "Comparison complete.");
@@ -494,9 +514,26 @@ comparisonForm.addEventListener("submit", async (event) => {
       ]}],
       generationConfig: {temperature: 0.25, maxOutputTokens: 650, responseMimeType: "application/json"}
     });
-    const comparison = parseJson(response);
+    const comparison = {...parseJson(response), _videoTitle: videoTitle};
     saveSessionResult(cacheKey, comparison);
+    sessionStorage.setItem("viewcastLatestThumbnailComparison", cacheKey);
     renderComparison(comparison);
+    addNotifications([
+      {
+        id: `thumbnail-comparison:${cacheKey}:winner`,
+        title: `${comparison.winner || "Thumbnail comparison"} leads`,
+        message: comparison.summary,
+        href: "pages/thumbnail-analyzer.html?comparison=latest",
+        tone: "teal"
+      },
+      {
+        id: `thumbnail-comparison:${cacheKey}:recommendation`,
+        title: "Best combined direction",
+        message: comparison.recommendation,
+        href: "pages/thumbnail-analyzer.html?comparison=latest",
+        tone: "blue"
+      }
+    ]);
     setComparisonStatus("Comparison complete.", "success");
   } catch (error) {
     console.error("Thumbnail comparison failed.", error);
@@ -506,3 +543,22 @@ comparisonForm.addEventListener("submit", async (event) => {
     comparisonButton.classList.remove("is-loading");
   }
 });
+
+const notificationParams = new URLSearchParams(window.location.search);
+if (notificationParams.get("result") === "latest") {
+  const key = sessionStorage.getItem("viewcastLatestThumbnailResult") || "";
+  const result = readSessionResult(key);
+  if (result) {
+    renderAnalysis(result);
+    setStatus("Showing your latest saved thumbnail result.", "success");
+  }
+}
+if (notificationParams.get("comparison") === "latest") {
+  const key = sessionStorage.getItem("viewcastLatestThumbnailComparison") || "";
+  const comparison = readSessionResult(key);
+  if (comparison) {
+    document.querySelector("[data-thumbnail-tab='comparison']")?.click();
+    renderComparison(comparison);
+    setComparisonStatus("Showing your latest saved comparison.", "success");
+  }
+}
