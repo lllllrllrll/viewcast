@@ -26,7 +26,7 @@ const analyzerLoading = document.getElementById("analyzerLoading");
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const videoAnalysisStorageKeyPrefix = "viewcastGeminiVideoAnalysis:";
-const videoAnalysisCacheMaxAge = 6 * 60 * 60 * 1000;
+const videoAnalysisCacheMaxAge = 24 * 60 * 60 * 1000;
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 let currentUser = null;
 let auth = null;
@@ -856,7 +856,7 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 900
+        maxOutputTokens: 700
       }
     });
     const text = payload.candidates?.[0]?.content?.parts
@@ -1252,7 +1252,7 @@ async function analyzeUploadedVideo(file) {
     ].join("\n");
     const payload = await requestGeminiContent({
       contents: [{role: "user", parts: [{text: prompt}, {inlineData: {mimeType: file.type, data}}]}],
-      generationConfig: {responseMimeType: "application/json", maxOutputTokens: 900}
+      generationConfig: {responseMimeType: "application/json", maxOutputTokens: 700}
     });
     if (requestId !== analysisRequestId) return;
     const responseText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();

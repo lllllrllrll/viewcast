@@ -42,7 +42,7 @@ const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
 const insightsCacheVersion = 26;
-const insightsCacheMaxAge = 6 * 60 * 60 * 1000;
+const insightsCacheMaxAge = 24 * 60 * 60 * 1000;
 
 let currentUser = null;
 let auth = null;
@@ -2436,7 +2436,7 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 1800
+        maxOutputTokens: 1100
       }
     });
     const text = payload.candidates?.[0]?.content?.parts
@@ -2725,7 +2725,7 @@ async function buildGeminiPageInsights(summary, videos) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 1600
+        maxOutputTokens: 1100
       }
     });
 
@@ -2761,7 +2761,7 @@ async function buildGeminiChatReply(question, summary) {
       contents: chatHistory.slice(-6),
       systemInstruction,
       generationConfig: {
-        maxOutputTokens: 240
+        maxOutputTokens: 160
       }
     });
 
@@ -2909,7 +2909,7 @@ async function loadVideosWithRetry(allowPrompt) {
   }
 }
 
-async function loadVideoLibrary({allowPrompt = false, generateAfterLoad = false} = {}) {
+async function loadVideoLibrary({allowPrompt = false} = {}) {
   if (!currentUser) return [];
 
   const cachedVideos = readCachedVideos();
@@ -2917,7 +2917,6 @@ async function loadVideoLibrary({allowPrompt = false, generateAfterLoad = false}
 
   if (!readCachedAccessToken() && !allowPrompt) {
     setLibraryStatus(cachedVideos.length ? "Showing saved uploads. Generate insights from saved data or refresh for current data." : "Refresh videos to load uploads from your linked channel.");
-    if (generateAfterLoad && cachedVideos.length) await generateChannelInsights({allowPrompt: false});
     return cachedVideos;
   }
 
@@ -2928,7 +2927,6 @@ async function loadVideoLibrary({allowPrompt = false, generateAfterLoad = false}
     saveCachedVideos(videos);
     renderVideoLibrary(videos);
     setLibraryStatus(videos.length ? "Uploads loaded. Generate insights for your channel." : "No uploads were found on your linked channel.");
-    if (generateAfterLoad && videos.length) await generateChannelInsights({allowPrompt});
     return videos;
   } catch (error) {
     console.error("Could not load channel videos.", error);
@@ -3025,9 +3023,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
     if (!summary.geminiInsights) throw new Error("AI_INSIGHTS_GENERATION_FAILED");
     if (requestId !== analysisRequestId) return;
     renderChannelInsights(summary);
-    if (trendVideos.length && trendVideos.outsideTrendVideos?.length) {
-      saveCachedInsights(summary, videos, focusVideoId);
-    }
+    saveCachedInsights(summary, videos, focusVideoId);
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     setStatus("");
@@ -3160,7 +3156,7 @@ if (form && firebaseConfigured) {
       showMissingGeminiKeyMessage();
       return;
     }
-    loadVideoLibrary({allowPrompt: false, generateAfterLoad: true});
+    loadVideoLibrary({allowPrompt: false});
   });
 
   form.addEventListener("submit", handleGenerateInsights);
@@ -3171,19 +3167,9 @@ if (form && firebaseConfigured) {
   });
   analyzerDashboard?.addEventListener("click", handleReadMoreClick);
   insightTabs.forEach((tab) => {
-    tab.addEventListener("click", async () => {
+    tab.addEventListener("click", () => {
       const tabName = tab.dataset.insightsTab;
       activateInsightsTab(tabName);
-      if (tabName === "trends" &&
-          currentUser &&
-          hasLinkedChannel() &&
-          !hasLiveTrendResults(latestChannelSummary)) {
-        await generateChannelInsights({
-          allowPrompt: true,
-          forceRefresh: true
-        });
-        activateInsightsTab("trends");
-      }
     });
     tab.addEventListener("keydown", handleInsightsTabKeydown);
   });
@@ -3193,7 +3179,8 @@ if (form && firebaseConfigured) {
     if (!card) return;
     generateChannelInsights({allowPrompt: true, focusVideoId: card.dataset.videoId});
   });
-  refreshVideosButton?.addEventListener("click", () => loadVideoLibrary({allowPrompt: true, generateAfterLoad: true}));
+  refreshVideosButton?.addEventListener("click", () =>
+    loadVideoLibrary({allowPrompt: true}));
 } else if (form) {
   setStatus("Firebase is not configured yet.");
 }

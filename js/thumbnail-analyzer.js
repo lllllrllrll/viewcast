@@ -30,6 +30,9 @@ const comparisonFiles = {v1: null, v2: null};
 const comparisonUrls = {v1: "", v2: ""};
 const thumbnailCachePrefix = "viewcastThumbnailAnalysis:";
 const comparisonCachePrefix = "viewcastThumbnailComparison:";
+const RESULT_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const MAX_IMAGE_DIMENSION = 1280;
+const IMAGE_QUALITY = 0.84;
 
 function imageMimeType(file) {
   if (ALLOWED_TYPES.has(file?.type)) return file.type;
@@ -108,13 +111,44 @@ function selectFile(file) {
   setStatus(thumbnailTitle.value.trim() ? "Ready to analyze." : "Enter the video title to continue.");
 }
 
-function fileToBase64(file) {
+function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(new Error("Could not read the selected image."));
     reader.readAsDataURL(file);
   });
+}
+
+function loadImage(source) {
+  return new Promise((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error("Could not optimize the selected image."));
+    element.src = source;
+  });
+}
+
+async function optimizedImage(file) {
+  const source = await fileToDataUrl(file);
+  const bitmap = typeof createImageBitmap === "function"
+    ? await createImageBitmap(file)
+    : await loadImage(source);
+  const width = bitmap.width || bitmap.naturalWidth;
+  const height = bitmap.height || bitmap.naturalHeight;
+  const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(width, height));
+  if (scale === 1 && file.type === "image/webp") {
+    bitmap.close?.();
+    return {data: source.split(",")[1], mimeType: "image/webp"};
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const optimized = canvas.toDataURL("image/webp", IMAGE_QUALITY);
+  return {data: optimized.split(",")[1], mimeType: "image/webp"};
 }
 
 function fileFingerprint(file) {
@@ -123,15 +157,20 @@ function fileFingerprint(file) {
 
 function readSessionResult(key) {
   try {
-    return JSON.parse(sessionStorage.getItem(key) || "null");
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    if (!saved?.value || Date.now() - saved.savedAt > RESULT_CACHE_MAX_AGE) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return saved.value;
   } catch {
-    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
     return null;
   }
 }
 
 function saveSessionResult(key, value) {
-  if (value) sessionStorage.setItem(key, JSON.stringify(value));
+  if (value) localStorage.setItem(key, JSON.stringify({value, savedAt: Date.now()}));
 }
 
 function parseJson(text) {
@@ -139,10 +178,14 @@ function parseJson(text) {
   return JSON.parse(cleaned);
 }
 
+function cleanText(value, maxLength) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
 function renderList(element, items) {
   element.replaceChildren(...items.slice(0, 5).map((item) => {
     const li = document.createElement("li");
-    li.textContent = String(item);
+    li.textContent = cleanText(item, 220);
     return li;
   }));
 }
@@ -151,13 +194,17 @@ function renderAnalysis(analysis) {
   latestAnalysis = analysis;
   const score = Math.max(0, Math.min(10, Number(analysis.score) || 0));
   document.querySelector("#thumbnailScore strong").textContent = Number(score.toFixed(1));
-  document.querySelector("#thumbnailVerdict").textContent = String(analysis.verdict || "Thumbnail review");
-  document.querySelector("#thumbnailSummary").textContent = String(analysis.summary || "Analysis complete.");
+  document.querySelector("#thumbnailVerdict").textContent = cleanText(analysis.verdict || "Thumbnail review", 80);
+  document.querySelector("#thumbnailSummary").textContent = cleanText(analysis.summary || "Analysis complete.", 420);
   document.querySelector("#analyzedVideoTitle").textContent = thumbnailTitle.value.trim();
-  document.querySelector("#thumbnailTitleAlignment").textContent = String(
-    analysis.titleAlignment || "The title and thumbnail should communicate one clear, complementary promise."
+  document.querySelector("#thumbnailTitleAlignment").textContent = cleanText(
+    analysis.titleAlignment || "The title and thumbnail should communicate one clear, complementary promise.",
+    420
   );
-  document.querySelector("#thumbnailRecommendation").textContent = String(analysis.recommendation || "Test a simplified variation against the current design.");
+  document.querySelector("#thumbnailRecommendation").textContent = cleanText(
+    analysis.recommendation || "Test a simplified variation against the current design.",
+    320
+  );
   renderList(document.querySelector("#thumbnailStrengths"), Array.isArray(analysis.strengths) ? analysis.strengths : []);
   renderList(document.querySelector("#thumbnailImprovements"), Array.isArray(analysis.improvements) ? analysis.improvements : []);
   document.querySelector("#thumbnailScore").style.setProperty("--score", `${score * 36}deg`);
@@ -197,7 +244,7 @@ thumbnailChatForm.addEventListener("submit", async (event) => {
   thumbnailChatStatus.textContent = "Gemini is thinking…";
   thumbnailChatStatus.dataset.type = "loading";
   try {
-    const recentConversation = thumbnailChatHistory.slice(-7)
+    const recentConversation = thumbnailChatHistory.slice(-4)
       .map((message) => `${message.role === "user" ? "User" : "Gemini"}: ${message.text}`)
       .join("\n");
     const reply = await requestGeminiText({
@@ -205,7 +252,7 @@ thumbnailChatForm.addEventListener("submit", async (event) => {
       contents: [{role: "user", parts: [
         {text: `Use the completed visual analysis below; do not re-analyze the image.\nAnalysis:${JSON.stringify(latestAnalysis)}\nTitle:${thumbnailTitle.value.trim()}\nConversation:${recentConversation}\nAnswer the latest question directly.`}
       ]}],
-      generationConfig: {temperature: 0.35, maxOutputTokens: 320}
+      generationConfig: {temperature: 0.35, maxOutputTokens: 180}
     });
     const answer = reply || "I could not produce a useful answer for that question.";
     appendThumbnailChatMessage("assistant", answer);
@@ -274,17 +321,17 @@ form.addEventListener("submit", async (event) => {
       return;
     }
 
-    const base64 = await fileToBase64(selectedFile);
+    const optimized = await optimizedImage(selectedFile);
     const response = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist. Give specific, candid, visually grounded feedback. Return only valid JSON, without markdown.",
       contents: [{
         role: "user",
         parts: [
           { text: `Analyze this thumbnail together with the video title "${videoTitle}". Do not judge the image in isolation. First determine the promise, topic, and curiosity created by the title, then compare that promise with what the thumbnail communicates. Identify whether they reinforce each other, add complementary information, redundantly repeat each other, create confusion, or make conflicting promises. Make title–thumbnail alignment 40% of the overall score; use likely click performance, visual hierarchy, contrast, subject clarity, mobile text legibility, emotional pull, curiosity, and clutter for the remaining 60%. The score must be from 0 to 10 and may use one decimal place.\nReturn this exact JSON shape: {"score": 0.0, "verdict": "short headline", "summary": "2-3 sentence combined title and thumbnail assessment", "titleAlignment": "specific explanation of what the title promises, what the thumbnail promises, and whether they work together", "strengths": ["specific point", "specific point", "specific point"], "improvements": ["specific actionable point", "specific actionable point", "specific actionable point"], "recommendation": "one concrete redesign direction that better supports this title"}` },
-          { inlineData: { data: base64, mimeType: imageMimeType(selectedFile) } }
+          { inlineData: optimized }
         ]
       }],
-      generationConfig: { temperature: 0.35, maxOutputTokens: 850, responseMimeType: "application/json" }
+      generationConfig: { temperature: 0.3, maxOutputTokens: 650, responseMimeType: "application/json" }
     });
     const analysis = parseJson(response);
     saveSessionResult(cacheKey, analysis);
@@ -432,20 +479,20 @@ comparisonForm.addEventListener("submit", async (event) => {
       return;
     }
 
-    const [version1Data, version2Data] = await Promise.all([
-      fileToBase64(comparisonFiles.v1),
-      fileToBase64(comparisonFiles.v2)
+    const [version1, version2] = await Promise.all([
+      optimizedImage(comparisonFiles.v1),
+      optimizedImage(comparisonFiles.v2)
     ]);
     const response = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist. Compare the two labeled images objectively and return only valid JSON, without markdown.",
       contents: [{role: "user", parts: [
         {text: `Compare two thumbnail versions together with the video title "${videoTitle}". Do not judge either image in isolation. Determine what the title promises, then compare that promise with what each thumbnail communicates. Make title–thumbnail alignment 40% of each score, with likely click performance, visual hierarchy, mobile readability, emotional pull, curiosity, clarity, and clutter making up the remaining 60%. Scores must be from 0 to 10 and may use one decimal place. The next image is Version 1.`},
-        {inlineData: {data: version1Data, mimeType: imageMimeType(comparisonFiles.v1)}},
+        {inlineData: version1},
         {text: "The next image is Version 2."},
-        {inlineData: {data: version2Data, mimeType: imageMimeType(comparisonFiles.v2)}},
+        {inlineData: version2},
         {text: 'Return this exact JSON shape: {"winner":"Version 1, Version 2, or Tie","version1Score":0.0,"version2Score":0.0,"summary":"2-3 sentence comparison tied to the title","winnerReasons":["reason","reason","reason"],"feedback":["specific Version 1 feedback","specific Version 2 feedback","shared lesson"],"recommendation":"best combined redesign direction for this title"}'}
       ]}],
-      generationConfig: {temperature: 0.3, maxOutputTokens: 900, responseMimeType: "application/json"}
+      generationConfig: {temperature: 0.25, maxOutputTokens: 650, responseMimeType: "application/json"}
     });
     const comparison = parseJson(response);
     saveSessionResult(cacheKey, comparison);

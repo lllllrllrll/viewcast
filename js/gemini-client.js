@@ -6,6 +6,7 @@ const fallbackGeminiModel = "gemini-3.1-flash-lite";
 const allowedGeminiModels = new Set([
   "gemini-3.1-flash-lite"
 ]);
+const pendingRequests = new Map();
 
 function geminiText(payload = {}) {
   return payload.candidates?.[0]?.content?.parts
@@ -49,14 +50,31 @@ async function requestGeminiFunction({contents, systemInstruction, generationCon
   return result.data || {};
 }
 
+function requestKey(options = {}) {
+  return JSON.stringify({
+    contents: options.contents || [],
+    systemInstruction: options.systemInstruction || "",
+    generationConfig: options.generationConfig || {},
+    modelName: safeGeminiModel(options.modelName)
+  });
+}
+
 export function isGeminiAvailable() {
   return firebaseConfigured;
 }
 
 export async function requestGeminiContent(options) {
-  const result = await requestGeminiFunction(options);
-  recordAiAnalysis();
-  return result;
+  const key = requestKey(options);
+  if (pendingRequests.has(key)) return pendingRequests.get(key);
+
+  const request = requestGeminiFunction(options)
+    .then((result) => {
+      recordAiAnalysis();
+      return result;
+    })
+    .finally(() => pendingRequests.delete(key));
+  pendingRequests.set(key, request);
+  return request;
 }
 
 export async function requestGeminiText(options) {
