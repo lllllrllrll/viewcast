@@ -9,10 +9,26 @@ const colors = {
   green: "#2f9b6c"
 };
 
-document.body.classList.toggle(
-  "settings-dark",
-  localStorage.getItem("viewcastDarkMode") === "on"
-);
+// Start authentication before any optional dashboard setup. If another piece of
+// page initialization fails, the auth gate must still be able to reveal or
+// redirect the page instead of leaving the app permanently hidden.
+const authModuleUrl = new URL("auth.js?v=18", document.currentScript.src);
+const authInitialization = import(authModuleUrl.href);
+
+window.setTimeout(() => {
+  if (document.body.classList.contains("auth-ready")) return;
+  console.warn("Authentication is taking longer than expected; revealing the page shell.");
+  document.body.classList.add("auth-ready", "auth-delayed");
+}, 8000);
+
+try {
+  document.body.classList.toggle(
+    "settings-dark",
+    localStorage.getItem("viewcastDarkMode") === "on"
+  );
+} catch (error) {
+  console.warn("Could not load the saved color theme.", error);
+}
 
 function scaleCanvas(canvas) {
   const rect = canvas.getBoundingClientRect();
@@ -410,8 +426,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-const authModuleUrl = new URL("auth.js?v=14", document.currentScript.src);
-import(authModuleUrl.href).catch((error) => {
+authInitialization.catch((error) => {
   console.error("Authentication failed to initialize.", error);
   document.body.classList.add("auth-ready");
 });

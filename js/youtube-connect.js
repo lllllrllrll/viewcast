@@ -1,10 +1,7 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {
   getAuth,
-  GoogleAuthProvider,
-  linkWithPopup,
-  onAuthStateChanged,
-  reauthenticateWithPopup
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {
   doc,
@@ -38,12 +35,37 @@ const activeConnectionKey = "viewcastYouTubeConnection";
 const channelStorageKey = "viewcastYouTubeChannel";
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
+const MAX_LINKED_CHANNELS = 5;
+const BASIC_LINKED_CHANNELS = 1;
 
 let currentUser = null;
 let auth = null;
 let db = null;
 let linkedConnections = [];
 let googleIdentityScriptPromise = null;
+
+function currentPlan() {
+  return "basic";
+}
+
+function requiresChannelUpgrade(connections = readAllConnections()) {
+  return currentPlan() === "basic" && connections.length >= BASIC_LINKED_CHANNELS;
+}
+
+function promptForChannelUpgrade() {
+  const message = "The Basic plan includes one linked channel. Upgrade to Pro or Premium to link another channel.";
+  if (typeof window.showPlanModal === "function") {
+    window.showPlanModal(message);
+    return;
+  }
+
+  const prompt = document.getElementById("connectionPrompt");
+  if (prompt) {
+    prompt.textContent = message;
+    prompt.style.color = "var(--rose)";
+    prompt.style.fontWeight = "bold";
+  }
+}
 
 function setButton(label, disabled = false) {
   if (!connectButton) return;
@@ -76,7 +98,13 @@ function updateUI() {
     }));
 
     setUnlinkButton({visible: true, disabled: false});
-    setButton("Link New Channel");
+    if (connections.length >= MAX_LINKED_CHANNELS) {
+      setButton("5 Channels Linked", true);
+    } else if (requiresChannelUpgrade(connections)) {
+      setButton("Upgrade to Link Another Channel");
+    } else {
+      setButton("Link New Channel");
+    }
   } else {
     channelSelectorWrap.hidden = true;
     setUnlinkButton({visible: false, disabled: true});
@@ -118,6 +146,7 @@ function readActiveConnection() {
 }
 
 function saveConnections(connections, activeId = null) {
+  connections = connections.slice(0, MAX_LINKED_CHANNELS);
   localStorage.setItem(allConnectionsKey, JSON.stringify(connections));
 
   let active = connections.find(c => c.channel.id === activeId) || connections[0] || null;
@@ -131,12 +160,13 @@ function saveConnections(connections, activeId = null) {
   updateUI();
 }
 
-function saveCachedAccessToken(accessToken) {
+function saveCachedAccessToken(accessToken, channelId) {
   if (!accessToken || !currentUser) return;
   localStorage.removeItem(tokenStorageKey);
   sessionStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
+    channelId,
     expiresAt: Date.now() + 50 * 60 * 1000
   }));
 }
@@ -339,21 +369,31 @@ async function fetchAnalyticsSummary(accessToken) {
 
 async function connectYouTube() {
   if (!currentUser) return;
+  if (requiresChannelUpgrade()) {
+    promptForChannelUpgrade();
+    return;
+  }
   try {
     setButton("Connecting...", true);
     const accessToken = await requestYouTubeAccessToken();
 
-    saveCachedAccessToken(accessToken);
     const channel = await fetchChannel(accessToken);
+    const connections = readAllConnections();
+    const existingIdx = connections.findIndex(c => c.channel.id === channel.id);
+    if (existingIdx === -1 && requiresChannelUpgrade(connections)) {
+      promptForChannelUpgrade();
+      updateUI();
+      return;
+    }
+
+    saveCachedAccessToken(accessToken, channel.id);
     const analytics = await fetchAnalyticsSummary(accessToken);
     const newConn = { channel, analyticsSummary: analytics, connectedAt: Date.now() };
 
-    const connections = readAllConnections();
-    const existingIdx = connections.findIndex(c => c.channel.id === channel.id);
     if (existingIdx > -1) connections[existingIdx] = newConn;
     else {
-      if (connections.length >= 10) {
-        throw new Error("A maximum of 10 YouTube channels can be linked.");
+      if (connections.length >= MAX_LINKED_CHANNELS) {
+        throw new Error("A maximum of 5 YouTube channels can be linked.");
       }
       connections.push(newConn);
     }
@@ -412,17 +452,16 @@ if (connectButton && firebaseConfigured) {
   db = getFirestore(app);
 
   onAuthStateChanged(auth, async (user) => {
-    currentUser = user?.emailVerified ? user : null;
+    currentUser = user || null;
     if (!user) {
       saveConnections([]);
       setButton("Sign in to connect", true);
       return;
     }
     if (!user.emailVerified) {
-      setButton("Verify email to connect", true);
+      setButton("Verify Email to Connect", true);
       return;
     }
-
     const params = new URLSearchParams(window.location.search);
     if (params.get("link") === "required") {
       const prompt = document.getElementById("connectionPrompt");
@@ -449,9 +488,14 @@ if (connectButton && firebaseConfigured) {
 
   channelSelector?.addEventListener("change", () => {
     const connections = readAllConnections();
+    sessionStorage.removeItem(tokenStorageKey);
     saveConnections(connections, channelSelector.value);
     window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", {
       detail: readActiveConnection()
     }));
+  });
+
+  window.addEventListener("storage", (event) => {
+    if (event.key === "viewcast:plan") updateUI();
   });
 }

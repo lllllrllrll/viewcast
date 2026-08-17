@@ -86,10 +86,18 @@ function safeReturnUrl() {
   try {
     const target = new URL(returnTo, window.location.origin);
     if (target.origin !== window.location.origin) return dashboardUrl.href;
+    if (target.pathname === loginUrl.pathname) return dashboardUrl.href;
     return target.href;
   } catch (error) {
     return dashboardUrl.href;
   }
+}
+
+function destinationForUser(user) {
+  if (!requiresEmailVerification(user)) return safeReturnUrl();
+  const verificationUrl = new URL(accountUrl.href);
+  verificationUrl.searchParams.set("verification", "required");
+  return verificationUrl.href;
 }
 
 function loginUrlForCurrentPage() {
@@ -291,7 +299,7 @@ function addAccountControl(user) {
   const footer = document.querySelector(".sidebar-footer");
   if (!footer || document.getElementById("accountControl")) return;
 
-  const plan = (localStorage.getItem("viewcast:plan") || "basic").charAt(0).toUpperCase() + (localStorage.getItem("viewcast:plan") || "basic").slice(1);
+  const plan = "Basic";
 
   const wrapper = document.createElement("div");
   wrapper.className = "account-control";
@@ -410,34 +418,37 @@ function setupLoginForm() {
         showStep("Creating your Firebase account...");
         const credential = await createUserWithEmailAndPassword(auth, email, password);
         rememberPendingProfile(credential.user, displayName, { isNewAccount: true });
-        setSubmitStatus("Saving profile...");
-        showStep("Saving your display name...");
+        setSubmitStatus("Sending verification...");
+        showStep(`Sending a verification email to ${credential.user.email}...`);
         try {
-          await updateProfile(credential.user, { displayName });
-        } catch (profileError) {
-          console.warn("Profile save will be retried on the homepage.", profileError);
+          await sendEmailVerification(credential.user);
+        } catch (verificationError) {
+          // The account already exists at this point. Continue to the gated
+          // dashboard, where the user can retry without creating a duplicate.
+          console.warn("The initial verification email could not be sent.", verificationError);
         }
-        setSubmitStatus("Saving account...");
-        showStep("Saving your profile to Firestore...");
-        try {
-          await syncUserProfile(credential.user, displayName, { isNewAccount: true });
-        } catch (profileError) {
-          console.warn("Firestore profile save will be retried on the homepage.", profileError);
-          showStep("Account created. Opening your dashboard while the profile save retries...");
-        }
+        // The dashboard retries the pending display-name and Firestore profile
+        // updates. Do not make a successful account creation wait on either
+        // secondary network request before navigating.
+        void updateProfile(credential.user, { displayName }).catch((profileError) => {
+          console.warn("Profile save will be retried on the dashboard.", profileError);
+        });
       } else {
         setSubmitStatus("Signing in...");
         showStep("Signing in with Firebase...");
         const credential = await signInWithEmailAndPassword(auth, email, password);
-        try {
-          await syncUserProfile(credential.user, displayNameFor(credential.user));
-        } catch (profileError) {
-          console.warn("Firestore sign-in sync will be retried on the homepage.", profileError);
-        }
+        setSubmitStatus(requiresEmailVerification(credential.user) ? "Email verification required" : "Opening dashboard...");
+        showStep(
+          requiresEmailVerification(credential.user)
+            ? "Signed in successfully. Opening email verification settings..."
+            : "Opening your dashboard..."
+        );
+        window.location.replace(destinationForUser(credential.user));
+        return;
       }
-      setSubmitStatus("Opening dashboard...");
-      showStep("Opening your dashboard...");
-      window.location.replace(safeReturnUrl());
+      setSubmitStatus("Email verification required");
+      showStep("Account created successfully. Opening email verification settings...");
+      window.location.replace(destinationForUser(auth.currentUser));
     } catch (error) {
       authActionInProgress = false;
       console.error("Firebase authentication request failed.", error);
@@ -506,7 +517,7 @@ if (!firebaseConfigured) {
 
     onAuthStateChanged(auth, async (user) => {
       if (isLoginPage) {
-        if (user && !authActionInProgress) window.location.replace(safeReturnUrl());
+        if (user && !authActionInProgress) window.location.replace(destinationForUser(user));
         return;
       }
 
@@ -516,6 +527,12 @@ if (!firebaseConfigured) {
         return;
       }
 
+      // Authentication has succeeded, so render immediately. Profile refreshes
+      // and Firestore synchronization are network enhancements and must never
+      // hold the entire interface behind an invisible auth gate.
+      updateUserInterface(user);
+      document.body.classList.add("auth-ready");
+
       try {
         await user.reload();
       } catch (error) {
@@ -524,10 +541,9 @@ if (!firebaseConfigured) {
 
       let currentUser = auth.currentUser || user;
 
-      if (requiresEmailVerification(currentUser) && !isAccountPage) {
+      if (requiresEmailVerification(currentUser)) {
         updateUserInterface(currentUser);
-        setupEmailVerificationGate(currentUser);
-        document.body.classList.add("auth-ready");
+        if (!isAccountPage) setupEmailVerificationGate(currentUser);
         return;
       }
 
@@ -556,7 +572,6 @@ if (!firebaseConfigured) {
       }
 
       updateUserInterface(currentUser);
-      document.body.classList.add("auth-ready");
     });
   } catch (error) {
     console.error("Firebase Authentication failed to initialize.", error);

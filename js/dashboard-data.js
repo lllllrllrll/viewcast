@@ -136,6 +136,7 @@ function readCachedAccessToken(user) {
     const token = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
     if (!token?.accessToken || !token.expiresAt) return "";
     if (user?.uid && token.uid && token.uid !== user.uid) return "";
+    if (token.channelId !== readActiveConnection()?.channel?.id) return "";
     if (Date.now() >= token.expiresAt) return "";
     return token.accessToken;
   } catch (error) {
@@ -537,7 +538,7 @@ function renderHealth(connection, overviewData) {
 
 function readRecentTrends(user) {
   if (!user?.uid) return null;
-  const feedKey = `${recentTrendsStorageKeyPrefix}${user.uid}`;
+  const feedKey = `${recentTrendsStorageKeyPrefix}${user.uid}:${readActiveConnection()?.channel?.id || "none"}`;
   try {
     const feed = JSON.parse(localStorage.getItem(feedKey) || "null");
     if (feed?.trends) return feed;
@@ -758,7 +759,7 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
   const db = getFirestore(app);
 
   onAuthStateChanged(auth, (user) => {
-    if (!user?.emailVerified) return;
+    if (!user || !user.emailVerified) return;
     loadYouTubeData(user, db).catch(console.error);
 
     document.querySelectorAll(".segmented button").forEach((button) => {

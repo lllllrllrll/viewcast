@@ -37,8 +37,8 @@ For local testing, use `http://localhost:4173` rather than `127.0.0.1`, or add `
 The app supports:
 
 - Email/password account creation
-- Optional email verification from the Account page
-- Closable verification popup when an unverified account attempts to use a feature
+- Automatic email verification on account creation
+- Verified-email access for dashboard features and Firestore profile data
 - Persistent email/password sign-in
 - Password reset emails
 - Protected dashboard pages
@@ -50,7 +50,7 @@ Each Firestore user profile stores the Firebase UID, email address, display name
 
 ## YouTube OAuth
 
-ViewCast includes a YouTube connection flow that uses Firebase Google sign-in with YouTube scopes:
+ViewCast includes a YouTube connection flow that uses Google authorization with YouTube scopes:
 
 - `js/youtube-connect.js` opens Google consent from the My Channel page.
 - Firebase Auth requests YouTube Data API and YouTube Analytics API read scopes.
@@ -71,15 +71,14 @@ YouTube access tokens are kept in session storage, cleared on sign-out, and sent
 
 ## App Check and AI quotas
 
-The callable Gemini backend has both a short-window instance limit and durable per-user/project daily limits. Firebase App Check support is wired in but intentionally fail-open until a reCAPTCHA Enterprise key is configured, so enabling it cannot accidentally lock every user out.
+The callable Gemini backend has both a short-window instance limit and durable per-user/project daily limits. Firebase App Check is enforced with a score-based reCAPTCHA Enterprise key restricted to `localhost`, `viewcast-a6f31.web.app`, and `viewcast-a6f31.firebaseapp.com`.
 
-To enforce App Check in production:
+When adding a custom production domain:
 
-1. Create a reCAPTCHA Enterprise website key restricted to the exact production hostnames.
-2. Register the web app and that key in **Firebase Console > App Check**.
-3. Put the public site key in `firebaseAppCheckSiteKey` in `js/firebase-config.js` and deploy the client.
-4. Set `ENFORCE_APP_CHECK=true` in the Functions runtime environment and deploy the functions.
-5. Confirm legitimate AI requests succeed, then monitor App Check metrics for rejected traffic.
+1. Add the hostname to the ViewCast reCAPTCHA Enterprise website key.
+2. Add the hostname to Firebase Authentication authorized domains.
+3. Add the hostname to `firebaseAuthorizedDomains` in `js/firebase-config.js` and `auth.authorizedDomains` in `firebase.json`.
+4. Deploy the client and confirm legitimate AI requests succeed.
 
 Never put a reCAPTCHA secret, Gemini API key, or YouTube access token in client configuration. The reCAPTCHA website key is designed to be public; its hostname restrictions provide the important boundary.
 

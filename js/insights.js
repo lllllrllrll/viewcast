@@ -9,7 +9,7 @@ import {
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
-import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js";
+import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=2";
 import { addNotifications } from "./notifications.js";
 
 const scopes = [
@@ -191,7 +191,15 @@ function average(values) {
 }
 
 function videosStorageKey() {
-  return currentUser ? videosStorageKeyPrefix + currentUser.uid : "";
+  return currentUser ? `${videosStorageKeyPrefix}${currentUser.uid}:${activeChannelId() || "none"}` : "";
+}
+
+function activeChannelId() {
+  try {
+    return JSON.parse(localStorage.getItem(connectionStorageKey) || "null")?.channel?.id || "";
+  } catch (error) {
+    return "";
+  }
 }
 
 function readCachedVideos() {
@@ -216,7 +224,7 @@ function saveCachedVideos(videos) {
 }
 
 function insightsStorageKey(focusVideoId = "") {
-  return currentUser ? insightsStorageKeyPrefix + currentUser.uid + ":" + (focusVideoId || "channel") : "";
+  return currentUser ? `${insightsStorageKeyPrefix}${currentUser.uid}:${activeChannelId() || "none"}:${focusVideoId || "channel"}` : "";
 }
 
 function insightsFingerprint(videos, focusVideoId = "") {
@@ -312,7 +320,7 @@ function saveCachedInsights(summary, videos, focusVideoId = "") {
   }).slice(0, 4);
 
   localStorage.setItem(
-    `${recentTrendsStorageKeyPrefix}${currentUser.uid}`,
+    `${recentTrendsStorageKeyPrefix}${currentUser.uid}:${activeChannelId() || "none"}`,
     JSON.stringify({
       trends,
       category: summary.channelLane?.specificCategory ||
@@ -376,7 +384,7 @@ function readCachedAccessToken() {
   localStorage.removeItem(tokenStorageKey);
   try {
     const saved = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
-    if (saved?.accessToken && saved.uid === currentUser?.uid && saved.expiresAt > Date.now() + 60 * 1000) {
+    if (saved?.accessToken && saved.uid === currentUser?.uid && saved.channelId === activeChannelId() && saved.expiresAt > Date.now() + 60 * 1000) {
       return saved.accessToken;
     }
   } catch (error) {
@@ -391,6 +399,7 @@ function saveCachedAccessToken(accessToken) {
   sessionStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
+    channelId: activeChannelId(),
     expiresAt: Date.now() + 50 * 60 * 1000
   }));
 }
@@ -428,13 +437,25 @@ async function requestAccessToken() {
       client_id: googleOAuthClientId,
       scope: scopes.join(" "),
       prompt: "consent select_account",
-      callback: (response) => {
+      callback: async (response) => {
         if (response.error) {
           reject(new Error(response.error_description || response.error));
           return;
         }
-        saveCachedAccessToken(response.access_token);
-        resolve(response.access_token);
+        try {
+          const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+          url.searchParams.set("part", "id");
+          url.searchParams.set("mine", "true");
+          const payload = await fetchJson(url, response.access_token);
+          const channelId = payload.items?.[0]?.id || "";
+          if (!channelId || channelId !== activeChannelId()) {
+            throw new Error("Select the Google account that owns the active YouTube channel.");
+          }
+          saveCachedAccessToken(response.access_token);
+          resolve(response.access_token);
+        } catch (error) {
+          reject(error);
+        }
       },
       error_callback: (error) => {
         if (error.type === "popup_closed") {
@@ -2951,7 +2972,6 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
     showMissingGeminiKeyMessage();
     return;
   }
-
   const requestId = ++analysisRequestId;
 
   try {
@@ -3136,17 +3156,7 @@ if (form && firebaseConfigured) {
   auth = getAuth(app);
   db = getFirestore(app);
   onAuthStateChanged(auth, async (user) => {
-    let refreshedUser = user;
-    if (user) {
-      try {
-        await user.reload();
-        refreshedUser = auth.currentUser || user;
-      } catch (error) {
-        console.warn("Could not refresh email verification status for AI Insights.", error);
-      }
-    }
-
-    currentUser = refreshedUser?.emailVerified ? refreshedUser : null;
+    currentUser = user || null;
     selectedVideoId = "";
     clearAnalyzerResults();
 
@@ -3159,8 +3169,15 @@ if (form && firebaseConfigured) {
     if (!currentUser) {
       channelVideos = [];
       renderVideoLibrary([]);
-      setStatus(refreshedUser ? "Verify your email before generating AI insights." : "Sign in before generating AI insights.");
-      setLibraryStatus(refreshedUser ? "Verify your email to unlock channel insights." : "Sign in and link a channel to generate channel insights.");
+      setStatus("Sign in before generating AI insights.");
+      setLibraryStatus("Sign in and link a channel to generate channel insights.");
+      return;
+    }
+    if (!currentUser.emailVerified) {
+      channelVideos = [];
+      renderVideoLibrary([]);
+      setStatus("Verify your email before generating AI insights.");
+      setLibraryStatus("Verify your email to load linked channel uploads.");
       return;
     }
 

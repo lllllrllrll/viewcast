@@ -11,7 +11,7 @@ if (!getApps().length) initializeApp();
 // Define the secret for the Gemini API Key
 // Set using: firebase functions:secrets:set GEMINI_API_KEY
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
-const enforceAppCheck = process.env.ENFORCE_APP_CHECK === "true";
+const enforceAppCheck = true;
 
 // Allowed models to prevent abuse with expensive models
 const ALLOWED_MODELS = [
@@ -119,16 +119,28 @@ exports.deleteAccount = onCall(
 
       const uid = request.auth.uid;
       try {
-        await getFirestore().doc(`users/${uid}`).delete();
         await getAuth().deleteUser(uid);
-        logger.info("Deleted ViewCast account", {uid});
-        return {deleted: true};
       } catch (error) {
-        logger.error("Account deletion failed", {uid, error});
+        logger.error("Firebase Auth account deletion failed", {uid, error});
         throw new HttpsError(
             "internal",
             "The account could not be deleted. Please try again.",
         );
+      }
+
+      try {
+        // Firestore deletion is idempotent. Perform it after deleting the Auth
+        // identity so a cleanup failure can never leave a usable account with
+        // a missing profile.
+        await getFirestore().doc(`users/${uid}`).delete();
+        logger.info("Deleted ViewCast account and profile", {uid});
+        return {deleted: true, profileDeleted: true};
+      } catch (error) {
+        logger.error("Deleted Auth account but profile cleanup failed", {
+          uid,
+          error,
+        });
+        return {deleted: true, profileDeleted: false};
       }
     },
 );
@@ -288,16 +300,14 @@ exports.generateGeminiContent = onCall(
         );
       }
       if (request.auth.token.email_verified !== true) {
-        logger.warn(
-            "Unverified account attempted to use generateGeminiContent",
-            {uid: request.auth.uid},
-        );
+        logger.warn("Unverified request to generateGeminiContent", {
+          uid: request.auth.uid,
+        });
         throw new HttpsError(
             "permission-denied",
-            "Verify your email address before using ViewCast AI features.",
+            "Verify your email address before using AI features.",
         );
       }
-
       if (!request.data || typeof request.data !== "object") {
         throw new HttpsError("invalid-argument", "Request data is required.");
       }

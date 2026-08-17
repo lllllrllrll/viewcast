@@ -17,6 +17,9 @@ import {
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 (function () {
+  const featureAvailability = {
+    emailNotifications: false
+  };
   const defaults = {
     darkMode: "off",
     emailNotifications: "enabled",
@@ -26,32 +29,30 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
   const planLimits = {
     basic: {
       label: "Basic",
-      videos: 5,
+      videos: Infinity,
       channels: 1,
-      aiAnalyses: 5
+      aiAnalyses: Infinity
     },
     pro: {
       label: "Pro",
       videos: Infinity,
-      channels: 1,
+      channels: 5,
       aiAnalyses: Infinity
     },
     premium: {
       label: "Premium",
       videos: Infinity,
-      channels: 10,
+      channels: 5,
       aiAnalyses: Infinity
     }
   };
 
   const status = document.getElementById("settingsStatus");
   const upgradeButton = document.getElementById("upgradePlan");
-  const planModal = document.getElementById("planModal");
   const closeModal = document.getElementById("closeModal");
   const toggles = document.querySelectorAll("[data-setting]");
   const currentPlanLabels = document.querySelectorAll("[data-current-plan]");
   const planCards = document.querySelectorAll("[data-plan-card]");
-  const planButtons = document.querySelectorAll("[data-plan-choice]");
   const usageLabels = {
     videos: document.querySelector("[data-usage-label='videos']"),
     channels: document.querySelector("[data-usage-label='channels']"),
@@ -73,6 +74,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
   let usesPasswordProvider = false;
 
   function readSetting(key) {
+    if (key === "plan") return defaults.plan;
     return localStorage.getItem(`viewcast:${key}`) || defaults[key];
   }
 
@@ -84,33 +86,19 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     }
   }
 
-  function currentUsageDay() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  }
-
   function readVideosAnalyzed() {
-    try {
-      const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
-      return usage?.day === currentUsageDay() ? Number(usage.count) || 0 : 0;
-    } catch (error) {
-      localStorage.removeItem("viewcastVideosAnalyzed");
-      return 0;
-    }
+    return 0;
   }
 
   function readAiAnalysesUsed() {
-    try {
-      const usage = JSON.parse(localStorage.getItem("viewcastAiAnalysesUsed") || "null");
-      return usage?.day === currentUsageDay() ? Number(usage.count) || 0 : 0;
-    } catch (error) {
-      localStorage.removeItem("viewcastAiAnalysesUsed");
-      return 0;
-    }
+    return 0;
   }
 
   function readChannelsConnected() {
     try {
+      const savedConnections = localStorage.getItem("viewcastYouTubeAllConnections");
+      const connections = JSON.parse(savedConnections || "[]");
+      if (savedConnections && Array.isArray(connections)) return Math.min(5, connections.length);
       const connection = JSON.parse(localStorage.getItem("viewcastYouTubeConnection") || "null");
       if (connection?.channel?.id || connection?.channel?.url || connection?.channel?.title) return 1;
       const channel = JSON.parse(localStorage.getItem("viewcastYouTubeChannel") || "null");
@@ -121,7 +109,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
   }
 
   function usageText(value, limit) {
-    if (limit === Infinity) return `${value} / Unlimited`;
+    if (limit === Infinity) return "Unlimited";
     return `${value} / ${limit}`;
   }
 
@@ -255,6 +243,15 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     const setting = group.dataset.setting;
     updateToggle(group, readSetting(setting));
 
+    if (setting === "emailNotifications" && !featureAvailability.emailNotifications) {
+      group.querySelectorAll("button").forEach((button) => {
+        button.disabled = true;
+        button.title = "Email notifications are coming soon";
+      });
+      group.setAttribute("aria-disabled", "true");
+      return;
+    }
+
     group.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-value]");
       if (!button) return;
@@ -266,19 +263,9 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
   updatePlanDisplay();
 
-  planButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      writeSetting("plan", button.dataset.planChoice);
-      updatePlanDisplay();
-      showStatus("Plan updated.");
-      if (planModal) planModal.hidden = true;
-    });
-  });
-
   window.addEventListener("storage", (event) => {
     if (
-      event.key === "viewcastVideosAnalyzed"
-      || event.key === "viewcastAiAnalysesUsed"
+      event.key === "viewcastYouTubeAllConnections"
       || event.key === "viewcastYouTubeConnection"
       || event.key === "viewcastYouTubeChannel"
       || event.key === "viewcast:plan"
@@ -288,7 +275,6 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
   });
 
   window.addEventListener("viewcast:ai-usage-updated", updatePlanDisplay);
-
   upgradeButton?.addEventListener("click", () => {
     if (typeof window.showPlanModal === "function") {
       window.showPlanModal();
@@ -351,11 +337,4 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     });
   }
 
-  // Check for auto-upgrade prompt
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get("upgrade") === "limit") {
-    if (typeof window.showPlanModal === "function") {
-      window.showPlanModal("You've reached the daily analysis limit for the Basic plan. Upgrade to continue.");
-    }
-  }
 })();

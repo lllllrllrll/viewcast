@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ViewCast - My Channel</title>
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="../css/style.css">
   </head>
   <body>
@@ -69,7 +70,7 @@
             <div class="panel-head">
               <div>
                 <h3>YouTube Connections</h3>
-                <p id="connectionPrompt">Link multiple channels and swap between them to monitor your entire portfolio.</p>
+                <p id="connectionPrompt">Link up to five channels and swap between them to monitor your entire portfolio.</p>
               </div>
               <div id="channelSelectorWrap" hidden>
                 <select class="settings-select" id="channelSelector" aria-label="Select active channel">
@@ -176,9 +177,10 @@
         </section>
       </main>
     </div>
-    <script src="../components/sidebar.js"></script>
-    <script src="../js/script.js?v=2"></script>
-    <script type="module" src="../js/dashboard-data.js?v=4"></script>
-    <script type="module" src="../js/youtube-connect.js?v=8"></script>
+    <script src="../components/sidebar.js?v=2"></script>
+    <script src="../components/plan-modal.js?v=3"></script>
+    <script src="../js/script.js?v=6"></script>
+    <script type="module" src="../js/dashboard-data.js?v=6"></script>
+    <script type="module" src="../js/youtube-connect.js?v=12"></script>
   </body>
 </html>

@@ -18,9 +18,9 @@ export const googleOAuthClientId = "351557961377-ocbt4u5dm00n0mqfjvf808rpakc0b5b
 // Gemini is called only through Firebase Functions. Never place its API key in client code.
 export const geminiModel = "gemini-3.1-flash-lite";
 
-// Set this to the public reCAPTCHA Enterprise site key registered for this
-// Firebase web app before enabling ENFORCE_APP_CHECK for Cloud Functions.
-export const firebaseAppCheckSiteKey = "";
+// Public, domain-restricted reCAPTCHA Enterprise key registered with Firebase
+// App Check. This is intentionally client-visible and is not a secret.
+export const firebaseAppCheckSiteKey = "6LcKsYQtAAAAAKJcohpCNs25IjJf2MstrkUBRY5k";
 
 export const firebaseConfigured = Boolean(
   firebaseConfig.apiKey &&

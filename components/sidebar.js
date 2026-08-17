@@ -79,12 +79,23 @@
           </div>
         </div>
         <nav class="nav">${links}</nav>
+        <button class="sidebar-upgrade-button" type="button" data-open-plan-modal>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v18" />
+            <path d="m5 10 7-7 7 7" />
+          </svg>
+          Upgrade Plan
+        </button>
         <div class="sidebar-footer">
           <strong>${escapeHtml(footerTitle)}</strong>
           <span>${escapeHtml(footerText)}</span>
         </div>
       </aside>
     `;
+
+    document.querySelector("[data-open-plan-modal]")?.addEventListener("click", () => {
+      if (typeof window.showPlanModal === "function") window.showPlanModal();
+    });
   }
 
   document.querySelectorAll("[data-component='sidebar']").forEach(renderSidebar);

@@ -1,13 +1,10 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {
   getAuth,
-  GoogleAuthProvider,
-  linkWithPopup,
-  onAuthStateChanged,
-  reauthenticateWithPopup
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
-import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js";
+import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
+import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=2";
 import { addNotifications } from "./notifications.js";
 
 const scopes = [
@@ -25,6 +22,7 @@ const refreshVideosButton = document.getElementById("refreshVideos");
 const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
 const tokenStorageKey = "viewcastYouTubeAccessToken";
+const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const videoAnalysisStorageKeyPrefix = "viewcastGeminiVideoAnalysis:";
 const videoAnalysisCacheMaxAge = 24 * 60 * 60 * 1000;
@@ -36,6 +34,7 @@ let selectedVideoId = "";
 let analysisRequestId = 0;
 let initialVideoId = "";
 let timelineDismissHandler = null;
+let googleIdentityScriptPromise = null;
 const maxUploadBytes = 15 * 1024 * 1024;
 
 function setStatus(message) {
@@ -184,8 +183,16 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function activeChannelId() {
+  try {
+    return JSON.parse(localStorage.getItem(connectionStorageKey) || "null")?.channel?.id || "";
+  } catch (error) {
+    return "";
+  }
+}
+
 function videosStorageKey() {
-  return currentUser ? videosStorageKeyPrefix + currentUser.uid : "";
+  return currentUser ? `${videosStorageKeyPrefix}${currentUser.uid}:${activeChannelId() || "none"}` : "";
 }
 
 function readCachedVideos() {
@@ -253,24 +260,6 @@ function saveCachedGeminiVideoAnalysis(video, analytics, retentionPoints, search
     analysis,
     savedAt: Date.now()
   }));
-}
-
-function usageDay() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
-function recordVideoAnalysis() {
-  const key = "viewcastVideosAnalyzed";
-  let usage = {day: usageDay(), count: 0};
-  try {
-    const saved = JSON.parse(localStorage.getItem(key) || "null");
-    if (saved?.day === usage.day) usage.count = Number(saved.count) || 0;
-  } catch (error) {
-    localStorage.removeItem(key);
-  }
-  usage.count += 1;
-  localStorage.setItem(key, JSON.stringify(usage));
 }
 
 function setLibraryStatus(message) {
@@ -343,18 +332,11 @@ function parseVideoId(value) {
   return "";
 }
 
-function createProvider() {
-  const provider = new GoogleAuthProvider();
-  scopes.forEach((scope) => provider.addScope(scope));
-  provider.setCustomParameters({include_granted_scopes: "true"});
-  return provider;
-}
-
 function readCachedAccessToken() {
   localStorage.removeItem(tokenStorageKey);
   try {
     const saved = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
-    if (saved?.accessToken && saved.uid === currentUser?.uid && saved.expiresAt > Date.now() + 60 * 1000) {
+    if (saved?.accessToken && saved.uid === currentUser?.uid && saved.channelId === activeChannelId() && saved.expiresAt > Date.now() + 60 * 1000) {
       return saved.accessToken;
     }
   } catch (error) {
@@ -369,6 +351,7 @@ function saveCachedAccessToken(accessToken) {
   sessionStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
+    channelId: activeChannelId(),
     expiresAt: Date.now() + 50 * 60 * 1000
   }));
 }
@@ -378,20 +361,58 @@ function clearCachedAccessToken() {
   sessionStorage.removeItem(tokenStorageKey);
 }
 
-function userHasGoogleProvider(user) {
-  return user.providerData.some((provider) => provider.providerId === "google.com");
+function loadGoogleIdentityServices() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  if (googleIdentityScriptPromise) return googleIdentityScriptPromise;
+  googleIdentityScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Google Identity Services could not load."));
+    document.head.append(script);
+  });
+  return googleIdentityScriptPromise;
+}
+
+async function authorizedChannelId(accessToken) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+  url.searchParams.set("part", "id");
+  url.searchParams.set("mine", "true");
+  const payload = await fetchJson(url, accessToken);
+  return payload.items?.[0]?.id || "";
 }
 
 async function requestAccessToken() {
   if (!currentUser) throw new Error("Sign in before analyzing a video.");
-  const provider = createProvider();
-  const result = userHasGoogleProvider(currentUser)
-    ? await reauthenticateWithPopup(currentUser, provider)
-    : await linkWithPopup(currentUser, provider);
-  const credential = GoogleAuthProvider.credentialFromResult(result);
-  if (!credential?.accessToken) throw new Error("Google did not return a YouTube access token.");
-  saveCachedAccessToken(credential.accessToken);
-  return credential.accessToken;
+  if (!googleOAuthClientId) throw new Error("Missing Google OAuth client ID. Add your Web OAuth client ID in js/firebase-config.js.");
+  await loadGoogleIdentityServices();
+  return new Promise((resolve, reject) => {
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: googleOAuthClientId,
+      scope: scopes.join(" "),
+      prompt: "consent select_account",
+      callback: async (response) => {
+        if (response.error) {
+          reject(new Error(response.error_description || response.error));
+          return;
+        }
+        try {
+          const channelId = await authorizedChannelId(response.access_token);
+          if (!channelId || channelId !== activeChannelId()) {
+            throw new Error("Select the Google account that owns the active YouTube channel.");
+          }
+          saveCachedAccessToken(response.access_token);
+          resolve(response.access_token);
+        } catch (error) {
+          reject(error);
+        }
+      },
+      error_callback: (error) => reject(new Error(error.message || error.type || "Google authorization failed."))
+    });
+    tokenClient.requestAccessToken();
+  });
 }
 
 async function getAccessToken() {
@@ -1109,21 +1130,6 @@ async function analyzeVideoById(videoId) {
     return;
   }
 
-  // Check plan limits
-  const plan = localStorage.getItem("viewcast:plan") || "basic";
-  if (plan === "basic") {
-    const usage = JSON.parse(localStorage.getItem("viewcastVideosAnalyzed") || "null");
-    const currentDay = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
-    if (usage?.day === currentDay && usage.count >= 5) {
-      if (typeof window.showPlanModal === "function") {
-        window.showPlanModal("You've reached the daily analysis limit for the Basic plan. Upgrade to continue.");
-      } else {
-        window.location.href = "settings.html?upgrade=limit";
-      }
-      return;
-    }
-  }
-
   const requestId = ++analysisRequestId;
 
   try {
@@ -1164,7 +1170,6 @@ async function analyzeVideoById(videoId) {
     }
     if (requestId !== analysisRequestId) return;
 
-    recordVideoAnalysis();
     updateLibrarySelection(video.id);
     updateMetrics(video, analytics, geminiAnalysis);
     updateSearchTerms(searchTerms);
@@ -1257,7 +1262,6 @@ async function analyzeUploadedVideo(file) {
     setStatus("AI analysis is unavailable until Gemini is configured.");
     return;
   }
-
   const requestId = ++analysisRequestId;
   try {
     setBusy(true);
@@ -1290,7 +1294,6 @@ async function analyzeUploadedVideo(file) {
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
-    recordVideoAnalysis();
     setStatus(`Analysis complete for ${file.name}. Uploaded files do not include YouTube performance metrics.`);
     setLibraryStatus(`Analyzed uploaded file: ${file.name}.`);
     addNotifications((analysis.timelineInterestPoints || []).slice(0, 2).map((point, index) => ({
@@ -1381,14 +1384,21 @@ if (form && firebaseConfigured) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   auth = getAuth(app);
   onAuthStateChanged(auth, (user) => {
-    currentUser = user?.emailVerified ? user : null;
+    currentUser = user || null;
     selectedVideoId = "";
     clearAnalyzerResults();
     if (!currentUser) {
       channelVideos = [];
       renderVideoLibrary([]);
-      setStatus(user ? "Verify your email before analyzing a video." : "Sign in before analyzing a video.");
-      setLibraryStatus(user ? "Verify your email to unlock your video library." : "Sign in and link a channel to load your videos.");
+      setStatus("Sign in before analyzing a video.");
+      setLibraryStatus("Sign in and link a channel to load your videos.");
+      return;
+    }
+    if (!currentUser.emailVerified) {
+      channelVideos = [];
+      renderVideoLibrary([]);
+      setStatus("Verify your email before analyzing a video.");
+      setLibraryStatus("Verify your email to load linked channel uploads.");
       return;
     }
 

@@ -130,6 +130,42 @@ body:not([data-public-page]) .app {
   visibility: hidden;
 }
 
+body:not([data-public-page]):not(.auth-ready)::before {
+  content: "Loading your ViewCast workspace…";
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding-top: 76px;
+  color: #667085;
+  font: 600 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #f6f8fb;
+}
+
+body:not([data-public-page]):not(.auth-ready)::after {
+  content: "";
+  position: fixed;
+  z-index: 10001;
+  top: calc(50% - 22px);
+  left: calc(50% - 18px);
+  width: 32px;
+  height: 32px;
+  border: 3px solid #d8e0ea;
+  border-top-color: #0f8b8d;
+  border-radius: 50%;
+  animation: auth-loading-spin 0.8s linear infinite;
+}
+
+body.settings-dark:not([data-public-page]):not(.auth-ready)::before {
+  color: #a8b3c5;
+  background: #111827;
+}
+
+@keyframes auth-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
 body.auth-ready .app {
   visibility: visible;
 }
@@ -331,11 +367,49 @@ select {
 }
 
 .sidebar-footer {
-  margin-top: auto;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
+}
+
+.sidebar-upgrade-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  margin-top: auto;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--teal);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 160ms ease, filter 160ms ease;
+}
+
+.sidebar-upgrade-button:hover {
+  filter: brightness(0.94);
+  transform: translateY(-1px);
+}
+
+.sidebar-upgrade-button:focus-visible {
+  outline: 3px solid var(--teal-soft);
+  outline-offset: 2px;
+}
+
+.sidebar-upgrade-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .sidebar-footer strong {
@@ -1574,6 +1648,11 @@ body.settings-dark .plan-indicator {
   box-shadow: 0 3px 10px rgba(30, 41, 59, 0.08);
 }
 
+.segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .settings-stack {
   display: grid;
   gap: 20px;
@@ -1585,6 +1664,17 @@ body.settings-dark .plan-indicator {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+}
+
+.settings-label-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-label-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .settings-select {

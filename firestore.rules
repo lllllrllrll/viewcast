@@ -13,7 +13,7 @@ rules_version = '2';
 //   - updatedAt: timestamp (required, set by the server)
 //   - lastSignInAt: timestamp (required)
 //   - createdAt: timestamp (optional, immutable after creation)
-//   - youtubeConnections: list (optional, at most 10 validated connections)
+//   - youtubeConnections: list (optional, at most 5 validated connections)
 //   - youtubeConnection: map (optional validated legacy connection)
 //   - channelTopic: string (optional, at most 120 characters)
 //   - channelContext: string (optional, at most 1000 characters)
@@ -97,14 +97,21 @@ service cloud.firestore {
         ])
         && data.views is number
         && data.views >= 0
+        && data.views <= 10000000000000000
         && data.estimatedMinutesWatched is number
         && data.estimatedMinutesWatched >= 0
+        && data.estimatedMinutesWatched <= 10000000000000000
         && data.averageViewDuration is number
         && data.averageViewDuration >= 0
+        && data.averageViewDuration <= 604800
         && data.subscribersGained is number
+        && data.subscribersGained >= -1000000000000
+        && data.subscribersGained <= 1000000000000
         && (!('estimatedRevenue' in data)
           || data.estimatedRevenue == null
-          || data.estimatedRevenue is number);
+          || (data.estimatedRevenue is number
+            && data.estimatedRevenue >= -1000000000000
+            && data.estimatedRevenue <= 1000000000000));
     }
 
     function isValidConnection(data) {
@@ -123,7 +130,8 @@ service cloud.firestore {
         && (data.analyticsSummary == null
           || isValidAnalyticsSummary(data.analyticsSummary))
         && data.connectedAt is int
-        && data.connectedAt > 0;
+        && data.connectedAt >= 946684800000
+        && data.connectedAt <= request.time.toMillis() + 300000;
     }
 
     function isValidConnectionAt(connections, index) {
@@ -133,17 +141,12 @@ service cloud.firestore {
 
     function isValidConnections(connections) {
       return connections is list
-        && connections.size() <= 10
+        && connections.size() <= 5
         && isValidConnectionAt(connections, 0)
         && isValidConnectionAt(connections, 1)
         && isValidConnectionAt(connections, 2)
         && isValidConnectionAt(connections, 3)
-        && isValidConnectionAt(connections, 4)
-        && isValidConnectionAt(connections, 5)
-        && isValidConnectionAt(connections, 6)
-        && isValidConnectionAt(connections, 7)
-        && isValidConnectionAt(connections, 8)
-        && isValidConnectionAt(connections, 9);
+        && isValidConnectionAt(connections, 4);
     }
 
     function hasValidOptionalConnectionFields(data) {
@@ -200,18 +203,32 @@ service cloud.firestore {
         && hasValidOptionalChannelContext(data);
     }
 
+    function hasValidCreateTimestamps(data) {
+      return data.createdAt == request.time
+        && data.lastSignInAt == request.time;
+    }
+
+    function hasValidUpdateTimestamps(data) {
+      return (('createdAt' in resource.data)
+          && data.createdAt == resource.data.createdAt
+          || !('createdAt' in resource.data)
+          && !('createdAt' in data))
+        && (data.lastSignInAt == resource.data.lastSignInAt
+          || data.lastSignInAt == request.time);
+    }
+
     match /users/{userId} {
       allow create: if isVerifiedOwner(userId)
         && uidUnchanged(userId)
-        && isValidUser(request.resource.data);
+        && isValidUser(request.resource.data)
+        && hasValidCreateTimestamps(request.resource.data);
 
       allow read: if isVerifiedOwner(userId);
 
       allow update: if isVerifiedOwner(userId)
         && uidNotModified()
         && isValidUser(request.resource.data)
-        && (!('createdAt' in resource.data)
-          || request.resource.data.createdAt == resource.data.createdAt);
+        && hasValidUpdateTimestamps(request.resource.data);
 
       // Account deletion is handled by the authenticated Cloud Function so
       // profile data and the Firebase Authentication account stay consistent.

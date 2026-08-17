@@ -1,4 +1,4 @@
-import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js";
+import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=2";
 import { addNotifications } from "./notifications.js";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -309,7 +309,6 @@ form.addEventListener("submit", async (event) => {
     setStatus("Gemini is not configured for this workspace.", "error");
     return;
   }
-
   analyzeButton.disabled = true;
   analyzeButton.classList.add("is-loading");
   setStatus("Gemini is reviewing your thumbnail…", "loading");

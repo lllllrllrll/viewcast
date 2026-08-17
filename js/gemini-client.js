@@ -5,7 +5,7 @@ import {
   firebaseConfig,
   firebaseConfigured,
   geminiModel
-} from "./firebase-config.js";
+} from "./firebase-config.js?v=2";
 import {
   initializeAppCheck,
   ReCaptchaEnterpriseProvider
