@@ -2337,6 +2337,40 @@ tbody tr:hover {
   background: #f8fafc;
 }
 
+.launch-window-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #10694a;
+  background: #def6eb;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.launch-ranking-table {
+  min-width: 640px;
+}
+
+.launch-rank {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--teal);
+  background: var(--teal-soft);
+  font-weight: 800;
+}
+
+.table-empty-state {
+  padding: 30px 16px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .status {
   display: inline-flex;
   align-items: center;

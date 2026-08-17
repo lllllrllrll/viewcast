@@ -623,6 +623,53 @@ function renderVideoTable(overviewData) {
   }).join("");
 }
 
+function launchAgeLabel(hours) {
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m`;
+  const wholeHours = Math.floor(hours);
+  const minutes = Math.round((hours - wholeHours) * 60);
+  return minutes ? `${wholeHours}h ${minutes}m` : `${wholeHours}h`;
+}
+
+function renderFirstDayRanking(overviewData) {
+  const tbody = document.querySelector("[data-first-day-ranking]");
+  if (!tbody) return;
+
+  const now = Date.now();
+  const rankedVideos = (overviewData?.videos || [])
+    .map((video) => {
+      const publishedAt = new Date(video.snippet?.publishedAt || "").getTime();
+      const ageHours = (now - publishedAt) / 3600000;
+      const views = numberValue(video.statistics?.viewCount) || 0;
+      return {
+        video,
+        ageHours,
+        views,
+        viewsPerHour: views / Math.max(ageHours, 1 / 60)
+      };
+    })
+    .filter((item) => Number.isFinite(item.ageHours) && item.ageHours >= 0 && item.ageHours <= 24)
+    .sort((a, b) => b.viewsPerHour - a.viewsPerHour || b.views - a.views)
+    .slice(0, 5);
+
+  if (!rankedVideos.length) {
+    const message = overviewData?.videos?.length
+      ? "No uploads are currently within their first 24 hours. This ranking will appear after your next upload."
+      : "Connect YouTube to track videos during their first 24 hours.";
+    tbody.innerHTML = `<tr><td class="table-empty-state" colspan="5">${message}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rankedVideos.map((item, index) => `
+    <tr>
+      <td><span class="launch-rank">${index + 1}</span></td>
+      <td>${escapeHtml(item.video.snippet?.title || "Untitled")}</td>
+      <td>${launchAgeLabel(item.ageHours)} / 24h</td>
+      <td>${wholeNumber(item.views)}</td>
+      <td><strong>${compactNumber(item.viewsPerHour)}</strong></td>
+    </tr>
+  `).join("");
+}
+
 function renderPerformanceNotifications(overviewData) {
   const container = document.querySelector("[data-performance-notifications]");
   if (!container) return;
@@ -710,6 +757,7 @@ function renderOverviewData(connection, overviewData = null, user = null) {
   renderHealth(connection, overviewData);
   renderRecentTrends(user);
   renderVideoTable(overviewData);
+  renderFirstDayRanking(overviewData);
   renderPerformanceNotifications(overviewData);
   renderSubscribersTrend(connection, overviewData);
   renderUploadFrequency(overviewData);
