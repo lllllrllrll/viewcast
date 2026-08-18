@@ -22,6 +22,7 @@ const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 const firstDayHistoryKeyPrefix = "viewcastFirstDayHistory:";
 const metadataHistoryKeyPrefix = "viewcastVideoMetadataHistory:";
+const metadataEventsKeyPrefix = "viewcastVideoMetadataEvents:";
 
 const trafficSourceLabels = {
   ADVERTISING: "Advertising",
@@ -615,6 +616,16 @@ function videoFormat(video) {
   return "Video";
 }
 
+function dashboardFormatFilter() {
+  return String(window.viewcastDashboardFormat || "all");
+}
+
+function visibleDashboardVideos(overviewData) {
+  const filter = dashboardFormatFilter();
+  const videos = overviewData?.videos || [];
+  return filter === "all" ? videos : videos.filter((video) => videoFormat(video) === filter);
+}
+
 function decimal(value, digits = 1) {
   const number = numberValue(value);
   if (number === null) return "—";
@@ -640,7 +651,7 @@ function renderVideoTable(overviewData) {
   const tbody = document.querySelector("[data-overview-videos]");
   if (!tbody) return;
   const metrics = analyticsByVideo(overviewData);
-  const videos = [...(overviewData?.videos || [])]
+  const videos = [...visibleDashboardVideos(overviewData)]
     .filter((video) => metrics.has(String(video.id)))
     .sort((a, b) => metrics.get(String(b.id)).views - metrics.get(String(a.id)).views)
     .slice(0, 4);
@@ -650,7 +661,7 @@ function renderVideoTable(overviewData) {
     const engagement = item.likes + item.comments + item.shares;
     const perThousand = item.views ? 1000 / item.views : 0;
     const rpm = item.revenue !== null && item.views ? item.revenue * perThousand : null;
-    return `<tr><td>${escapeHtml(video.snippet?.title || "Untitled")}<small class="table-secondary">${videoFormat(video)}</small></td><td>${wholeNumber(item.views)}</td><td>${item.averageViewPercentage !== null ? `${decimal(item.averageViewPercentage)}%` : "—"}</td><td>${decimal(item.watchMinutes / 60)}</td><td>${decimal(item.subscribersGained * perThousand, 2)}</td><td>${decimal(engagement * perThousand)}</td><td>${rpm !== null ? currency(rpm) : "—"}</td></tr>`;
+    return `<tr><td><a class="dashboard-video-link" href="pages/analyzer.html?video=${encodeURIComponent(video.id)}">${escapeHtml(video.snippet?.title || "Untitled")}</a><small class="table-secondary">${videoFormat(video)}</small></td><td>${wholeNumber(item.views)}</td><td>${item.averageViewPercentage !== null ? `${decimal(item.averageViewPercentage)}%` : "—"}</td><td>${decimal(item.watchMinutes / 60)}</td><td>${decimal(item.subscribersGained * perThousand, 2)}</td><td>${decimal(engagement * perThousand)}</td><td>${rpm !== null ? currency(rpm) : "—"}</td></tr>`;
   }).join("");
 }
 
@@ -678,7 +689,7 @@ function renderSignalList(key, rows, labeler = (value) => value) {
 }
 
 function renderFormatBenchmarks(overviewData) {
-  const videos = overviewData?.videos || [];
+  const videos = visibleDashboardVideos(overviewData);
   const metrics = analyticsByVideo(overviewData);
   const groups = new Map();
   videos.forEach((video) => {
@@ -776,7 +787,7 @@ function renderFirstDayRanking(overviewData, connection, user) {
   const channelId = connection?.channel?.id || "none";
   const historyKey = `${firstDayHistoryKeyPrefix}${user?.uid || "guest"}:${channelId}`;
   const history = readLocalJson(historyKey, {});
-  const videoRows = (overviewData?.videos || [])
+  const videoRows = visibleDashboardVideos(overviewData)
     .map((video) => {
       const publishedAt = new Date(video.snippet?.publishedAt || "").getTime();
       const ageHours = (now - publishedAt) / 3600000;
@@ -828,7 +839,7 @@ function renderFirstDayRanking(overviewData, connection, user) {
     return `
     <tr>
       <td><span class="launch-rank">${index + 1}</span></td>
-      <td>${escapeHtml(item.video.snippet?.title || "Untitled")}</td>
+      <td><a class="dashboard-video-link" href="pages/analyzer.html?video=${encodeURIComponent(item.video.id)}">${escapeHtml(item.video.snippet?.title || "Untitled")}</a></td>
       <td>${launchAgeLabel(item.ageHours)} / 24h</td>
       <td>${wholeNumber(item.views)}</td>
       <td><strong>${compactNumber(item.viewsPerHour)}</strong></td>
@@ -846,6 +857,8 @@ function trackVideoMetadata(overviewData, connection, user) {
   }
   const key = `${metadataHistoryKeyPrefix}${user.uid}:${channelId}`;
   const previous = readLocalJson(key, {});
+  const eventsKey = `${metadataEventsKeyPrefix}${user.uid}:${channelId}`;
+  const events = readLocalJson(eventsKey, []);
   let changes = 0;
   const next = {};
   (overviewData?.videos || []).forEach((video) => {
@@ -856,10 +869,18 @@ function trackVideoMetadata(overviewData, connection, user) {
       thumbnail: String(video.snippet?.thumbnails?.medium?.url || video.snippet?.thumbnails?.default?.url || ""),
       checkedAt: Date.now()
     };
-    if (previous[id] && (previous[id].title !== metadata.title || previous[id].thumbnail !== metadata.thumbnail)) changes += 1;
+    if (previous[id] && previous[id].title !== metadata.title) {
+      changes += 1;
+      events.unshift({videoId: id, title: metadata.title, type: "Title", detectedAt: Date.now()});
+    }
+    if (previous[id] && previous[id].thumbnail !== metadata.thumbnail) {
+      changes += 1;
+      events.unshift({videoId: id, title: metadata.title, type: "Thumbnail", detectedAt: Date.now()});
+    }
     next[id] = metadata;
   });
   localStorage.setItem(key, JSON.stringify(next));
+  localStorage.setItem(eventsKey, JSON.stringify(events.slice(0, 50)));
   setIntelligence("metadata-tracking", changes ? `${changes} change${changes === 1 ? "" : "s"} detected` : "Tracking active");
 }
 
@@ -963,11 +984,19 @@ function escapeHtml(value) { return String(value || "").replace(/&/g, "&amp;").r
 function applyYouTubeData(connection, overviewData = null, user = null) {
   const values = fieldValues(connection);
   document.querySelectorAll("[data-youtube-field]").forEach((element) => { element.textContent = values[element.dataset.youtubeField] || emptyValue; });
-  if (!connection) { renderInsights(null); renderOverviewData(null, null, user); return; }
+  if (!connection) {
+    renderInsights(null);
+    renderOverviewData(null, null, user);
+    window.viewcastDashboardState = {connection: null, overviewData: null, user: user || null};
+    window.dispatchEvent(new CustomEvent("viewcast:dashboard-data", {detail: window.viewcastDashboardState}));
+    return;
+  }
   const summary = `Showing saved YouTube data for ${connection.channel.title}.`;
   document.querySelectorAll("[data-youtube-summary]").forEach((element) => { element.textContent = summary; });
   renderInsights(connection);
   renderOverviewData(connection, overviewData, user);
+  window.viewcastDashboardState = {connection, overviewData, user: user || null};
+  window.dispatchEvent(new CustomEvent("viewcast:dashboard-data", {detail: window.viewcastDashboardState}));
 }
 
 async function loadYouTubeData(user, db, days = 30) {
@@ -1026,5 +1055,10 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
 
   window.addEventListener("viewcast:youtube-unlinked", () => {
     applyYouTubeData(null, null, getAuth().currentUser);
+  });
+
+  window.addEventListener("viewcast:dashboard-filter", () => {
+    const current = window.viewcastDashboardState;
+    if (current) renderOverviewData(current.connection, current.overviewData, current.user);
   });
 }

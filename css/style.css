@@ -795,6 +795,207 @@ body.settings-dark .plan-indicator {
   gap: 16px;
 }
 
+.dashboard-control-bar {
+  position: sticky;
+  top: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+  backdrop-filter: blur(12px);
+}
+
+.dashboard-control-bar label,
+.goal-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dashboard-control-bar select,
+.comparison-controls select,
+.goal-form input {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 32px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+}
+
+.dashboard-quality-summary {
+  margin-left: auto;
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-customizer {
+  position: fixed;
+  z-index: 1000;
+  top: 80px;
+  right: 24px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 110px);
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+}
+
+.dashboard-customizer[hidden],
+.goal-form[hidden],
+[data-dashboard-widget][hidden] {
+  display: none !important;
+}
+
+.dashboard-customizer > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dashboard-widget-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.dashboard-widget-options label {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.dashboard-video-link,
+.comparison-results a {
+  color: var(--teal);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.dashboard-video-link:hover,
+.comparison-results a:hover {
+  text-decoration: underline;
+}
+
+.comparison-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.comparison-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.comparison-results section {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.comparison-results section > a {
+  grid-column: 1 / -1;
+}
+
+.comparison-results section div {
+  display: grid;
+  gap: 2px;
+}
+
+.comparison-results section span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.positive { color: var(--green); }
+.negative { color: var(--rose); }
+
+.goal-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.goal-progress-list,
+.dashboard-alert-list,
+.metadata-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.goal-progress-list > div > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.dashboard-alert-list > div,
+.metadata-timeline > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-left: 3px solid var(--amber);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.dashboard-alert-list span,
+.metadata-timeline span,
+.metadata-timeline time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.next-action-card {
+  padding: 18px;
+  border-radius: 10px;
+  color: #0b5e60;
+  background: var(--teal-soft);
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-control-bar { flex-wrap: wrap; }
+  .dashboard-quality-summary { width: 100%; margin-left: 0; }
+  .goal-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .dashboard-control-bar label { flex: 1 1 42%; }
+  .dashboard-control-bar select { width: 100%; }
+  .comparison-controls, .comparison-results, .goal-form { grid-template-columns: 1fr; }
+  .comparison-controls span { text-align: center; }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
