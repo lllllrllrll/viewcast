@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ViewCast - My Channel</title>
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/style.css?v=7">
   </head>
   <body>
     <div class="app">
@@ -144,9 +144,9 @@
             </div>
             <div>
               <h3>Estimated Revenue</h3>
-              <div class="metric-value" data-youtube-field="estimated-revenue">&nbsp;</div>
+              <div class="metric-value" data-youtube-field="estimated-revenue">Not available</div>
+              <p class="metric-data-status" data-revenue-status>Checking YouTube revenue access…</p>
             </div>
-            <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
           <article class="panel large">
@@ -180,7 +180,7 @@
     <script src="../components/sidebar.js?v=2"></script>
     <script src="../components/plan-modal.js?v=3"></script>
     <script src="../js/script.js?v=8"></script>
-    <script type="module" src="../js/dashboard-data.js?v=7"></script>
+    <script type="module" src="../js/dashboard-data.js?v=8"></script>
     <script type="module" src="../js/youtube-connect.js?v=13"></script>
   </body>
 </html>

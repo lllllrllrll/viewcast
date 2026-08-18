@@ -221,7 +221,7 @@ function fieldValues(connection) {
     "watch-hours": watchHours(analyticsSummary.estimatedMinutesWatched),
     "average-view-duration": duration(analyticsSummary.averageViewDuration),
     "subscribers-gained": wholeNumber(analyticsSummary.subscribersGained),
-    "estimated-revenue": currency(analyticsSummary.estimatedRevenue)
+    "estimated-revenue": currency(analyticsSummary.estimatedRevenue) || "Not available"
   };
 }
 
@@ -284,6 +284,7 @@ async function fetchLiveOverview(accessToken, days = 30) {
     traffic: trafficResult.status === "fulfilled" ? trafficResult.value : [],
     videos: videosResult.status === "fulfilled" ? videosResult.value : [],
     estimatedRevenue: revenueResult.status === "fulfilled" ? revenueResult.value?.[0]?.[0] ?? null : null,
+    revenueStatus: revenueResult.status === "fulfilled" ? "available" : "permission-required",
     videoAnalytics: videoAnalyticsResult.status === "fulfilled" ? videoAnalyticsResult.value : [],
     videoRevenue: videoRevenueResult.status === "fulfilled" ? videoRevenueResult.value : [],
     countries: countriesResult.status === "fulfilled" ? countriesResult.value : [],
@@ -836,7 +837,15 @@ function renderOverviewData(connection, overviewData = null, user = null) {
   const avgDuration = dailySummary.durationCount ? dailySummary.durationTotal / dailySummary.durationCount : numberValue(analyticsSummary.averageViewDuration);
   const estimatedRevenue = numberValue(overviewData?.estimatedRevenue) ?? numberValue(analyticsSummary.estimatedRevenue);
 
-  setElementText("[data-youtube-field=\"estimated-revenue\"]", currency(estimatedRevenue));
+  setElementText("[data-youtube-field=\"estimated-revenue\"]", currency(estimatedRevenue) || "Not available");
+  setElementText(
+    "[data-revenue-status]",
+    estimatedRevenue !== null
+      ? "Estimated revenue for the latest 28-day report."
+      : overviewData?.revenueStatus === "permission-required"
+        ? "Unavailable. Reconnect YouTube after monetary analytics access is approved."
+        : "Available only for eligible monetized channels with monetary analytics access."
+  );
   setTrend("total-views", totalViews !== null ? "Lifetime" : "");
   setTrend("subscriber-count", subscribers !== null ? "Total" : "");
   setTrend("video-count", videos !== null ? "Uploads" : "", "warn");
