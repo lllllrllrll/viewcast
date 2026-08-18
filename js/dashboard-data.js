@@ -8,7 +8,6 @@ import {
   getDoc,
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
-import { readNotifications } from "./notifications.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const emptyValue = "\u00a0";
@@ -17,8 +16,6 @@ const allConnectionsKey = "viewcastYouTubeAllConnections";
 const channelStorageKey = "viewcastYouTubeChannel";
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const overviewStorageKeyPrefix = "viewcastOverviewData:";
-const insightsStorageKeyPrefix = "viewcastAiInsights:";
-const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 const firstDayHistoryKeyPrefix = "viewcastFirstDayHistory:";
 const metadataHistoryKeyPrefix = "viewcastVideoMetadataHistory:";
@@ -554,61 +551,6 @@ function renderHealth(connection, overviewData) {
   setProgress("subscribers", Math.min(100, Math.max(0, subscribers) / Math.max(1, views) * 10000), wholeNumber(subscribers));
 }
 
-function readRecentTrends(user) {
-  if (!user?.uid) return null;
-  const feedKey = `${recentTrendsStorageKeyPrefix}${user.uid}:${readActiveConnection()?.channel?.id || "none"}`;
-  try {
-    const feed = JSON.parse(localStorage.getItem(feedKey) || "null");
-    if (feed?.trends) return feed;
-
-    const legacy = JSON.parse(
-      sessionStorage.getItem(`${insightsStorageKeyPrefix}${user.uid}:channel`) || "null"
-    );
-    if (!legacy?.summary) return null;
-    const summary = legacy.summary;
-    return {
-      trends: [
-        ...(summary.geminiInsights?.validatedTrends || []),
-        ...(summary.currentTrends || [])
-      ],
-      category: summary.channelLane?.specificCategory ||
-        summary.channelLane?.primaryCategory ||
-        "Channel trend",
-      savedAt: legacy.savedAt
-    };
-  } catch {
-    localStorage.removeItem(feedKey);
-    return null;
-  }
-}
-
-function renderRecentTrends(user) {
-  const container = document.querySelector("[data-overview-trends]");
-  if (!container) return;
-  const cached = readRecentTrends(user);
-  const trends = (cached?.trends || []).slice(0, 4);
-
-  if (!trends.length) {
-    container.innerHTML = `
-      <div class="activity-item">
-        <i class="dot"></i>
-        <div><b>No saved trends yet</b><span>Generate Trend Suggestions in AI Insights to populate this section.</span></div>
-        <time>Insights</time>
-      </div>`;
-    return;
-  }
-
-  const category = cached.category || "Channel trend";
-  const savedLabel = cached?.savedAt ? timeAgo(cached.savedAt) : "Recent";
-  container.innerHTML = trends.map((trend) => `
-    <div class="activity-item">
-      <i class="dot"></i>
-      <div><b>${escapeHtml(trend)}</b><span>${escapeHtml(category)}</span></div>
-      <time>${escapeHtml(savedLabel)}</time>
-    </div>
-  `).join("");
-}
-
 function videoFormat(video) {
   const seconds = secondsFromIso(video.contentDetails?.duration || "");
   if (seconds && seconds <= 60) return "Short";
@@ -884,70 +826,6 @@ function trackVideoMetadata(overviewData, connection, user) {
   setIntelligence("metadata-tracking", changes ? `${changes} change${changes === 1 ? "" : "s"} detected` : "Tracking active");
 }
 
-function renderPerformanceNotifications(overviewData) {
-  const container = document.querySelector("[data-performance-notifications]");
-  if (!container) return;
-  const notifications = readNotifications();
-  const videos = overviewData?.videos || [];
-  if (videos.length >= 2) {
-    const latestVideo = videos[0];
-    const views = numberValue(latestVideo.statistics?.viewCount);
-    const average = videos.slice(1).reduce((sum, v) => sum + (numberValue(v.statistics?.viewCount) || 0), 0) / (videos.length - 1);
-    const ratio = views !== null && average ? views / average : 1;
-    if (ratio >= 1.15 || ratio <= 0.85) {
-      const tone = ratio >= 1.15 ? "teal" : "rose";
-      const title = ratio >= 1.15 ? "Above Average" : "Below Average";
-      const publishedAt = new Date(latestVideo.snippet?.publishedAt || "").getTime();
-      notifications.unshift({
-        id: `performance:${latestVideo.id}`,
-        title,
-        message: latestVideo.snippet?.title || "Latest upload",
-        href: `pages/analyzer.html?video=${encodeURIComponent(latestVideo.id)}`,
-        tone,
-        createdAt: Number.isFinite(publishedAt) ? publishedAt : Date.now()
-      });
-    }
-  }
-
-  const unique = notifications.filter((item, index, values) =>
-    values.findIndex((candidate) => candidate.id === item.id) === index).slice(0, 7);
-  container.replaceChildren(...unique.map((item) => {
-    const link = document.createElement("a");
-    link.className = "notif-item unread";
-    link.href = /^pages\/[a-z-]+\.html(?:\?.*)?$/.test(item.href)
-      ? item.href
-      : "index.html";
-    const icon = document.createElement("div");
-    icon.className = `notif-icon ${item.tone || "blue"}`;
-    icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>';
-    const body = document.createElement("div");
-    body.className = "notif-body";
-    const text = document.createElement("p");
-    const strong = document.createElement("strong");
-    strong.textContent = item.title;
-    text.append(strong, document.createTextNode(`: ${item.message || "View result"}`));
-    const time = document.createElement("time");
-    time.textContent = item.createdAt ? timeAgo(item.createdAt) : "Recent";
-    body.append(text, time);
-    link.append(icon, body);
-    return link;
-  }));
-
-  if (!unique.length) {
-    const empty = document.createElement("div");
-    empty.className = "notif-empty";
-    empty.textContent = "No analysis results yet.";
-    container.append(empty);
-  }
-  const readAt = Number(localStorage.getItem("viewcastNotificationsRead") || 0);
-  const hasUnread = unique.some((item) => Number(item.createdAt || 0) > readAt);
-  const badge = document.querySelector(".notif-badge");
-  const markRead = document.getElementById("markRead");
-  if (badge) badge.hidden = !hasUnread;
-  if (markRead) markRead.hidden = !hasUnread;
-  if (!hasUnread) container.querySelectorAll(".unread").forEach((item) => item.classList.remove("unread"));
-}
-
 function renderOverviewData(connection, overviewData = null, user = null) {
   const analyticsSummary = connection?.analyticsSummary || {};
   const channel = connection?.channel || {};
@@ -958,7 +836,6 @@ function renderOverviewData(connection, overviewData = null, user = null) {
   const avgDuration = dailySummary.durationCount ? dailySummary.durationTotal / dailySummary.durationCount : numberValue(analyticsSummary.averageViewDuration);
   const estimatedRevenue = numberValue(overviewData?.estimatedRevenue) ?? numberValue(analyticsSummary.estimatedRevenue);
 
-  setElementText("[data-overview-status]", connection ? "Overview is using verified channel totals." : "Connect your YouTube channel to populate Overview.");
   setElementText("[data-youtube-field=\"estimated-revenue\"]", currency(estimatedRevenue));
   setTrend("total-views", totalViews !== null ? "Lifetime" : "");
   setTrend("subscriber-count", subscribers !== null ? "Total" : "");
@@ -969,12 +846,10 @@ function renderOverviewData(connection, overviewData = null, user = null) {
   renderSparklineData(overviewData);
   renderTrafficSources(overviewData);
   renderHealth(connection, overviewData);
-  renderRecentTrends(user);
   renderVideoTable(overviewData);
   renderFirstDayRanking(overviewData, connection, user);
   renderGrowthIntelligence(connection, overviewData);
   trackVideoMetadata(overviewData, connection, user);
-  renderPerformanceNotifications(overviewData);
   renderSubscribersTrend(connection, overviewData);
   renderUploadFrequency(overviewData);
 }
