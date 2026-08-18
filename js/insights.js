@@ -9,7 +9,7 @@ import {
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
-import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=2";
+import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=3";
 import { addNotifications } from "./notifications.js";
 
 const scopes = [
@@ -2289,10 +2289,10 @@ function compactAdviceSummary(summary) {
 }
 
 function channelVideoContext(videos) {
-  return videos.slice(0, 12).map((video) => ({
+  return videos.slice(0, 8).map((video) => ({
     title: video.snippet?.title || "Untitled video",
-    description: shortText(video.snippet?.description || "", 90),
-    tags: (video.snippet?.tags || []).slice(0, 4),
+    description: shortText(video.snippet?.description || "", 60),
+    tags: (video.snippet?.tags || []).slice(0, 3),
     publishedAt: video.snippet?.publishedAt || "",
     views: numberValue(video.statistics?.viewCount) || 0,
     likes: numberValue(video.statistics?.likeCount) || 0,
@@ -2326,9 +2326,9 @@ function uploadPerformanceContext(videos) {
     medianViews: Math.round(median(views) || 0),
     shortAverageViews: averageViewsFor(shorts),
     videoAverageViews: averageViewsFor(longVideos),
-    topPerformers: [...mapped].sort((a, b) => b.views - a.views).slice(0, 5),
-    underPerformers: [...mapped].sort((a, b) => a.views - b.views).slice(0, 4),
-    recentUploads: mapped.slice(0, 6)
+    topPerformers: [...mapped].sort((a, b) => b.views - a.views).slice(0, 3),
+    underPerformers: [...mapped].sort((a, b) => a.views - b.views).slice(0, 2),
+    recentUploads: mapped.slice(0, 4)
   };
 }
 
@@ -2461,7 +2461,7 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 1100
+        maxOutputTokens: 800
       }
     });
     const text = payload.candidates?.[0]?.content?.parts
@@ -2487,7 +2487,7 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
 
 function geminiContext(summary) {
   const trendReferences = summary.trendVideos
-    .slice(0, 8)
+    .slice(0, 5)
     .map((video) => ({
       ...trendEvidence(video),
       likes: numberValue(video.statistics?.likeCount) || 0,
@@ -2497,7 +2497,7 @@ function geminiContext(summary) {
     }))
     .filter((video) => video.title);
   const outsideTrendReferences = (summary.outsideTrendVideos || [])
-    .slice(0, 6)
+    .slice(0, 4)
     .map((video) => ({
       ...trendEvidence(video),
       category: youtubeCategoryName(video.snippet?.categoryId) || "Popular video",
@@ -2523,7 +2523,7 @@ function geminiContext(summary) {
     trendReferences,
     outsideTrendReferences,
     trendQueries: summary.trendVideos.trendQueries || [],
-    contentInterpretations: summary.contentInterpretations || []
+    contentInterpretations: (summary.contentInterpretations || []).slice(0, 5)
   };
 }
 
@@ -2750,7 +2750,7 @@ async function buildGeminiPageInsights(summary, videos) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 1100
+        maxOutputTokens: 850
       }
     });
 
@@ -2771,22 +2771,31 @@ async function buildGeminiPageInsights(summary, videos) {
 async function buildGeminiChatReply(question, summary) {
   if (!isGeminiAvailable()) return "An error has occurred. The AI assistant is unavailable right now.";
 
+  const fullContext = summary ? geminiContext(summary) : null;
+  const chatContext = fullContext ? {
+    creatorProvidedContext: fullContext.creatorProvidedContext,
+    channelCategory: fullContext.channelCategory,
+    currentYouTubeTrend: fullContext.currentYouTubeTrend,
+    bestUploadTime: fullContext.bestUploadTime,
+    nextVideoLength: fullContext.nextVideoLength,
+    nextShortLength: fullContext.nextShortLength,
+    suggestedIdeas: fullContext.suggestedIdeas,
+    trendReferences: fullContext.trendReferences.slice(0, 3)
+  } : null;
   const systemInstruction = [
-    "You are ViewCast's YouTube channel advice assistant.",
-    "Give concise, practical creator advice. Do not invent analytics beyond the provided context.",
-    "Use the channel category and trend references to suggest specific next actions.",
-    "Keep the answer to 2-4 short sentences.",
+    "Give concise, practical YouTube advice using only the supplied channel context.",
+    "Do not invent analytics. Answer in 2-3 short sentences.",
     "",
     "Channel context:",
-    summary ? JSON.stringify(geminiContext(summary)) : "No channel data analyzed yet. Ask the user questions to understand their goals and niche."
+    chatContext ? JSON.stringify(chatContext) : "No channel data yet. Ask one focused question."
   ].join("\n");
 
   try {
     const text = await requestGeminiText({
-      contents: chatHistory.slice(-6),
+      contents: chatHistory.slice(-4),
       systemInstruction,
       generationConfig: {
-        maxOutputTokens: 160
+        maxOutputTokens: 120
       }
     });
 

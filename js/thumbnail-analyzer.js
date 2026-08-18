@@ -1,4 +1,4 @@
-import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=2";
+import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=3";
 import { addNotifications } from "./notifications.js";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -32,8 +32,8 @@ const comparisonUrls = {v1: "", v2: ""};
 const thumbnailCachePrefix = "viewcastThumbnailAnalysis:";
 const comparisonCachePrefix = "viewcastThumbnailComparison:";
 const RESULT_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
-const MAX_IMAGE_DIMENSION = 1280;
-const IMAGE_QUALITY = 0.84;
+const MAX_IMAGE_DIMENSION = 960;
+const IMAGE_QUALITY = 0.76;
 
 function imageMimeType(file) {
   if (ALLOWED_TYPES.has(file?.type)) return file.type;
@@ -156,22 +156,22 @@ function fileFingerprint(file) {
   return [file?.name || "", file?.size || 0, file?.lastModified || 0].join(":");
 }
 
-function readSessionResult(key) {
+function readCachedResult(key) {
   try {
-    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
     if (!saved?.value || Date.now() - saved.savedAt > RESULT_CACHE_MAX_AGE) {
-      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
       return null;
     }
     return saved.value;
   } catch {
-    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
     return null;
   }
 }
 
-function saveSessionResult(key, value) {
-  if (value) sessionStorage.setItem(key, JSON.stringify({value, savedAt: Date.now()}));
+function saveCachedResult(key, value) {
+  if (value) localStorage.setItem(key, JSON.stringify({value, savedAt: Date.now()}));
 }
 
 function parseJson(text) {
@@ -246,15 +246,15 @@ thumbnailChatForm.addEventListener("submit", async (event) => {
   thumbnailChatStatus.textContent = "Gemini is thinking…";
   thumbnailChatStatus.dataset.type = "loading";
   try {
-    const recentConversation = thumbnailChatHistory.slice(-4)
+    const recentConversation = thumbnailChatHistory.slice(-2)
       .map((message) => `${message.role === "user" ? "User" : "Gemini"}: ${message.text}`)
       .join("\n");
     const reply = await requestGeminiText({
-      systemInstruction: "You are an expert YouTube thumbnail strategist answering follow-up questions about your prior visual analysis. Be concise, specific, honest about uncertainty, and ground every answer in the supplied thumbnail and analysis.",
+      systemInstruction: "Answer thumbnail follow-ups concisely using only the supplied analysis. Be specific and honest about uncertainty.",
       contents: [{role: "user", parts: [
-        {text: `Use the completed visual analysis below; do not re-analyze the image.\nAnalysis:${JSON.stringify(latestAnalysis)}\nTitle:${thumbnailTitle.value.trim()}\nConversation:${recentConversation}\nAnswer the latest question directly.`}
+        {text: `Analysis:${JSON.stringify({score: latestAnalysis.score, verdict: latestAnalysis.verdict, titleAlignment: latestAnalysis.titleAlignment, improvements: latestAnalysis.improvements, recommendation: latestAnalysis.recommendation})}\nTitle:${thumbnailTitle.value.trim()}\nRecent chat:${recentConversation}\nAnswer the latest question directly.`}
       ]}],
-      generationConfig: {temperature: 0.35, maxOutputTokens: 180}
+      generationConfig: {temperature: 0.3, maxOutputTokens: 120}
     });
     const answer = reply || "I could not produce a useful answer for that question.";
     appendThumbnailChatMessage("assistant", answer);
@@ -315,10 +315,10 @@ form.addEventListener("submit", async (event) => {
   try {
     const videoTitle = thumbnailTitle.value.trim();
     const cacheKey = `${thumbnailCachePrefix}${fileFingerprint(selectedFile)}:${videoTitle}`;
-    const cachedAnalysis = readSessionResult(cacheKey);
+    const cachedAnalysis = readCachedResult(cacheKey);
     if (cachedAnalysis) {
       renderAnalysis(cachedAnalysis);
-      setStatus("Showing this session's saved analysis.", "success");
+      setStatus("Showing your saved analysis.", "success");
       return;
     }
 
@@ -332,10 +332,10 @@ form.addEventListener("submit", async (event) => {
           { inlineData: optimized }
         ]
       }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 650, responseMimeType: "application/json" }
+      generationConfig: { temperature: 0.3, maxOutputTokens: 480, responseMimeType: "application/json" }
     });
     const analysis = {...parseJson(response), _videoTitle: videoTitle};
-    saveSessionResult(cacheKey, analysis);
+    saveCachedResult(cacheKey, analysis);
     sessionStorage.setItem("viewcastLatestThumbnailResult", cacheKey);
     renderAnalysis(analysis);
     addNotifications([
@@ -491,10 +491,10 @@ comparisonForm.addEventListener("submit", async (event) => {
   try {
     const videoTitle = comparisonTitle.value.trim();
     const cacheKey = `${comparisonCachePrefix}${fileFingerprint(comparisonFiles.v1)}:${fileFingerprint(comparisonFiles.v2)}:${videoTitle}`;
-    const cachedComparison = readSessionResult(cacheKey);
+    const cachedComparison = readCachedResult(cacheKey);
     if (cachedComparison) {
       renderComparison(cachedComparison);
-      setComparisonStatus("Showing this session's saved comparison.", "success");
+      setComparisonStatus("Showing your saved comparison.", "success");
       return;
     }
 
@@ -505,16 +505,15 @@ comparisonForm.addEventListener("submit", async (event) => {
     const response = await requestGeminiText({
       systemInstruction: "You are an expert YouTube thumbnail strategist. Compare the two labeled images objectively and return only valid JSON, without markdown.",
       contents: [{role: "user", parts: [
-        {text: `Compare two thumbnail versions together with the video title "${videoTitle}". Do not judge either image in isolation. Determine what the title promises, then compare that promise with what each thumbnail communicates. Make title–thumbnail alignment 40% of each score, with likely click performance, visual hierarchy, mobile readability, emotional pull, curiosity, clarity, and clutter making up the remaining 60%. Scores must be from 0 to 10 and may use one decimal place. The next image is Version 1.`},
+        {text: `Compare two thumbnail versions for the title "${videoTitle}". The following images are Version 1, then Version 2. Score title alignment at 40%; use likely click performance, hierarchy, mobile readability, emotion, curiosity, clarity, and clutter for 60%. Scores are 0-10.`},
         {inlineData: version1},
-        {text: "The next image is Version 2."},
         {inlineData: version2},
         {text: 'Return this exact JSON shape: {"winner":"Version 1, Version 2, or Tie","version1Score":0.0,"version2Score":0.0,"summary":"2-3 sentence comparison tied to the title","winnerReasons":["reason","reason","reason"],"feedback":["specific Version 1 feedback","specific Version 2 feedback","shared lesson"],"recommendation":"best combined redesign direction for this title"}'}
       ]}],
-      generationConfig: {temperature: 0.25, maxOutputTokens: 650, responseMimeType: "application/json"}
+      generationConfig: {temperature: 0.25, maxOutputTokens: 480, responseMimeType: "application/json"}
     });
     const comparison = {...parseJson(response), _videoTitle: videoTitle};
-    saveSessionResult(cacheKey, comparison);
+    saveCachedResult(cacheKey, comparison);
     sessionStorage.setItem("viewcastLatestThumbnailComparison", cacheKey);
     renderComparison(comparison);
     addNotifications([
@@ -546,7 +545,7 @@ comparisonForm.addEventListener("submit", async (event) => {
 const notificationParams = new URLSearchParams(window.location.search);
 if (notificationParams.get("result") === "latest") {
   const key = sessionStorage.getItem("viewcastLatestThumbnailResult") || "";
-  const result = readSessionResult(key);
+  const result = readCachedResult(key);
   if (result) {
     renderAnalysis(result);
     setStatus("Showing your latest saved thumbnail result.", "success");
@@ -554,7 +553,7 @@ if (notificationParams.get("result") === "latest") {
 }
 if (notificationParams.get("comparison") === "latest") {
   const key = sessionStorage.getItem("viewcastLatestThumbnailComparison") || "";
-  const comparison = readSessionResult(key);
+  const comparison = readCachedResult(key);
   if (comparison) {
     document.querySelector("[data-thumbnail-tab='comparison']")?.click();
     renderComparison(comparison);

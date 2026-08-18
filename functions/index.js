@@ -18,10 +18,10 @@ const ALLOWED_MODELS = [
   "gemini-3.1-flash-lite",
 ];
 const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite";
-const MAX_TEXT_CHARS = 60000;
+const MAX_TEXT_CHARS = 30000;
 const MAX_INLINE_DATA_CHARS = 7 * 1024 * 1024;
-const MAX_SYSTEM_CHARS = 12000;
-const MAX_OUTPUT_TOKENS = 2048;
+const MAX_SYSTEM_CHARS = 6000;
+const MAX_OUTPUT_TOKENS = 1200;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_REQUESTS = 12;
 const MAX_RATE_LIMIT_USERS = 5000;
@@ -151,10 +151,10 @@ exports.deleteAccount = onCall(
  * @return {void}
  */
 function validateContents(contents) {
-  if (!Array.isArray(contents) || !contents.length || contents.length > 12) {
+  if (!Array.isArray(contents) || !contents.length || contents.length > 8) {
     throw new HttpsError(
         "invalid-argument",
-        "Contents must contain between 1 and 12 messages.",
+        "Contents must contain between 1 and 8 messages.",
     );
   }
 
@@ -165,7 +165,7 @@ function validateContents(contents) {
         !["user", "model"].includes(message.role) ||
         !Array.isArray(message.parts) ||
         !message.parts.length ||
-        message.parts.length > 8) {
+        message.parts.length > 4) {
       throw new HttpsError("invalid-argument", "Invalid message structure.");
     }
     message.parts.forEach((part) => {
@@ -258,7 +258,7 @@ function validatedGenerationConfig(value) {
     config.topK = value.topK;
   }
   const outputTokens = value.maxOutputTokens === undefined ?
-    1024 :
+    512 :
     value.maxOutputTokens;
   if (!Number.isInteger(outputTokens) ||
       outputTokens < 1 || outputTokens > MAX_OUTPUT_TOKENS) {

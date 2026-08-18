@@ -39,19 +39,27 @@ function safeGeminiModel(modelName) {
   return allowedGeminiModels.has(model) ? model : fallbackGeminiModel;
 }
 
-function recordAiAnalysis() {
+function recordAiAnalysis(usageMetadata = {}) {
   if (typeof window === "undefined") return;
   const now = new Date();
   const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const key = "viewcastAiAnalysesUsed";
-  let usage = {day, count: 0};
+  let usage = {day, count: 0, promptTokens: 0, outputTokens: 0, totalTokens: 0};
   try {
     const saved = JSON.parse(localStorage.getItem(key) || "null");
-    if (saved?.day === day) usage.count = Number(saved.count) || 0;
+    if (saved?.day === day) {
+      usage.count = Number(saved.count) || 0;
+      usage.promptTokens = Number(saved.promptTokens) || 0;
+      usage.outputTokens = Number(saved.outputTokens) || 0;
+      usage.totalTokens = Number(saved.totalTokens) || 0;
+    }
   } catch (error) {
     localStorage.removeItem(key);
   }
   usage.count += 1;
+  usage.promptTokens += Number(usageMetadata.promptTokenCount) || 0;
+  usage.outputTokens += Number(usageMetadata.candidatesTokenCount) || 0;
+  usage.totalTokens += Number(usageMetadata.totalTokenCount) || 0;
   localStorage.setItem(key, JSON.stringify(usage));
   window.dispatchEvent(new CustomEvent("viewcast:ai-usage-updated", {detail: usage}));
 }
@@ -89,7 +97,7 @@ export async function requestGeminiContent(options) {
 
   const request = requestGeminiFunction(options)
     .then((result) => {
-      recordAiAnalysis();
+      recordAiAnalysis(result.usageMetadata);
       return result;
     })
     .finally(() => pendingRequests.delete(key));

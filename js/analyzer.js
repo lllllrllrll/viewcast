@@ -4,7 +4,7 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
-import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=2";
+import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=3";
 import { addNotifications } from "./notifications.js";
 
 const scopes = [
@@ -222,7 +222,7 @@ function videoAnalysisStorageKey(videoId = "") {
 
 function videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms) {
   return JSON.stringify({
-    analysisVersion: 2,
+    analysisVersion: 3,
     id: video.id || "",
     views: video.statistics?.viewCount || "",
     likes: video.statistics?.likeCount || "",
@@ -239,15 +239,15 @@ function readCachedGeminiVideoAnalysis(video, analytics, retentionPoints, search
   const key = videoAnalysisStorageKey(video.id);
   if (!key) return null;
   try {
-    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
     if (!saved?.analysis || saved.fingerprint !== videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms)) return null;
     if (Date.now() - saved.savedAt > videoAnalysisCacheMaxAge) {
-      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
       return null;
     }
     return saved.analysis;
   } catch (error) {
-    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
     return null;
   }
 }
@@ -255,7 +255,7 @@ function readCachedGeminiVideoAnalysis(video, analytics, retentionPoints, search
 function saveCachedGeminiVideoAnalysis(video, analytics, retentionPoints, searchTerms, analysis) {
   const key = videoAnalysisStorageKey(video.id);
   if (!key || !analysis) return;
-  sessionStorage.setItem(key, JSON.stringify({
+  localStorage.setItem(key, JSON.stringify({
     fingerprint: videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms),
     analysis,
     savedAt: Date.now()
@@ -740,7 +740,7 @@ function safeJsonParse(value) {
 }
 
 function channelVideoContext(videos) {
-  return videos.slice(0, 10).map((video) => ({
+  return videos.slice(0, 6).map((video) => ({
     id: video.id || "",
     title: video.snippet?.title || "Untitled video",
     publishedAt: video.snippet?.publishedAt || "",
@@ -758,8 +758,8 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
   const views = videos.map((item) => numberValue(item.statistics?.viewCount)).filter((value) => value !== null);
   const averageViews = views.length ? Math.round(views.reduce((sum, value) => sum + value, 0) / views.length) : 0;
   const retentionSamples = retentionPoints
-    .filter((_, index) => index % Math.max(1, Math.floor(retentionPoints.length / 6)) === 0)
-    .slice(0, 7)
+    .filter((_, index) => index % Math.max(1, Math.floor(retentionPoints.length / 5)) === 0)
+    .slice(0, 5)
     .map((point) => ({
       time: durationSeconds ? durationFromSeconds(point.position * durationSeconds) : `${Math.round(point.position * 100)}%`,
       retentionPercent: Math.round(point.ratio * 100)
@@ -771,8 +771,8 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
     selectedVideo: {
       id: video.id || "",
       title: video.snippet?.title || "Untitled video",
-      description: shortText(video.snippet?.description || "", 220),
-      tags: (video.snippet?.tags || []).slice(0, 6),
+      description: shortText(video.snippet?.description || "", 140),
+      tags: (video.snippet?.tags || []).slice(0, 4),
       publishedAt: video.snippet?.publishedAt || "",
       duration: durationFromIso(video.contentDetails?.duration),
       youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId),
@@ -789,7 +789,7 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
       } : null,
       retentionSamples,
       retentionDips,
-      youtubeSearchTerms: searchTerms.slice(0, 5).map((term) => ({
+      youtubeSearchTerms: searchTerms.slice(0, 3).map((term) => ({
         term: term.term,
         views: term.views,
         period: term.periodLabel
@@ -881,7 +881,7 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 700
+        maxOutputTokens: 520
       }
     });
     const text = payload.candidates?.[0]?.content?.parts
@@ -1279,7 +1279,7 @@ async function analyzeUploadedVideo(file) {
     ].join("\n");
     const payload = await requestGeminiContent({
       contents: [{role: "user", parts: [{text: prompt}, {inlineData: {mimeType: file.type, data}}]}],
-      generationConfig: {responseMimeType: "application/json", maxOutputTokens: 700}
+      generationConfig: {responseMimeType: "application/json", maxOutputTokens: 520}
     });
     if (requestId !== analysisRequestId) return;
     const responseText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
