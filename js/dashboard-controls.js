@@ -3,7 +3,6 @@
   const activeConnectionKey = "viewcastYouTubeConnection";
   const activeChannelKey = "viewcastYouTubeChannel";
   const goalsKey = "viewcastDashboardGoals";
-  const hiddenWidgetsKey = "viewcastDashboardHiddenWidgets";
   let state = {connection: null, overviewData: null, user: null};
 
   function readJson(key, fallback) {
@@ -49,12 +48,7 @@
         <label>Channel<select id="dashboardChannel"><option value="">No channel connected</option></select></label>
         <label>Format<select id="dashboardFormat"><option value="all">All formats</option><option>Short</option><option>Video</option><option>Long-form</option></select></label>
         <label>Comparison baseline<select id="dashboardBenchmark"><option value="5">Average of 5 other recent uploads</option><option value="10" selected>Average of 10 other recent uploads</option><option value="20">Average of 20 other recent uploads</option></select></label>
-        <button class="account-cancel-button" id="customizeDashboard" type="button">Customize</button>
         <span class="dashboard-quality-summary" id="dashboardQualitySummary">Waiting for channel data</span>
-      </section>
-      <section class="dashboard-customizer" id="dashboardCustomizer" hidden>
-        <div><strong>Visible widgets</strong><button class="close-button" id="closeDashboardCustomizer" type="button" aria-label="Close customization">&times;</button></div>
-        <div class="dashboard-widget-options" id="dashboardWidgetOptions"></div>
       </section>
     `);
     grid.insertAdjacentHTML("beforeend", `
@@ -87,7 +81,6 @@
     `);
     assignWidgetNames();
     bindControls();
-    renderCustomizer();
   }
 
   function assignWidgetNames() {
@@ -119,8 +112,6 @@
     document.getElementById("compareVideoB")?.addEventListener("change", renderComparison);
     document.getElementById("editGoals")?.addEventListener("click", () => { document.getElementById("goalForm").hidden = false; });
     document.getElementById("goalForm")?.addEventListener("submit", saveGoals);
-    document.getElementById("customizeDashboard")?.addEventListener("click", () => { document.getElementById("dashboardCustomizer").hidden = false; });
-    document.getElementById("closeDashboardCustomizer")?.addEventListener("click", () => { document.getElementById("dashboardCustomizer").hidden = true; });
   }
 
   function populateChannels() {
@@ -225,14 +216,6 @@
     const key = `viewcastVideoMetadataEvents:${state.user?.uid || "guest"}:${state.connection?.channel?.id || "none"}`;
     const events = readJson(key, []).slice(0, 12); const container = document.getElementById("metadataTimeline"); if (!container) return;
     container.innerHTML = events.length ? events.map((event) => `<div><time>${new Date(event.detectedAt).toLocaleString()}</time><b>${escapeHtml(event.title || "Video")}</b><span>${escapeHtml(event.type)} changed</span></div>`).join("") : '<p class="signal-empty">No title or thumbnail changes detected yet.</p>';
-  }
-
-  function renderCustomizer() {
-    const hidden = new Set(readJson(hiddenWidgetsKey, [])); const options = document.getElementById("dashboardWidgetOptions"); if (!options) return;
-    const panels = [...document.querySelectorAll("[data-dashboard-widget]")];
-    panels.forEach((panel) => { panel.hidden = hidden.has(panel.dataset.dashboardWidget); });
-    options.innerHTML = panels.map((panel, index) => `<label><input type="checkbox" data-widget-index="${index}" ${hidden.has(panel.dataset.dashboardWidget) ? "" : "checked"}>${escapeHtml(panel.dataset.dashboardWidget)}</label>`).join("");
-    options.querySelectorAll("input").forEach((input) => input.addEventListener("change", () => { const panel = panels[number(input.dataset.widgetIndex)]; const next = new Set(readJson(hiddenWidgetsKey, [])); input.checked ? next.delete(panel.dataset.dashboardWidget) : next.add(panel.dataset.dashboardWidget); localStorage.setItem(hiddenWidgetsKey, JSON.stringify([...next])); panel.hidden = !input.checked; }));
   }
 
   function renderAll() { populateChannels(); populateComparison(); renderComparison(); renderGoals(); renderRecommendationsAndAlerts(); renderDataQuality(); renderTimeline(); }
