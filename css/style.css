@@ -907,6 +907,16 @@ body.settings-dark .plan-indicator {
   gap: 12px;
 }
 
+.comparison-benchmark-summary {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
 .comparison-results section {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

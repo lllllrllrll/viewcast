@@ -48,7 +48,7 @@
         <label>Range<select id="dashboardRange"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select></label>
         <label>Channel<select id="dashboardChannel"><option value="">No channel connected</option></select></label>
         <label>Format<select id="dashboardFormat"><option value="all">All formats</option><option>Short</option><option>Video</option><option>Long-form</option></select></label>
-        <label>Benchmark<select id="dashboardBenchmark"><option value="5">Previous 5</option><option value="10" selected>Previous 10</option><option value="20">Previous 20</option></select></label>
+        <label>Comparison baseline<select id="dashboardBenchmark"><option value="5">Average of 5 other recent uploads</option><option value="10" selected>Average of 10 other recent uploads</option><option value="20">Average of 20 other recent uploads</option></select></label>
         <button class="account-cancel-button" id="customizeDashboard" type="button">Customize</button>
         <span class="dashboard-quality-summary" id="dashboardQualitySummary">Waiting for channel data</span>
       </section>
@@ -152,18 +152,22 @@
 
   function renderComparison() {
     const container = document.getElementById("comparisonResults"); if (!container) return;
-    const map = analyticsMap(); const videos = visibleVideos();
+    const map = analyticsMap();
+    const videos = [...visibleVideos()].sort((a, b) => new Date(b.snippet?.publishedAt || 0) - new Date(a.snippet?.publishedAt || 0));
     const ids = [document.getElementById("compareVideoA")?.value, document.getElementById("compareVideoB")?.value].filter(Boolean);
     const benchmarkCount = number(document.getElementById("dashboardBenchmark")?.value || 10);
-    const benchmarkRows = videos.map((video) => map.get(String(video.id))).filter(Boolean).slice(0, benchmarkCount);
+    const benchmarkRows = videos.filter((video) => !ids.includes(String(video.id))).map((video) => map.get(String(video.id))).filter(Boolean).slice(0, benchmarkCount);
     const typicalViews = benchmarkRows.length ? benchmarkRows.reduce((sum, item) => sum + item.views, 0) / benchmarkRows.length : 0;
     if (!ids.length || !map.size) { container.innerHTML = '<p class="signal-empty">No comparable video analytics are available.</p>'; return; }
-    container.innerHTML = ids.map((id) => {
+    const baselineSummary = benchmarkRows.length
+      ? `<p class="comparison-benchmark-summary"><b>Benchmark:</b> ${format(typicalViews)} average views across ${benchmarkRows.length} other recent upload${benchmarkRows.length === 1 ? "" : "s"}.</p>`
+      : '<p class="comparison-benchmark-summary"><b>Benchmark unavailable:</b> Connect more uploads or choose a broader format filter.</p>';
+    container.innerHTML = baselineSummary + ids.map((id) => {
       const video = videos.find((item) => String(item.id) === String(id)); const item = map.get(String(id));
       if (!video || !item) return "";
       const engagement = item.views ? ((item.likes + item.comments + item.shares) / item.views) * 1000 : 0;
-      const delta = typicalViews ? ((item.views / typicalViews) - 1) * 100 : 0;
-      return `<section><a href="pages/analyzer.html?video=${encodeURIComponent(id)}">${escapeHtml(video.snippet?.title || "Untitled")}</a><div><b>${format(item.views)}</b><span>views</span></div><div><b>${format(item.retention, 1)}%</b><span>viewed</span></div><div><b>${format(engagement, 1)}</b><span>engagement / 1K</span></div><div><b class="${delta >= 0 ? "positive" : "negative"}">${delta >= 0 ? "+" : ""}${format(delta, 0)}%</b><span>vs. benchmark</span></div></section>`;
+      const delta = typicalViews ? ((item.views / typicalViews) - 1) * 100 : null;
+      return `<section><a href="pages/analyzer.html?video=${encodeURIComponent(id)}">${escapeHtml(video.snippet?.title || "Untitled")}</a><div><b>${format(item.views)}</b><span>views</span></div><div><b>${format(item.retention, 1)}%</b><span>viewed</span></div><div><b>${format(engagement, 1)}</b><span>engagement / 1K</span></div><div><b class="${delta === null ? "" : delta >= 0 ? "positive" : "negative"}">${delta === null ? "—" : `${delta >= 0 ? "+" : ""}${format(delta, 0)}%`}</b><span>vs. benchmark</span></div></section>`;
     }).join("");
   }
 
