@@ -170,7 +170,7 @@
             <div class="panel-head">
               <div>
                 <h3>Video Performance</h3>
-                <p>Best-performing uploads, ranked from highest to lowest views.</p>
+                <p>Owner-only 28-day performance, retention, conversion, engagement, and revenue efficiency.</p>
               </div>
               <button class="icon-button" type="button" aria-label="Download table" title="Download table">
                 <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
@@ -181,45 +181,17 @@
                 <thead>
                   <tr>
                     <th>Video</th>
-                    <th>Format</th>
-                    <th>Views</th>
-                    <th>Likes</th>
-                    <th>Comments</th>
-                    <th>Status</th>
+                    <th>28D views</th>
+                    <th>Avg. viewed</th>
+                    <th>Watch hours</th>
+                    <th>Subs / 1K</th>
+                    <th>Engagement / 1K</th>
+                    <th>RPM</th>
                   </tr>
                 </thead>
                 <tbody data-overview-videos>
                   <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-                  <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-                  <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-                  <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
+                    <td class="table-empty-state" colspan="7">Waiting for YouTube Analytics…</td>
                   </tr>
                 </tbody>
               </table>
@@ -243,14 +215,58 @@
                     <th>Time live</th>
                     <th>Views so far</th>
                     <th>Views/hour</th>
+                    <th>Vs. typical</th>
                   </tr>
                 </thead>
                 <tbody data-first-day-ranking>
                   <tr>
-                    <td class="table-empty-state" colspan="5">Connect YouTube to track videos during their first 24 hours.</td>
+                    <td class="table-empty-state" colspan="6">Connect YouTube to track videos during their first 24 hours.</td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </article>
+
+          <article class="panel full">
+            <div class="panel-head">
+              <div>
+                <h3>Growth Intelligence</h3>
+                <p>Channel benchmarks and projections calculated from the latest 28 days.</p>
+              </div>
+              <span class="data-freshness" data-intelligence="freshness">Waiting for sync</span>
+            </div>
+            <div class="intelligence-grid">
+              <div class="intelligence-card"><span>Typical video</span><strong data-intelligence="typical-video">—</strong><small>Median 28-day views per upload</small></div>
+              <div class="intelligence-card"><span>Average retention</span><strong data-intelligence="retention">—</strong><small>Average percentage viewed</small></div>
+              <div class="intelligence-card"><span>Subscriber conversion</span><strong data-intelligence="subscriber-conversion">—</strong><small>Subscribers gained per 1,000 views</small></div>
+              <div class="intelligence-card"><span>Engagement rate</span><strong data-intelligence="engagement-rate">—</strong><small>Likes, comments, and shares per 1,000 views</small></div>
+              <div class="intelligence-card"><span>Watch-time velocity</span><strong data-intelligence="watch-velocity">—</strong><small>Watch hours generated per day</small></div>
+              <div class="intelligence-card"><span>Revenue efficiency</span><strong data-intelligence="rpm">—</strong><small>Estimated revenue per 1,000 views</small></div>
+              <div class="intelligence-card"><span>Next view milestone</span><strong data-intelligence="milestone">—</strong><small data-intelligence="milestone-detail">Based on recent daily views</small></div>
+              <div class="intelligence-card"><span>Strongest viewing day</span><strong data-intelligence="best-day">—</strong><small>Best recent day-of-week signal for scheduling</small></div>
+            </div>
+          </article>
+
+          <article class="panel large">
+            <div class="panel-head"><div><h3>Audience &amp; Discovery</h3><p>Who is watching and how viewers find the channel.</p></div></div>
+            <div class="discovery-grid">
+              <section><h4>Top countries</h4><div class="ranked-signal-list" data-discovery="countries"></div></section>
+              <section><h4>Devices</h4><div class="ranked-signal-list" data-discovery="devices"></div></section>
+              <section><h4>Subscription status</h4><div class="ranked-signal-list" data-discovery="subscriptions"></div></section>
+              <section><h4>YouTube search terms</h4><div class="ranked-signal-list" data-discovery="search"></div></section>
+              <section><h4>Suggested-video sources</h4><div class="ranked-signal-list" data-discovery="suggested"></div></section>
+              <section><h4>Format benchmarks</h4><div class="ranked-signal-list" data-discovery="formats"></div></section>
+            </div>
+          </article>
+
+          <article class="panel side">
+            <div class="panel-head"><div><h3>Tracking Coverage</h3><p>Availability of advanced YouTube signals.</p></div></div>
+            <div class="coverage-list">
+              <div><span>Thumbnail impression CTR</span><b>Not exposed by API</b></div>
+              <div><span>Returning vs. new viewers</span><b>Not exposed by API</b></div>
+              <div><span>Thumbnail/title changes</span><b data-intelligence="metadata-tracking">Tracking starts after sync</b></div>
+              <div><span>Historical first 24 hours</span><b>Tracking new uploads</b></div>
+              <div><span>Revenue</span><b data-intelligence="revenue-coverage">Checking access</b></div>
             </div>
           </article>
         </section>
@@ -258,7 +274,7 @@
     </div>
     <script src="components/sidebar.js?v=2"></script>
     <script src="components/plan-modal.js?v=3"></script>
-    <script src="js/script.js?v=6"></script>
-    <script type="module" src="js/dashboard-data.js?v=7"></script>
+    <script src="js/script.js?v=7"></script>
+    <script type="module" src="js/dashboard-data.js?v=8"></script>
   </body>
 </html>
