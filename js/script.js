@@ -40,43 +40,6 @@ function scaleCanvas(canvas) {
   return { ctx, width: rect.width, height: rect.height };
 }
 
-function drawSparkline(canvas) {
-  const { ctx, width, height } = scaleCanvas(canvas);
-  const values = (canvas.dataset.values || "")
-    .split(",")
-    .map(Number)
-    .filter(Number.isFinite);
-
-  ctx.clearRect(0, 0, width, height);
-  if (values.length < 2) {
-    if (canvas.dataset.emptyGraph === "true") {
-      ctx.strokeStyle = colors.line;
-      ctx.lineWidth = 1;
-      for (let i = 1; i < 4; i += 1) {
-        const y = (i / 4) * height;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-      }
-    }
-    return;
-  }
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const pad = 3;
-  ctx.beginPath();
-  values.forEach((value, index) => {
-    const x = pad + (index / (values.length - 1)) * (width - pad * 2);
-    const y = height - pad - ((value - min) / (max - min || 1)) * (height - pad * 2);
-    index ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-  });
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = colors.teal;
-  ctx.stroke();
-}
-
 function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
@@ -107,6 +70,11 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
       ctx.lineTo(x, height - pad.bottom);
       ctx.stroke();
     }
+    ctx.fillStyle = colors.muted;
+    ctx.font = "600 13px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(canvas.dataset.emptyLabel || "No data for this period", width / 2, height / 2);
     return;
   }
 
@@ -325,8 +293,6 @@ function drawBarChart(canvasId, data, maxVal = 80) {
 }
 
 function initCharts() {
-  document.querySelectorAll(".sparkline").forEach(drawSparkline);
-
   if (document.getElementById("viewsChart")) {
     drawLineChart("viewsChart", [], [], []);
   }

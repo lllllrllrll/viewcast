@@ -98,7 +98,6 @@
               <h3>Total Subs</h3>
               <div class="metric-value" data-youtube-field="subscriber-count">&nbsp;</div>
             </div>
-            <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
           <article class="metric-card channel-metric-card">
@@ -110,7 +109,6 @@
               <h3>Watch Hours</h3>
               <div class="metric-value" data-youtube-field="watch-hours">&nbsp;</div>
             </div>
-            <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
           <article class="metric-card channel-metric-card">
@@ -122,7 +120,6 @@
               <h3>Total Views</h3>
               <div class="metric-value" data-youtube-field="total-views">&nbsp;</div>
             </div>
-            <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
           <article class="metric-card channel-metric-card channel-metric-wide">
@@ -134,7 +131,6 @@
               <h3>Videos</h3>
               <div class="metric-value" data-youtube-field="video-count">&nbsp;</div>
             </div>
-            <canvas class="sparkline" data-empty-graph="true"></canvas>
           </article>
 
           <article class="metric-card channel-metric-card channel-metric-wide">
@@ -157,7 +153,7 @@
               </div>
             </div>
             <div class="chart-wrap">
-              <canvas id="subsChart"></canvas>
+              <canvas id="subsChart" data-empty-label="No subscriber history for this period"></canvas>
             </div>
           </article>
 
@@ -169,9 +165,7 @@
               </div>
             </div>
             <div class="region-list" data-channel-upload-frequency>
-              <div class="region-row"><span>&nbsp;</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
-              <div class="region-row"><span>&nbsp;</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
-              <div class="region-row"><span>&nbsp;</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
+              <p class="signal-empty">Waiting for upload history…</p>
             </div>
           </article>
         </section>
@@ -179,8 +173,8 @@
     </div>
     <script src="../components/sidebar.js?v=2"></script>
     <script src="../components/plan-modal.js?v=3"></script>
-    <script src="../js/script.js?v=8"></script>
-    <script type="module" src="../js/dashboard-data.js?v=8"></script>
+    <script src="../js/script.js?v=9"></script>
+    <script type="module" src="../js/dashboard-data.js?v=12"></script>
     <script type="module" src="../js/youtube-connect.js?v=13"></script>
   </body>
 </html>

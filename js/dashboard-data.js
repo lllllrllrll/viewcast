@@ -423,9 +423,7 @@ function renderSubscribersTrend(connection, overviewData) {
   const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]));
 
   if (!rows.length) {
-    const labels = buckets.map((bucket) => bucket.label);
-    const baseline = Array.from({length: labels.length}, () => 0);
-    window.drawLineChart("subsChart", baseline, baseline, labels, {ySuffix: ""});
+    window.drawLineChart("subsChart", [], [], [], {ySuffix: ""});
     return;
   }
 
@@ -444,13 +442,6 @@ function renderSubscribersTrend(connection, overviewData) {
 
 function weekLabel(date) {
   return new Intl.DateTimeFormat("en", {month: "short", day: "numeric"}).format(date);
-}
-
-function fallbackWeekRows() {
-  return recentWeekBuckets().map((bucket) => ({
-    label: bucket.label,
-    count: 0
-  }));
 }
 
 function weekKey(date) {
@@ -478,6 +469,10 @@ function renderUploadFrequency(overviewData) {
   const container = document.querySelector("[data-channel-upload-frequency]");
   if (!container) return;
   const videos = overviewData?.videos || [];
+  if (!videos.length) {
+    container.innerHTML = '<p class="signal-empty">No upload history is available for this channel.</p>';
+    return;
+  }
   const buckets = recentWeekBuckets(4);
   const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]));
 
@@ -488,7 +483,7 @@ function renderUploadFrequency(overviewData) {
     if (bucket) bucket.count += 1;
   });
 
-  const rows = videos.length ? buckets : fallbackWeekRows();
+  const rows = buckets;
   const max = Math.max(1, ...rows.map((row) => row.count));
 
   container.innerHTML = rows.map((row) => {
@@ -513,23 +508,13 @@ function renderViewsTrend(overviewData) {
   window.drawLineChart("viewsChart", actual, forecast, labels, {ySuffix: ""});
 }
 
-function renderSparklineData(overviewData) {
-  const dailyViews = (overviewData?.daily || []).map((row) => numberValue(row[1]) || 0);
-  document.querySelectorAll(".sparkline").forEach((canvas) => {
-    canvas.dataset.values = dailyViews.join(",");
-    if (typeof window.drawSparkline === "function") window.drawSparkline(canvas);
-  });
-}
-
 function renderTrafficSources(overviewData) {
   const container = document.querySelector("[data-overview-traffic]");
   if (!container) return;
   const rows = overviewData?.traffic || [];
   const total = rows.reduce((sum, row) => sum + (numberValue(row[1]) || 0), 0);
   if (!rows.length || !total) {
-    container.innerHTML = ["Browse", "Search", "Shorts", "External", "Suggested"].map((label) => `
-      <div class="region-row"><span>${label}</span><div class="bar"><i style="--value: 0%"></i></div><b>${emptyValue}</b></div>
-    `).join("");
+    container.innerHTML = '<p class="signal-empty">Traffic-source data is not available for this period.</p>';
     return;
   }
   container.innerHTML = rows.map((row) => {
@@ -540,7 +525,7 @@ function renderTrafficSources(overviewData) {
 }
 
 function renderHealth(connection, overviewData) {
-  if (!connection) { setProgress("watch-hours", 0, emptyValue); setProgress("avg-duration", 0, emptyValue); setProgress("subscribers", 0, emptyValue); return; }
+  if (!connection) { setProgress("watch-hours", 0, "Not connected"); setProgress("avg-duration", 0, "Not connected"); setProgress("subscribers", 0, "Not connected"); return; }
   const analyticsSummary = connection?.analyticsSummary || {};
   const dailySummary = summarizeDaily(overviewData?.daily || []);
   const views = dailySummary.views || numberValue(analyticsSummary.views) || 0;
@@ -852,7 +837,6 @@ function renderOverviewData(connection, overviewData = null, user = null) {
   setTrend("average-view-duration", avgDuration !== null ? "28D" : "", "good");
 
   renderViewsTrend(overviewData);
-  renderSparklineData(overviewData);
   renderTrafficSources(overviewData);
   renderHealth(connection, overviewData);
   renderVideoTable(overviewData);

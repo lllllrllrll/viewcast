@@ -63,7 +63,7 @@
               </div>
             </div>
             <div class="chart-wrap">
-              <canvas id="viewsChart" aria-label="Views trend line chart"></canvas>
+              <canvas id="viewsChart" aria-label="Views trend line chart" data-empty-label="No views data for this period"></canvas>
             </div>
           </article>
 
@@ -75,11 +75,7 @@
               </div>
             </div>
             <div class="region-list" data-overview-traffic>
-              <div class="region-row"><span>Browse</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
-              <div class="region-row"><span>Search</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
-              <div class="region-row"><span>Shorts</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
-              <div class="region-row"><span>External</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
-              <div class="region-row"><span>Suggested</span><div class="bar"><i style="--value: 0%"></i></div><b>&nbsp;</b></div>
+              <p class="signal-empty">Waiting for traffic-source data…</p>
             </div>
           </article>
 
@@ -214,8 +210,8 @@
     </div>
     <script src="components/sidebar.js?v=2"></script>
     <script src="components/plan-modal.js?v=3"></script>
-    <script src="js/script.js?v=8"></script>
+    <script src="js/script.js?v=9"></script>
     <script src="js/dashboard-controls.js?v=4"></script>
-    <script type="module" src="js/dashboard-data.js?v=11"></script>
+    <script type="module" src="js/dashboard-data.js?v=12"></script>
   </body>
 </html>
