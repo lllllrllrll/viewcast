@@ -299,15 +299,6 @@ exports.generateGeminiContent = onCall(
             "The function must be called while authenticated.",
         );
       }
-      if (request.auth.token.email_verified !== true) {
-        logger.warn("Unverified request to generateGeminiContent", {
-          uid: request.auth.uid,
-        });
-        throw new HttpsError(
-            "permission-denied",
-            "Verify your email address before using AI features.",
-        );
-      }
       if (!request.data || typeof request.data !== "object") {
         throw new HttpsError("invalid-argument", "Request data is required.");
       }

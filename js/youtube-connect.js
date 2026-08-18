@@ -458,10 +458,6 @@ if (connectButton && firebaseConfigured) {
       setButton("Sign in to connect", true);
       return;
     }
-    if (!user.emailVerified) {
-      setButton("Verify Email to Connect", true);
-      return;
-    }
     const params = new URLSearchParams(window.location.search);
     if (params.get("link") === "required") {
       const prompt = document.getElementById("connectionPrompt");

@@ -1031,7 +1031,7 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
   const db = getFirestore(app);
 
   onAuthStateChanged(auth, (user) => {
-    if (!user || !user.emailVerified) return;
+    if (!user) return;
     loadYouTubeData(user, db).catch(console.error);
 
     document.querySelectorAll(".segmented button").forEach((button) => {
@@ -1050,7 +1050,7 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
     saveCachedConnection(event.detail);
     const auth = getAuth();
     applyYouTubeData(event.detail, null, auth.currentUser);
-    if (auth.currentUser?.emailVerified) loadYouTubeData(auth.currentUser, getFirestore());
+    if (auth.currentUser) loadYouTubeData(auth.currentUser, getFirestore());
   });
 
   window.addEventListener("viewcast:youtube-unlinked", () => {

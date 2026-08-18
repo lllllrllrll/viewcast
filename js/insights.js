@@ -3182,14 +3182,6 @@ if (form && firebaseConfigured) {
       setLibraryStatus("Sign in and link a channel to generate channel insights.");
       return;
     }
-    if (!currentUser.emailVerified) {
-      channelVideos = [];
-      renderVideoLibrary([]);
-      setStatus("Verify your email before generating AI insights.");
-      setLibraryStatus("Verify your email to load linked channel uploads.");
-      return;
-    }
-
     await loadSavedChannelContext();
 
     const cachedVideos = readCachedVideos();

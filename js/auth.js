@@ -7,7 +7,6 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
-  sendEmailVerification,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
@@ -29,9 +28,7 @@ import { clearCreatorDataCaches, secureSignOut } from "./privacy.js";
 
 const loginUrl = new URL("../login.html", import.meta.url);
 const dashboardUrl = new URL("../index.html", import.meta.url);
-const accountUrl = new URL("../pages/settings.html", import.meta.url);
 const isLoginPage = document.body.dataset.publicPage === "login";
-const isAccountPage = window.location.pathname === accountUrl.pathname;
 const pendingProfileKey = "viewcastPendingProfile";
 let authActionInProgress = false;
 
@@ -93,143 +90,14 @@ function safeReturnUrl() {
   }
 }
 
-function destinationForUser(user) {
-  if (!requiresEmailVerification(user)) return safeReturnUrl();
-  const verificationUrl = new URL(accountUrl.href);
-  verificationUrl.searchParams.set("verification", "required");
-  return verificationUrl.href;
+function destinationForUser() {
+  return safeReturnUrl();
 }
 
 function loginUrlForCurrentPage() {
   const url = new URL(loginUrl.href);
   url.searchParams.set("returnTo", `${window.location.pathname}${window.location.search}`);
   return url.href;
-}
-
-function requiresEmailVerification(user) {
-  return Boolean(user?.email && !user.emailVerified);
-}
-
-function showEmailVerificationGate(user) {
-  if (document.getElementById("emailVerificationGate")) return;
-
-  const overlay = document.createElement("div");
-  overlay.className = "modal-overlay verification-modal-overlay";
-  overlay.id = "emailVerificationGate";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-labelledby", "verificationModalTitle");
-  overlay.innerHTML = `
-    <section class="modal-card verification-modal-card">
-      <button class="close-button verification-modal-close" data-verification-close type="button" aria-label="Close verification popup">&times;</button>
-      <div class="verification-modal-icon" aria-hidden="true">✉</div>
-      <h3 id="verificationModalTitle">Verify your email</h3>
-      <p>Verify <strong></strong> before using ViewCast features.</p>
-      <div class="verification-modal-actions">
-        <button class="primary-button" data-verification-send type="button">Send verification email</button>
-        <button class="account-cancel-button" data-verification-refresh type="button">I’ve verified</button>
-        <button class="account-cancel-button" data-verification-signout type="button">Sign out</button>
-      </div>
-      <p class="verification-modal-status" data-verification-status role="status" aria-live="polite"></p>
-    </section>
-  `;
-
-  const email = overlay.querySelector("p strong");
-  const sendButton = overlay.querySelector("[data-verification-send]");
-  const refreshButton = overlay.querySelector("[data-verification-refresh]");
-  const signOutButton = overlay.querySelector("[data-verification-signout]");
-  const closeButton = overlay.querySelector("[data-verification-close]");
-  const status = overlay.querySelector("[data-verification-status]");
-  email.textContent = user.email;
-
-  function closeVerificationGate() {
-    window.removeEventListener("focus", refreshVerification);
-    window.removeEventListener("keydown", handleVerificationKeydown);
-    document.querySelector(".app")?.removeAttribute("inert");
-    document.body.classList.remove("verification-locked");
-    overlay.remove();
-  }
-
-  function handleVerificationKeydown(event) {
-    if (event.key === "Escape") closeVerificationGate();
-  }
-
-  async function refreshVerification() {
-    refreshButton.disabled = true;
-    status.textContent = "Checking verification status…";
-    status.dataset.type = "info";
-    try {
-      await user.reload();
-      if (auth.currentUser?.emailVerified) {
-        window.location.reload();
-        return;
-      }
-      status.textContent = "Your email is not verified yet. Open the link in the email, then try again.";
-      status.dataset.type = "error";
-    } catch (error) {
-      status.textContent = "Firebase could not check your verification status. Please try again.";
-      status.dataset.type = "error";
-    } finally {
-      refreshButton.disabled = false;
-    }
-  }
-
-  sendButton.addEventListener("click", async () => {
-    sendButton.disabled = true;
-    status.textContent = "Sending verification email…";
-    status.dataset.type = "info";
-    try {
-      await sendEmailVerification(user);
-      status.textContent = `Verification email sent to ${user.email}. Check your inbox and spam folder.`;
-      status.dataset.type = "success";
-    } catch (error) {
-      status.textContent = friendlyError(error);
-      status.dataset.type = "error";
-    } finally {
-      sendButton.disabled = false;
-    }
-  });
-
-  refreshButton.addEventListener("click", refreshVerification);
-  signOutButton.addEventListener("click", async () => {
-    await secureSignOut(auth, signOut);
-    window.location.replace(loginUrl.href);
-  });
-  closeButton.addEventListener("click", closeVerificationGate);
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) closeVerificationGate();
-  });
-  window.addEventListener("focus", refreshVerification);
-  window.addEventListener("keydown", handleVerificationKeydown);
-
-  document.body.append(overlay);
-  document.querySelector(".app")?.setAttribute("inert", "");
-  document.body.classList.add("auth-ready", "verification-locked");
-  closeButton.focus();
-}
-
-function setupEmailVerificationGate(user) {
-  if (document.body.dataset.verificationGateReady === "true") return;
-  document.body.dataset.verificationGateReady = "true";
-
-  function interceptFeatureAttempt(event) {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target || target.closest("#emailVerificationGate, #deleteAccountModal, .account-signout, .account-destructive-action, a")) return;
-
-    const isFeatureAttempt =
-      event.type === "submit" ||
-      (event.type === "beforeinput" && target.matches("input, textarea, [contenteditable='true']")) ||
-      (event.type === "click" && Boolean(target.closest("button, input, select, textarea, [role='button']")));
-
-    if (!isFeatureAttempt) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    showEmailVerificationGate(user);
-  }
-
-  document.addEventListener("click", interceptFeatureAttempt, true);
-  document.addEventListener("submit", interceptFeatureAttempt, true);
-  document.addEventListener("beforeinput", interceptFeatureAttempt, true);
 }
 
 function setFormBusy(isBusy) {
@@ -418,15 +286,6 @@ function setupLoginForm() {
         showStep("Creating your Firebase account...");
         const credential = await createUserWithEmailAndPassword(auth, email, password);
         rememberPendingProfile(credential.user, displayName, { isNewAccount: true });
-        setSubmitStatus("Sending verification...");
-        showStep(`Sending a verification email to ${credential.user.email}...`);
-        try {
-          await sendEmailVerification(credential.user);
-        } catch (verificationError) {
-          // The account already exists at this point. Continue to the gated
-          // dashboard, where the user can retry without creating a duplicate.
-          console.warn("The initial verification email could not be sent.", verificationError);
-        }
         // The dashboard retries the pending display-name and Firestore profile
         // updates. Do not make a successful account creation wait on either
         // secondary network request before navigating.
@@ -437,17 +296,13 @@ function setupLoginForm() {
         setSubmitStatus("Signing in...");
         showStep("Signing in with Firebase...");
         const credential = await signInWithEmailAndPassword(auth, email, password);
-        setSubmitStatus(requiresEmailVerification(credential.user) ? "Email verification required" : "Opening dashboard...");
-        showStep(
-          requiresEmailVerification(credential.user)
-            ? "Signed in successfully. Opening email verification settings..."
-            : "Opening your dashboard..."
-        );
+        setSubmitStatus("Opening dashboard...");
+        showStep("Opening your dashboard...");
         window.location.replace(destinationForUser(credential.user));
         return;
       }
-      setSubmitStatus("Email verification required");
-      showStep("Account created successfully. Opening email verification settings...");
+      setSubmitStatus("Opening dashboard...");
+      showStep("Account created successfully. Opening your dashboard...");
       window.location.replace(destinationForUser(auth.currentUser));
     } catch (error) {
       authActionInProgress = false;
@@ -540,12 +395,6 @@ if (!firebaseConfigured) {
       }
 
       let currentUser = auth.currentUser || user;
-
-      if (requiresEmailVerification(currentUser)) {
-        updateUserInterface(currentUser);
-        if (!isAccountPage) setupEmailVerificationGate(currentUser);
-        return;
-      }
 
       const pendingDisplayName = sessionStorage.getItem("viewcastDisplayName");
       const pendingProfile = readPendingProfile(currentUser);

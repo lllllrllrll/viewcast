@@ -37,7 +37,7 @@ For local testing, use `http://localhost:4173` rather than `127.0.0.1`, or add `
 The app supports:
 
 - Email/password account creation
-- Automatic email verification on account creation
+- Immediate dashboard access after account creation
 - Verified-email access for dashboard features and Firestore profile data
 - Persistent email/password sign-in
 - Password reset emails

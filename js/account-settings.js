@@ -5,7 +5,6 @@ import {
   onAuthStateChanged,
   reauthenticateWithCredential,
   reauthenticateWithPopup,
-  sendEmailVerification,
   sendPasswordResetEmail,
   signOut,
   updatePassword,
@@ -19,7 +18,6 @@ const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 let currentUser = null;
 let usesPasswordProvider = false;
-let verificationRequestInProgress = false;
 
 function setCredentialStatus(message, type = "") {
   const status = document.getElementById("credentialStatus");
@@ -43,45 +41,6 @@ function authErrorMessage(error) {
   };
   return messages[error?.code]
     || `Firebase could not complete the request${error?.code ? ` (${error.code})` : ""}. Please try again.`;
-}
-
-function renderEmailVerification(user) {
-  const status = document.getElementById("emailVerificationStatus");
-  const button = document.getElementById("sendVerificationEmail");
-  const gateNotice = document.getElementById("verificationGateNotice");
-  if (!status || !button || !gateNotice) return;
-  const canVerify = Boolean(user?.email);
-
-  if (user?.emailVerified) {
-    status.textContent = "Verified";
-    status.dataset.verified = "true";
-    button.hidden = true;
-    button.disabled = true;
-    gateNotice.hidden = true;
-    return;
-  }
-
-  status.textContent = canVerify ? "Not verified" : "No email address available";
-  status.dataset.verified = "false";
-  button.hidden = !canVerify;
-  button.disabled = !canVerify || verificationRequestInProgress;
-  button.textContent = verificationRequestInProgress ? "Sending…" : "Send verification email";
-  gateNotice.hidden = false;
-}
-
-async function refreshEmailVerificationStatus() {
-  if (!currentUser || verificationRequestInProgress) return;
-  const wasVerified = currentUser.emailVerified;
-  try {
-    await currentUser.reload();
-    currentUser = auth.currentUser || currentUser;
-    renderEmailVerification(currentUser);
-    if (!wasVerified && currentUser.emailVerified) {
-      setCredentialStatus("Email verified successfully.", "success");
-    }
-  } catch (error) {
-    console.warn("Could not refresh email verification status.", error);
-  }
 }
 
 async function reauthenticateUser(password = "") {
@@ -130,7 +89,6 @@ onAuthStateChanged(auth, (user) => {
   document.getElementById("passwordDisplay").textContent = usesPasswordProvider
     ? "••••••••••••"
     : "Managed by your provider";
-  renderEmailVerification(user);
 });
 
 document.getElementById("signOutBtn")?.addEventListener("click", async () => {
@@ -174,30 +132,6 @@ document.getElementById("resetPasswordEmail")?.addEventListener("click", async (
   } finally {
     button.disabled = false;
   }
-});
-
-document.getElementById("sendVerificationEmail")?.addEventListener("click", async () => {
-  if (!currentUser?.email || currentUser.emailVerified || verificationRequestInProgress) return;
-  verificationRequestInProgress = true;
-  renderEmailVerification(currentUser);
-  setCredentialStatus("Sending your verification email…", "info");
-  try {
-    await sendEmailVerification(currentUser);
-    setCredentialStatus(
-      `Firebase accepted the request for ${currentUser.email}. Check your inbox and spam folder, then return here after opening the link.`,
-      "success"
-    );
-  } catch (error) {
-    setCredentialStatus(authErrorMessage(error), "error");
-  } finally {
-    verificationRequestInProgress = false;
-    renderEmailVerification(currentUser);
-  }
-});
-
-window.addEventListener("focus", refreshEmailVerificationStatus);
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") refreshEmailVerificationStatus();
 });
 
 document.querySelectorAll("[data-close-credential-form]").forEach((button) => {

@@ -20,11 +20,6 @@
 
         </header>
 
-        <section class="verification-gate-notice" id="verificationGateNotice" role="alert" hidden>
-          <strong>Verify your email to unlock ViewCast</strong>
-          <p>Your account is active, but dashboard features remain unavailable until you verify your email address.</p>
-        </section>
-
         <section class="dashboard-grid">
           <article class="panel full showcase-panel">
             <div class="panel-head">
@@ -139,13 +134,6 @@
                 </div>
                 <button class="primary-button" id="toggleEmailForm" type="button">Change email</button>
               </section>
-              <section class="account-credential-row" id="emailVerificationRow">
-                <div class="account-credential-copy">
-                  <span>Email verification</span>
-                  <strong id="emailVerificationStatus">Checking status...</strong>
-                </div>
-                <button class="primary-button" id="sendVerificationEmail" type="button" disabled>Send verification email</button>
-              </section>
               <form class="account-credential-form" id="changeEmailForm" hidden>
                 <label>New email address<input id="newEmail" type="email" autocomplete="email" required /></label>
                 <label class="current-password-field">Current password<input id="emailCurrentPassword" type="password" autocomplete="current-password" /></label>
@@ -217,8 +205,8 @@
 
     <script src="../components/sidebar.js?v=2"></script>
     <script src="../components/plan-modal.js?v=3"></script>
-    <script src="../js/script.js?v=7"></script>
+    <script src="../js/script.js?v=8"></script>
     <script type="module" src="../js/settings.js?v=6"></script>
-    <script type="module" src="../js/account-settings.js?v=4"></script>
+    <script type="module" src="../js/account-settings.js?v=5"></script>
   </body>
 </html>

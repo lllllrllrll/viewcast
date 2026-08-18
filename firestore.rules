@@ -8,7 +8,7 @@ rules_version = '2';
 // Document ID: Firebase Authentication UID
 // Fields:
 //   - uid: string (required, immutable, matches document owner)
-//   - email: string (required, matches the verified Auth token)
+//   - email: string (required, matches the Auth token)
 //   - displayName: string (required, 1-100 characters)
 //   - updatedAt: timestamp (required, set by the server)
 //   - lastSignInAt: timestamp (required)
@@ -27,10 +27,9 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isVerifiedOwner(userId) {
+    function isOwner(userId) {
       return isAuthenticated()
-        && request.auth.uid == userId
-        && request.auth.token.email_verified == true;
+        && request.auth.uid == userId;
     }
 
     function uidUnchanged(userId) {
@@ -218,14 +217,14 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow create: if isVerifiedOwner(userId)
+      allow create: if isOwner(userId)
         && uidUnchanged(userId)
         && isValidUser(request.resource.data)
         && hasValidCreateTimestamps(request.resource.data);
 
-      allow read: if isVerifiedOwner(userId);
+      allow read: if isOwner(userId);
 
-      allow update: if isVerifiedOwner(userId)
+      allow update: if isOwner(userId)
         && uidNotModified()
         && isValidUser(request.resource.data)
         && hasValidUpdateTimestamps(request.resource.data);

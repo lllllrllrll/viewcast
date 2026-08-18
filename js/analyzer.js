@@ -1394,14 +1394,6 @@ if (form && firebaseConfigured) {
       setLibraryStatus("Sign in and link a channel to load your videos.");
       return;
     }
-    if (!currentUser.emailVerified) {
-      channelVideos = [];
-      renderVideoLibrary([]);
-      setStatus("Verify your email before analyzing a video.");
-      setLibraryStatus("Verify your email to load linked channel uploads.");
-      return;
-    }
-
     const cachedVideos = readCachedVideos();
     if (cachedVideos.length) {
       renderVideoLibrary(cachedVideos);
