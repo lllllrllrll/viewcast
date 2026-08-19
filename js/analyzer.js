@@ -24,6 +24,7 @@ const analyzerLoading = document.getElementById("analyzerLoading");
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
+const videosCacheVersion = 2;
 const videoAnalysisStorageKeyPrefix = "viewcastGeminiVideoAnalysis:";
 const videoAnalysisCacheMaxAge = 24 * 60 * 60 * 1000;
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
@@ -200,7 +201,11 @@ function readCachedVideos() {
   if (!key) return [];
   try {
     const saved = JSON.parse(sessionStorage.getItem(key) || "null");
-    return Array.isArray(saved?.videos) ? saved.videos : [];
+    if (saved?.version !== videosCacheVersion) {
+      sessionStorage.removeItem(key);
+      return [];
+    }
+    return Array.isArray(saved?.videos) ? saved.videos.filter((video) => !isLivestream(video)) : [];
   } catch (error) {
     sessionStorage.removeItem(key);
     return [];
@@ -211,9 +216,17 @@ function saveCachedVideos(videos) {
   const key = videosStorageKey();
   if (!key) return;
   sessionStorage.setItem(key, JSON.stringify({
-    videos,
+    version: videosCacheVersion,
+    videos: videos.filter((video) => !isLivestream(video)),
     savedAt: Date.now()
   }));
+}
+
+function isLivestream(video = {}) {
+  const broadcastState = video.snippet?.liveBroadcastContent;
+  return Boolean(video.liveStreamingDetails) ||
+    broadcastState === "live" ||
+    broadcastState === "upcoming";
 }
 
 function videoAnalysisStorageKey(videoId = "") {
@@ -282,7 +295,9 @@ function updateLibrarySelection(videoId) {
 }
 
 function renderVideoLibrary(videos = channelVideos) {
-  channelVideos = Array.isArray(videos) ? videos : [];
+  channelVideos = Array.isArray(videos)
+    ? videos.filter((video) => !isLivestream(video))
+    : [];
   if (!videoLibrary) return;
 
   if (!channelVideos.length) {
@@ -490,12 +505,12 @@ async function fetchVideosByIds(videoIds, accessToken) {
   for (let index = 0; index < videoIds.length; index += 50) {
     const chunk = videoIds.slice(index, index + 50);
     const url = new URL("https://www.googleapis.com/youtube/v3/videos");
-    url.searchParams.set("part", "snippet,statistics,contentDetails");
+    url.searchParams.set("part", "snippet,statistics,contentDetails,liveStreamingDetails");
     url.searchParams.set("id", chunk.join(","));
     const payload = await fetchJson(url, accessToken);
     videos.push(...(payload.items || []));
   }
-  return videos;
+  return videos.filter((video) => !isLivestream(video));
 }
 
 async function fetchChannelVideos(accessToken) {
@@ -506,11 +521,14 @@ async function fetchChannelVideos(accessToken) {
 
 async function fetchVideo(videoId, accessToken) {
   const url = new URL("https://www.googleapis.com/youtube/v3/videos");
-  url.searchParams.set("part", "snippet,statistics,contentDetails");
+  url.searchParams.set("part", "snippet,statistics,contentDetails,liveStreamingDetails");
   url.searchParams.set("id", videoId);
   const payload = await fetchJson(url, accessToken);
   const video = payload.items?.[0];
   if (!video) throw new Error("No video was found for that URL.");
+  if (isLivestream(video)) {
+    throw new Error("Livestreams are not supported by the Video Analyzer. Choose a regular video or Short.");
+  }
   return video;
 }
 

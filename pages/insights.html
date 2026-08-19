@@ -20,7 +20,7 @@
           <div class="actions" id="insightsHeaderActions">
             <button class="primary-button refresh-insights-button" id="refreshInsightsPage" type="button">
               <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path></svg>
-              <span>Refresh Page</span>
+              <span>Generate Insights</span>
             </button>
             <form class="channel-link-form" id="videoAnalysisForm" hidden>
             </form>
@@ -34,7 +34,10 @@
 
         <section class="dashboard-grid analyzer-results-hidden" id="analyzerDashboard">
           <article class="panel full insight-refresh-empty" id="insightRefreshEmpty">
-            <div class="insight-refresh-empty-content" id="insightRefreshEmptyContent"></div>
+            <div class="insight-refresh-empty-content" id="insightRefreshEmptyContent">
+              <h3>Generate channel insights</h3>
+              <p>Analyze your linked channel's uploads and current YouTube trend signals.</p>
+            </div>
           </article>
 
           <article class="panel full insight-channel-empty" id="insightChannelEmpty" hidden>
@@ -180,6 +183,6 @@
     <script src="../components/sidebar.js?v=2"></script>
     <script src="../components/plan-modal.js?v=3"></script>
     <script src="../js/script.js?v=9"></script>
-    <script type="module" src="../js/insights.js?v=37"></script>
+    <script type="module" src="../js/insights.js?v=39"></script>
   </body>
 </html>

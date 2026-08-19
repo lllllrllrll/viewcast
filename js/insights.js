@@ -38,6 +38,8 @@ const insightTabPanels = [...document.querySelectorAll("[data-insights-panel]")]
 
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
+const allConnectionsStorageKey = "viewcastYouTubeAllConnections";
+const channelStorageKey = "viewcastYouTubeChannel";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
@@ -70,10 +72,16 @@ function setStatus(message) {
   }
 }
 
-function setBusy(isBusy, label = "Insights Ready") {
-  if (!submitButton) return;
-  submitButton.disabled = isBusy;
-  submitButton.textContent = isBusy ? "Analyzing..." : label;
+function setBusy(isBusy, label = latestChannelSummary ? "Refresh Insights" : "Generate Insights") {
+  if (submitButton) {
+    submitButton.disabled = isBusy;
+    submitButton.textContent = isBusy ? "Analyzing..." : label;
+  }
+  if (refreshInsightsPageButton) {
+    refreshInsightsPageButton.disabled = isBusy;
+    const labelElement = refreshInsightsPageButton.querySelector("span");
+    if (labelElement) labelElement.textContent = isBusy ? "Analyzing..." : label;
+  }
 }
 
 function numberValue(value) {
@@ -255,6 +263,28 @@ function normalizeSavedChannelContext(value = {}) {
   };
 }
 
+function restoreSavedConnections(profile = {}) {
+  const cloudConnections = Array.isArray(profile.youtubeConnections)
+    ? profile.youtubeConnections.filter((connection) => connection?.channel?.id)
+    : [];
+  const connections = cloudConnections.length
+    ? cloudConnections
+    : (profile.youtubeConnection?.channel?.id ? [profile.youtubeConnection] : []);
+  if (!connections.length) return;
+
+  let activeConnection = null;
+  try {
+    const cachedId = JSON.parse(localStorage.getItem(connectionStorageKey) || "null")?.channel?.id;
+    activeConnection = connections.find((connection) => connection.channel.id === cachedId) || connections[0];
+  } catch {
+    activeConnection = connections[0];
+  }
+
+  localStorage.setItem(allConnectionsStorageKey, JSON.stringify(connections));
+  localStorage.setItem(connectionStorageKey, JSON.stringify(activeConnection));
+  localStorage.setItem(channelStorageKey, JSON.stringify(activeConnection.channel));
+}
+
 async function loadSavedChannelContext() {
   savedChannelContext = {channelTopic: "", channelContext: ""};
   const key = channelContextStorageKey();
@@ -270,10 +300,13 @@ async function loadSavedChannelContext() {
   if (!db || !currentUser) return savedChannelContext;
   try {
     const snapshot = await getDoc(doc(db, "users", currentUser.uid));
-    if (snapshot.exists() && !hasLocalValue) {
-      const cloudContext = snapshot.data();
-      savedChannelContext = normalizeSavedChannelContext(cloudContext);
-      sessionStorage.setItem(key, JSON.stringify(savedChannelContext));
+    if (snapshot.exists()) {
+      const profile = snapshot.data();
+      restoreSavedConnections(profile);
+      if (!hasLocalValue) {
+        savedChannelContext = normalizeSavedChannelContext(profile);
+        sessionStorage.setItem(key, JSON.stringify(savedChannelContext));
+      }
     }
   } catch (error) {
     console.warn("Could not refresh saved channel context for AI Insights.", error);
@@ -2254,13 +2287,17 @@ function showMissingGeminiKeyMessage() {
   setLibraryStatus("AI Insights could not be generated right now.");
 }
 
-function showInsightGenerationError() {
+function showInsightGenerationError(message = "AI Insights could not be generated right now. Check your connection and try again.") {
   setAnalyzerLoading(false);
   setAnalyzerResultsVisible(false);
-  if (insightErrorPanel) insightErrorPanel.hidden = false;
+  if (insightErrorPanel) {
+    insightErrorPanel.hidden = false;
+    const detail = insightErrorPanel.querySelector("p");
+    if (detail) detail.textContent = message;
+  }
   setRefreshButtonPlacement(true, insightErrorPanel?.querySelector(".insight-error-content"));
-  setStatus("An error has occurred. AI Insights could not be generated right now.");
-  setLibraryStatus("AI Insights could not be generated right now.");
+  setStatus(message);
+  setLibraryStatus(message);
 }
 
 function hideInsightError() {
@@ -3090,12 +3127,11 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
     }
     console.error("Could not generate channel insights.", error);
     if (error.message === "AI_INSIGHTS_RATE_LIMITED") {
-      showInsightGenerationError();
-      setLibraryStatus("AI Insights usage limit reached. Try again in about a minute.");
+      showInsightGenerationError("AI Insights usage limit reached. Try again in about a minute.");
     } else if (error.message === "AI_INSIGHTS_GENERATION_FAILED") {
       showInsightGenerationError();
     } else {
-      setStatus(error.message || "Could not generate channel insights.");
+      showInsightGenerationError(error.message || "Could not generate channel insights.");
     }
   } finally {
     if (requestId === analysisRequestId) {
@@ -3110,8 +3146,8 @@ async function handleGenerateInsights(event) {
   await generateChannelInsights({allowPrompt: true});
 }
 
-function handleRefreshInsightsPage() {
-  window.location.reload();
+async function handleRefreshInsightsPage() {
+  await generateChannelInsights({allowPrompt: true, forceRefresh: true});
 }
 
 async function handleChatQuestion(event) {
@@ -3169,12 +3205,6 @@ if (form && firebaseConfigured) {
     selectedVideoId = "";
     clearAnalyzerResults();
 
-    if (!hasLinkedChannel()) {
-      showChannelLinkPrompt(true);
-      return;
-    }
-    showChannelLinkPrompt(false);
-
     if (!currentUser) {
       channelVideos = [];
       renderVideoLibrary([]);
@@ -3184,13 +3214,22 @@ if (form && firebaseConfigured) {
     }
     await loadSavedChannelContext();
 
+    if (!hasLinkedChannel()) {
+      showChannelLinkPrompt(true);
+      return;
+    }
+    showChannelLinkPrompt(false);
+
     const cachedVideos = readCachedVideos();
+    let hasCachedSummary = false;
     if (cachedVideos.length) {
       renderVideoLibrary(cachedVideos);
       const cachedSummary = readCachedInsights(cachedVideos);
       if (cachedSummary) {
+        hasCachedSummary = true;
         renderChannelInsights(cachedSummary);
         setAnalyzerResultsVisible(true);
+        setBusy(false, "Refresh Insights");
         setLibraryStatus("Showing your latest saved AI insights.");
       } else {
         setLibraryStatus("Showing saved uploads. Generate insights or refresh for current data.");
@@ -3202,7 +3241,12 @@ if (form && firebaseConfigured) {
       showMissingGeminiKeyMessage();
       return;
     }
-    loadVideoLibrary({allowPrompt: false});
+    const videos = await loadVideoLibrary({allowPrompt: false});
+    if (!hasCachedSummary && videos.length) {
+      await generateChannelInsights({allowPrompt: false});
+    } else if (!hasCachedSummary) {
+      setBusy(false, "Generate Insights");
+    }
   });
 
   form.addEventListener("submit", handleGenerateInsights);
