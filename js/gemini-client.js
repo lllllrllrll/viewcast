@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {
   firebaseAppCheckSiteKey,
   firebaseConfig,
@@ -73,15 +73,39 @@ async function requestGeminiFunction({contents, systemInstruction, generationCon
   if (!firebaseConfigured) throw new Error("Firebase is not configured.");
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   const appCheck = ensureAppCheck(app);
-  if (appCheck) await getToken(appCheck, false);
-  const callGenerateGeminiContent = httpsCallable(getFunctions(app), "generateGeminiContent");
-  const result = await callGenerateGeminiContent({
-    contents,
-    systemInstruction,
-    generationConfig,
-    modelName: safeGeminiModel(modelName)
-  });
-  return result.data || {};
+  const user = getAuth(app).currentUser;
+  if (!user) throw new Error("Sign in before using AI features.");
+  if (!appCheck) throw new Error("App Check is not configured.");
+
+  const [idToken, appCheckResult] = await Promise.all([
+    user.getIdToken(),
+    getToken(appCheck, false)
+  ]);
+  const response = await fetch(
+    `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net/generateGeminiContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${idToken}`,
+        "X-Firebase-AppCheck": appCheckResult.token
+      },
+      body: JSON.stringify({data: {
+        contents,
+        systemInstruction,
+        generationConfig,
+        modelName: safeGeminiModel(modelName)
+      }})
+    }
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.error) {
+    const status = String(payload.error?.status || "internal").toLowerCase().replace(/_/g, "-");
+    const error = new Error(payload.error?.message || "The AI request failed.");
+    error.code = `functions/${status}`;
+    throw error;
+  }
+  return payload.data || payload.result || {};
 }
 
 function requestKey(options = {}) {
