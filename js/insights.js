@@ -872,43 +872,50 @@ async function fetchLaneTrendVideos(accessToken, videos) {
 
 async function fetchGeminiTrendVideos(accessToken, trendPlan) {
   if (!trendPlan?.queries?.length) return {lane: null, videos: []};
-  const recentResults = await Promise.allSettled(
-    trendPlan.queries.slice(0, 2).map((query) =>
-      searchVideosByQuery(accessToken, `${query} shorts`, 12, 30, true)
-    )
-  );
-  let videos = recentResults.flatMap((result, index) => result.status === "fulfilled"
-    ? result.value.map((video) => ({
+  const query = trendPlan.queries[0];
+  let videos = [];
+  let recentError = null;
+  try {
+    videos = (await searchVideosByQuery(
+      accessToken,
+      `${query} shorts`,
+      12,
+      30,
+      true
+    )).map((video) => ({
       ...video,
       trendSource: "Niche YouTube trend search",
-      trendQuery: trendPlan.queries[index]
-    }))
-    : []);
+      trendQuery: query
+    }));
+  } catch (error) {
+    recentError = error;
+    console.warn("Current niche trends were not available.", error);
+  }
 
-  if (!videos.length) {
-    const fallbackResults = await Promise.allSettled(
-      trendPlan.queries.slice(0, 2).map(
-        (query) => searchVideosByQuery(
-          accessToken,
-          `${query} shorts`,
-          12,
-          90,
-          true
-        )
-      )
-    );
-    videos = fallbackResults.flatMap((result, index) => result.status === "fulfilled"
-      ? result.value.map((video) => ({
+  // Do not retry quota-limited requests. A retry only spends more quota and
+  // produces another 429 without improving the result.
+  if (!videos.length && recentError?.status !== 429) {
+    try {
+      videos = (await searchVideosByQuery(
+        accessToken,
+        `${query} shorts`,
+        12,
+        90,
+        true
+      )).map((video) => ({
         ...video,
         trendSource: "Expanded niche YouTube trend search",
-        trendQuery: trendPlan.queries[index]
-      }))
-      : []);
+        trendQuery: query
+      }));
+    } catch (error) {
+      console.warn("Expanded niche trends were not available.", error);
+    }
   }
 
   return {
     lane: trendPlan.lane,
-    videos
+    videos,
+    quotaLimited: recentError?.status === 429
   };
 }
 
@@ -951,7 +958,8 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     console.warn("Niche trend search was not available.", error);
   }
   let laneResult = {lane, videos: []};
-  if (!nicheResult.videos.length && !contextControlsTrends) {
+  const quotaLimited = nicheResult.quotaLimited === true;
+  if (!nicheResult.videos.length && !contextControlsTrends && !quotaLimited) {
     try {
       laneResult = await fetchLaneTrendVideos(accessToken, videos);
     } catch (error) {
@@ -962,7 +970,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
   try {
     // One inexpensive videos.list call replaces the previous platform-wide and
     // eight-category search burst. This avoids quota spikes and HTTP 429 loops.
-    outsideVideos = await fetchMostPopularVideos(accessToken, 25);
+    if (!quotaLimited) outsideVideos = await fetchMostPopularVideos(accessToken, 25);
   } catch (error) {
     console.warn("Popular trend references were not available.", error);
   }
@@ -1016,7 +1024,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
       .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
   }
 
-  if (!filteredTrendVideos.length) {
+  if (!filteredTrendVideos.length && !quotaLimited) {
     const categoryFallback = await fetchTrendingVideos(accessToken, videos);
     filteredTrendVideos = categoryFallback
       .filter((video, index, values) => (
@@ -2791,7 +2799,15 @@ async function buildGeminiPageInsights(summary, videos) {
       ?.map((part) => part.text || "")
       .join("")
       .trim();
-    return normalizeGeminiInsights(safeJsonParse(text), summary);
+    const parsedInsights = safeJsonParse(text);
+    if (!parsedInsights) {
+      // Gemini can occasionally hit its output limit mid-object. The page still
+      // has complete deterministic channel analysis, so render that instead of
+      // discarding the entire result or spending credits on an automatic retry.
+      console.warn("Gemini returned incomplete JSON; using channel-data insights.");
+      return normalizeGeminiInsights({}, summary);
+    }
+    return normalizeGeminiInsights(parsedInsights, summary);
   } catch (error) {
     console.warn("Gemini page insights failed.", error);
     if (error.message === "AI_INSIGHTS_RATE_LIMITED" || error.code === "functions/resource-exhausted") {
