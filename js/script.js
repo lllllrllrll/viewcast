@@ -1,12 +1,17 @@
+function themeColor(variable, fallback) {
+  return getComputedStyle(document.body).getPropertyValue(variable).trim() || fallback;
+}
+
 const colors = {
-  ink: "#1c2430",
-  muted: "#667085",
-  line: "#d8e0ea",
-  teal: "#0f8b8d",
-  blue: "#3267d6",
-  amber: "#c47f13",
-  rose: "#d04d67",
-  green: "#2f9b6c"
+  get ink() { return themeColor("--ink", "#1c2430"); },
+  get surface() { return themeColor("--surface", "#ffffff"); },
+  get muted() { return themeColor("--muted", "#667085"); },
+  get line() { return themeColor("--line", "#d8e0ea"); },
+  get teal() { return themeColor("--teal", "#0f8b8d"); },
+  get blue() { return themeColor("--blue", "#3267d6"); },
+  get amber() { return themeColor("--amber", "#c47f13"); },
+  get rose() { return themeColor("--rose", "#d04d67"); },
+  get green() { return themeColor("--green", "#2f9b6c"); }
 };
 
 // Start authentication before any optional dashboard setup. If another piece of
@@ -171,7 +176,7 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
     ctx.arc(p.x, p.yActual, 5, 0, Math.PI * 2);
     ctx.fillStyle = colors.teal;
     ctx.fill();
-    ctx.strokeStyle = "white";
+    ctx.strokeStyle = colors.surface;
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -298,6 +303,14 @@ function initCharts() {
   }
 }
 
+function redrawThemedCharts() {
+  document.querySelectorAll("canvas").forEach((canvas) => {
+    if (!canvas.id || !canvas._chartData) return;
+    const {actual, forecast, labels, options} = canvas._chartData;
+    drawLineChart(canvas.id, actual, forecast, labels, options);
+  });
+}
+
 function hasVisibleButtonLabel(button) {
   return Boolean(
     button.textContent.replace(/\s+/g, " ").trim()
@@ -320,10 +333,16 @@ function hideEmptyPrimaryButtons(root = document) {
   });
 }
 
-window.addEventListener("resize", initCharts);
+window.addEventListener("resize", redrawThemedCharts);
 document.addEventListener("DOMContentLoaded", () => {
   initCharts();
   hideEmptyPrimaryButtons();
+
+  const themeObserver = new MutationObserver(redrawThemedCharts);
+  themeObserver.observe(document.body, {
+    attributes: true,
+    attributeFilter: ["class"]
+  });
 
   const emptyButtonObserver = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
