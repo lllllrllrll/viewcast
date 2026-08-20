@@ -9,7 +9,7 @@ import {
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
-import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=3";
+import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=4";
 import { addNotifications } from "./notifications.js";
 
 const scopes = [
