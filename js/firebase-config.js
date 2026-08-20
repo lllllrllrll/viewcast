@@ -31,6 +31,7 @@ export const firebaseConfigured = Boolean(
 
 export const firebaseAuthorizedDomains = [
   "localhost",
+  "viewcast1.netlify.app",
   "viewcast-a6f31.firebaseapp.com",
   "viewcast-a6f31.web.app"
 ];
