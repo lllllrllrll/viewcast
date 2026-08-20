@@ -32,6 +32,14 @@ function ensureAppCheck(app) {
   return appCheckInstance;
 }
 
+// App Check must be initialized before the page starts using Firebase services.
+// Doing this only when the user clicked Generate allowed Auth/Firestore to win the
+// initialization race on the Insights page and could make reCAPTCHA attestation fail.
+const firebaseApp = firebaseConfigured
+  ? (getApps().length ? getApps()[0] : initializeApp(firebaseConfig))
+  : null;
+if (firebaseApp) ensureAppCheck(firebaseApp);
+
 function geminiText(payload = {}) {
   return payload.candidates?.[0]?.content?.parts
     ?.map((part) => part.text || "")
@@ -85,8 +93,8 @@ function recordAiAnalysis(usageMetadata = {}) {
 
 async function requestGeminiFunction({contents, systemInstruction, generationConfig, modelName}) {
   if (!firebaseConfigured) throw new Error("Firebase is not configured.");
-  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-  const appCheck = ensureAppCheck(app);
+  const app = firebaseApp || (getApps().length ? getApps()[0] : initializeApp(firebaseConfig));
+  const appCheck = appCheckInstance || ensureAppCheck(app);
   if (!appCheck) throw new Error("App Check is not configured.");
   await ensureAppCheckToken(appCheck);
   const callGenerateGeminiContent = httpsCallable(getFunctions(app), "generateGeminiContent");

@@ -9,7 +9,7 @@ import {
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
-import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=5";
+import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=6";
 import { addNotifications } from "./notifications.js";
 
 const scopes = [
@@ -944,31 +944,34 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
   const lane = detectChannelLane(videos);
   const contextControlsTrends = meaningfulCreatorContextWords().length > 0;
   const ownCategoryIds = new Set(channelVideoCategoryIds(videos));
-  const [
-    nicheResult,
-    popularResult,
-    similarResult,
-    laneResult,
-    platformShortsResult,
-    outsideResult,
-    outsideCategoryResult
-  ] = await Promise.allSettled([
-    fetchGeminiTrendVideos(accessToken, trendPlan),
-    contextControlsTrends ? Promise.resolve([]) : fetchTrendingVideos(accessToken, videos),
-    contextControlsTrends ? Promise.resolve([]) : fetchSimilarTrendVideos(accessToken, videos),
-    contextControlsTrends ? Promise.resolve({lane: null, videos: []}) : fetchLaneTrendVideos(accessToken, videos),
-    fetchPlatformShortVideos(accessToken),
-    fetchMostPopularVideos(accessToken),
-    fetchOutsideCategoryTrends(accessToken)
-  ]);
-  const nicheVideos = nicheResult.status === "fulfilled" ? nicheResult.value.videos : [];
+  let nicheResult = {lane: trendPlan?.lane || lane, videos: []};
+  try {
+    nicheResult = await fetchGeminiTrendVideos(accessToken, trendPlan);
+  } catch (error) {
+    console.warn("Niche trend search was not available.", error);
+  }
+  let laneResult = {lane, videos: []};
+  if (!nicheResult.videos.length && !contextControlsTrends) {
+    try {
+      laneResult = await fetchLaneTrendVideos(accessToken, videos);
+    } catch (error) {
+      console.warn("Category trend search was not available.", error);
+    }
+  }
+  let outsideVideos = [];
+  try {
+    // One inexpensive videos.list call replaces the previous platform-wide and
+    // eight-category search burst. This avoids quota spikes and HTTP 429 loops.
+    outsideVideos = await fetchMostPopularVideos(accessToken, 25);
+  } catch (error) {
+    console.warn("Popular trend references were not available.", error);
+  }
+  const nicheVideos = nicheResult.videos;
   const merged = [
     ...nicheVideos,
     // The deterministic lane search is the fallback when Gemini's niche searches
     // return nothing, rather than a competing source that can dilute the niche.
-    ...(!nicheVideos.length && laneResult.status === "fulfilled" ? laneResult.value.videos : []),
-    ...(similarResult.status === "fulfilled" ? similarResult.value : []),
-    ...(popularResult.status === "fulfilled" ? popularResult.value : [])
+    ...(!nicheVideos.length ? laneResult.videos : [])
   ];
   const seen = new Set();
   const ownVideoIds = new Set(videos.map((video) => video.id).filter(Boolean));
@@ -1028,19 +1031,12 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
 
   const trendVideos = diversifyTrendVideos(filteredTrendVideos, trendPlan?.queries || []);
   trendVideos.channelLane = trendPlan?.lane
-    || (nicheResult.status === "fulfilled" ? nicheResult.value.lane : null)
-    || (laneResult.status === "fulfilled" ? laneResult.value.lane : lane);
+    || nicheResult.lane
+    || laneResult.lane
+    || lane;
   trendVideos.trendQueries = trendPlan?.queries || trendQueriesForLane(trendVideos.channelLane);
   trendVideos.contentInterpretations = trendPlan?.contentInterpretations || [];
-  const outsideCandidates = [
-    ...(platformShortsResult.status === "fulfilled"
-      ? platformShortsResult.value
-      : []),
-    ...(outsideResult.status === "fulfilled" ? outsideResult.value : []),
-    ...(outsideCategoryResult.status === "fulfilled"
-      ? outsideCategoryResult.value
-      : [])
-  ];
+  const outsideCandidates = outsideVideos;
   trendVideos.outsideTrendVideos = selectOutsideTopicTrends(
     outsideCandidates,
     ownVideoIds,
