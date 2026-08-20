@@ -9,7 +9,7 @@ import {
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
-import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=4";
+import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=5";
 import { addNotifications } from "./notifications.js";
 
 const scopes = [
@@ -2801,7 +2801,7 @@ async function buildGeminiPageInsights(summary, videos) {
     if (error.message === "AI_INSIGHTS_RATE_LIMITED" || error.code === "functions/resource-exhausted") {
       throw new Error("AI_INSIGHTS_RATE_LIMITED");
     }
-    return null;
+    throw error;
   }
 }
 
