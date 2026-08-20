@@ -98,6 +98,7 @@ async function enforceDailyQuota(uid) {
  */
 exports.deleteAccount = onCall(
     {
+      enforceAppCheck,
       region: "us-central1",
       timeoutSeconds: 30,
     },

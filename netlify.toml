@@ -1,0 +1,63 @@
+[build]
+  command = "node netlify-build.mjs"
+  publish = "dist"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://www.gstatic.com https://accounts.google.com https://www.google.com/recaptcha/; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com https://yt3.ggpht.com https://*.googleusercontent.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net https://accounts.google.com https://oauth2.googleapis.com https://www.google.com/recaptcha/; frame-src https://accounts.google.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://viewcast-a6f31.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/pages/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[redirects]]
+  from = "/analyzer.html"
+  to = "/pages/analyzer.html"
+  status = 301
+
+[[redirects]]
+  from = "/channel.html"
+  to = "/pages/channel.html"
+  status = 301
+
+[[redirects]]
+  from = "/thumbnail-analyzer.html"
+  to = "/pages/thumbnail-analyzer.html"
+  status = 302
+
+[[redirects]]
+  from = "/insights.html"
+  to = "/pages/insights.html"
+  status = 301
+
+[[redirects]]
+  from = "/settings.html"
+  to = "/pages/settings.html"
+  status = 301
+
+[[redirects]]
+  from = "/account.html"
+  to = "/pages/account.html"
+  status = 301
