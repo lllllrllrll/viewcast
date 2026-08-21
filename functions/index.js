@@ -11,6 +11,9 @@ if (!getApps().length) initializeApp();
 // Define the secret for the Gemini API Key
 // Set using: firebase functions:secrets:set GEMINI_API_KEY
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const googleOAuthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
+const GOOGLE_OAUTH_CLIENT_ID =
+  "351557961377-ocbt4u5dm00n0mqfjvf808rpakc0b5bt.apps.googleusercontent.com";
 const enforceAppCheck = true;
 
 // Allowed models to prevent abuse with expensive models
@@ -28,6 +31,190 @@ const MAX_RATE_LIMIT_USERS = 5000;
 const DAILY_USER_REQUESTS = 50;
 const DAILY_PROJECT_REQUESTS = 5000;
 const recentRequests = new Map();
+
+/**
+ * Exchanges an OAuth code or refresh token with Google.
+ * @param {object} parameters OAuth token endpoint parameters.
+ * @return {Promise<object>} Google token response.
+ */
+async function googleTokenRequest(parameters) {
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    body: new URLSearchParams(parameters),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.access_token) {
+    logger.error("Google OAuth token exchange failed", {
+      status: response.status,
+      error: payload.error,
+    });
+    throw new HttpsError(
+        "failed-precondition",
+        "Your YouTube connection needs to be linked again.",
+    );
+  }
+  return payload;
+}
+
+/**
+ * Resolves the channel owned by a Google access token.
+ * @param {string} accessToken Google OAuth access token.
+ * @return {Promise<string>} YouTube channel ID.
+ */
+async function youtubeChannelId(accessToken) {
+  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
+  url.searchParams.set("part", "id");
+  url.searchParams.set("mine", "true");
+  const response = await fetch(url, {
+    headers: {Authorization: `Bearer ${accessToken}`},
+  });
+  const payload = await response.json().catch(() => ({}));
+  const channelId = payload.items && payload.items[0] && payload.items[0].id;
+  if (!response.ok || !channelId) {
+    throw new HttpsError(
+        "failed-precondition",
+        "No YouTube channel was available for this Google account.",
+    );
+  }
+  return channelId;
+}
+
+exports.exchangeYouTubeAuthorizationCode = onCall(
+    {
+      secrets: [googleOAuthClientSecret],
+      region: "us-central1",
+      timeoutSeconds: 30,
+    },
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError(
+            "unauthenticated",
+            "Sign in before linking YouTube.",
+        );
+      }
+      const data = request.data || {};
+      const code = String(data.code || "");
+      const redirectUri = String(data.redirectUri || "");
+      if (!code || code.length > 4096 || !/^https?:\/\//.test(redirectUri)) {
+        throw new HttpsError(
+            "invalid-argument",
+            "Invalid Google authorization response.",
+        );
+      }
+
+      const tokens = await googleTokenRequest({
+        code,
+        client_id: GOOGLE_OAUTH_CLIENT_ID,
+        client_secret: googleOAuthClientSecret.value(),
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      });
+      const channelId = await youtubeChannelId(tokens.access_token);
+      const credentialRef = getFirestore()
+          .doc(`_internalYouTubeAuth/${request.auth.uid}`);
+      const existing = await credentialRef.get();
+      const existingCredential = existing.data() || {};
+      const refreshToken = tokens.refresh_token ||
+        existingCredential.refreshToken;
+      if (!refreshToken) {
+        throw new HttpsError(
+            "failed-precondition",
+            "Google did not return renewable access. " +
+            "Unlink ViewCast in your Google account and link again.",
+        );
+      }
+      const expiresAt = Date.now() +
+        Number(tokens.expires_in || 3600) * 1000;
+      await credentialRef.set({
+        refreshToken,
+        accessToken: tokens.access_token,
+        expiresAt,
+        channelId,
+        scope: String(tokens.scope || ""),
+        updatedAt: new Date(),
+      });
+      return {accessToken: tokens.access_token, expiresAt, channelId};
+    },
+);
+
+exports.getYouTubeAccessToken = onCall(
+    {
+      secrets: [googleOAuthClientSecret],
+      region: "us-central1",
+      timeoutSeconds: 30,
+    },
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError(
+            "unauthenticated",
+            "Sign in before using YouTube.",
+        );
+      }
+      const credentialRef = getFirestore()
+          .doc(`_internalYouTubeAuth/${request.auth.uid}`);
+      const snapshot = await credentialRef.get();
+      const credential = snapshot.data();
+      if (!credential || !credential.refreshToken) {
+        throw new HttpsError(
+            "failed-precondition",
+            "Link your YouTube channel first.",
+        );
+      }
+      if (credential.accessToken &&
+          Number(credential.expiresAt || 0) > Date.now() + 60 * 1000) {
+        return {
+          accessToken: credential.accessToken,
+          expiresAt: credential.expiresAt,
+          channelId: credential.channelId,
+        };
+      }
+      const tokens = await googleTokenRequest({
+        refresh_token: credential.refreshToken,
+        client_id: GOOGLE_OAUTH_CLIENT_ID,
+        client_secret: googleOAuthClientSecret.value(),
+        grant_type: "refresh_token",
+      });
+      const expiresAt = Date.now() +
+        Number(tokens.expires_in || 3600) * 1000;
+      await credentialRef.set({
+        accessToken: tokens.access_token,
+        expiresAt,
+        updatedAt: new Date(),
+      }, {merge: true});
+      return {
+        accessToken: tokens.access_token,
+        expiresAt,
+        channelId: credential.channelId,
+      };
+    },
+);
+
+exports.revokeYouTubeAuthorization = onCall(
+    {region: "us-central1", timeoutSeconds: 30},
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError(
+            "unauthenticated",
+            "Sign in before unlinking YouTube.",
+        );
+      }
+      const credentialRef = getFirestore()
+          .doc(`_internalYouTubeAuth/${request.auth.uid}`);
+      const snapshot = await credentialRef.get();
+      const savedCredential = snapshot.data() || {};
+      const token = savedCredential.refreshToken;
+      if (token) {
+        await fetch("https://oauth2.googleapis.com/revoke", {
+          method: "POST",
+          headers: {"Content-Type": "application/x-www-form-urlencoded"},
+          body: new URLSearchParams({token}),
+        }).catch(() => {});
+      }
+      await credentialRef.delete();
+      return {revoked: true};
+    },
+);
 
 /**
  * Applies a short per-instance request limit for one authenticated user.
@@ -119,6 +306,19 @@ exports.deleteAccount = onCall(
       }
 
       const uid = request.auth.uid;
+      const youtubeCredentialRef = getFirestore()
+          .doc(`_internalYouTubeAuth/${uid}`);
+      const youtubeCredential = await youtubeCredentialRef.get();
+      const savedYouTubeCredential = youtubeCredential.data() || {};
+      const googleRefreshToken = savedYouTubeCredential.refreshToken;
+      if (googleRefreshToken) {
+        await fetch("https://oauth2.googleapis.com/revoke", {
+          method: "POST",
+          headers: {"Content-Type": "application/x-www-form-urlencoded"},
+          body: new URLSearchParams({token: googleRefreshToken}),
+        }).catch(() => {});
+      }
+      await youtubeCredentialRef.delete();
       try {
         await getAuth().deleteUser(uid);
       } catch (error) {

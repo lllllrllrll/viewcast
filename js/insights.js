@@ -11,6 +11,7 @@ import {
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
 import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=6";
 import { addNotifications } from "./notifications.js";
+import {getRenewedYouTubeAccessToken} from "./youtube-auth.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -414,22 +415,24 @@ function renderVideoLibrary(videos = channelVideos) {
 }
 
 function readCachedAccessToken() {
-  localStorage.removeItem(tokenStorageKey);
   try {
-    const saved = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
+    const saved = JSON.parse(
+      localStorage.getItem(tokenStorageKey) || sessionStorage.getItem(tokenStorageKey) || "null"
+    );
     if (saved?.accessToken && saved.uid === currentUser?.uid && saved.channelId === activeChannelId() && saved.expiresAt > Date.now() + 60 * 1000) {
       return saved.accessToken;
     }
   } catch (error) {
     // Fall through and clear bad token cache below.
   }
+  localStorage.removeItem(tokenStorageKey);
   sessionStorage.removeItem(tokenStorageKey);
   return "";
 }
 
 function saveCachedAccessToken(accessToken) {
   if (!accessToken || !currentUser) return;
-  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
+  localStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
     channelId: activeChannelId(),
@@ -461,46 +464,7 @@ function loadGoogleIdentityServices() {
 
 async function requestAccessToken() {
   if (!currentUser) throw new Error("Sign in before generating insights.");
-  if (!googleOAuthClientId) throw new Error("Missing Google OAuth client ID. Add your Web OAuth client ID in js/firebase-config.js.");
-
-  await loadGoogleIdentityServices();
-
-  return new Promise((resolve, reject) => {
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: googleOAuthClientId,
-      scope: scopes.join(" "),
-      prompt: "consent select_account",
-      callback: async (response) => {
-        if (response.error) {
-          reject(new Error(response.error_description || response.error));
-          return;
-        }
-        try {
-          const url = new URL("https://www.googleapis.com/youtube/v3/channels");
-          url.searchParams.set("part", "id");
-          url.searchParams.set("mine", "true");
-          const payload = await fetchJson(url, response.access_token);
-          const channelId = payload.items?.[0]?.id || "";
-          if (!channelId || channelId !== activeChannelId()) {
-            throw new Error("Select the Google account that owns the active YouTube channel.");
-          }
-          saveCachedAccessToken(response.access_token);
-          resolve(response.access_token);
-        } catch (error) {
-          reject(error);
-        }
-      },
-      error_callback: (error) => {
-        if (error.type === "popup_closed") {
-          reject(new Error("Connection canceled."));
-          return;
-        }
-        reject(new Error(error.message || error.type || "Google authorization failed."));
-      }
-    });
-
-    tokenClient.requestAccessToken();
-  });
+  return getRenewedYouTubeAccessToken(currentUser.uid, activeChannelId());
 }
 
 async function getAccessToken() {

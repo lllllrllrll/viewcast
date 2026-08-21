@@ -6,6 +6,7 @@ import {
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
 import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=5";
 import { addNotifications } from "./notifications.js";
+import {getRenewedYouTubeAccessToken} from "./youtube-auth.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -348,22 +349,24 @@ function parseVideoId(value) {
 }
 
 function readCachedAccessToken() {
-  localStorage.removeItem(tokenStorageKey);
   try {
-    const saved = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
+    const saved = JSON.parse(
+      localStorage.getItem(tokenStorageKey) || sessionStorage.getItem(tokenStorageKey) || "null"
+    );
     if (saved?.accessToken && saved.uid === currentUser?.uid && saved.channelId === activeChannelId() && saved.expiresAt > Date.now() + 60 * 1000) {
       return saved.accessToken;
     }
   } catch (error) {
     // Fall through and clear bad token cache below.
   }
+  localStorage.removeItem(tokenStorageKey);
   sessionStorage.removeItem(tokenStorageKey);
   return "";
 }
 
 function saveCachedAccessToken(accessToken) {
   if (!accessToken || !currentUser) return;
-  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
+  localStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
     channelId: activeChannelId(),
@@ -401,33 +404,7 @@ async function authorizedChannelId(accessToken) {
 
 async function requestAccessToken() {
   if (!currentUser) throw new Error("Sign in before analyzing a video.");
-  if (!googleOAuthClientId) throw new Error("Missing Google OAuth client ID. Add your Web OAuth client ID in js/firebase-config.js.");
-  await loadGoogleIdentityServices();
-  return new Promise((resolve, reject) => {
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: googleOAuthClientId,
-      scope: scopes.join(" "),
-      prompt: "consent select_account",
-      callback: async (response) => {
-        if (response.error) {
-          reject(new Error(response.error_description || response.error));
-          return;
-        }
-        try {
-          const channelId = await authorizedChannelId(response.access_token);
-          if (!channelId || channelId !== activeChannelId()) {
-            throw new Error("Select the Google account that owns the active YouTube channel.");
-          }
-          saveCachedAccessToken(response.access_token);
-          resolve(response.access_token);
-        } catch (error) {
-          reject(error);
-        }
-      },
-      error_callback: (error) => reject(new Error(error.message || error.type || "Google authorization failed."))
-    });
-    tokenClient.requestAccessToken();
-  });
+  return getRenewedYouTubeAccessToken(currentUser.uid, activeChannelId());
 }
 
 async function getAccessToken() {
@@ -931,24 +908,55 @@ function fallbackTimeline(retentionPoints, video, edits = []) {
   }));
 }
 
-function renderTimeline(points, durationSeconds = 0) {
+function renderTimeline(points, durationSeconds = 0, recommendedEdits = []) {
   const markers = document.getElementById("timelineMarkers");
   const list = document.getElementById("timelinePoints");
   const duration = document.getElementById("timelineDuration");
+  const ticks = document.getElementById("timelineTicks");
   const popover = document.getElementById("timelinePopover");
   const popoverTime = document.getElementById("timelinePopoverTime");
   const popoverTitle = document.getElementById("timelinePopoverTitle");
   const popoverSuggestion = document.getElementById("timelinePopoverSuggestion");
+  const popoverEdit = document.getElementById("timelinePopoverEdit");
   const popoverClose = document.getElementById("timelinePopoverClose");
   if (!markers || !list) return;
   if (timelineDismissHandler) {
     document.removeEventListener("click", timelineDismissHandler);
     timelineDismissHandler = null;
   }
-  const normalized = (points || []).slice(0, 8);
+  const normalized = (points || []).slice(0, 8).map((point) => ({...point}));
+  (recommendedEdits || []).slice(0, 5).forEach((edit, index) => {
+    const timestamp = edit.segment.match(/\d{1,2}:\d{2}(?::\d{2})?/)?.[0];
+    let target = timestamp
+      ? normalized.find((point) => point.timestamp === timestamp)
+      : normalized[index];
+    if (!target) {
+      target = {
+        timestamp: timestamp || durationFromSeconds(index * 30),
+        title: edit.issue,
+        suggestion: edit.recommendation,
+        severity: index < 2 ? "high" : "medium"
+      };
+      normalized.push(target);
+    }
+    target.edit = edit;
+  });
+  normalized.sort((a, b) => secondsFromTimestamp(a.timestamp) - secondsFromTimestamp(b.timestamp));
   let pinnedIndex = -1;
   const inferredDuration = Math.max(durationSeconds, ...normalized.map((point) => secondsFromTimestamp(point.timestamp)), 1);
-  if (duration) duration.textContent = durationSeconds ? durationFromSeconds(durationSeconds) : "";
+  if (duration) {
+    duration.textContent = durationSeconds
+      ? `Video length ${durationFromSeconds(durationSeconds)}`
+      : "";
+  }
+  if (ticks) {
+    const tickCount = durationSeconds >= 120 ? 5 : 3;
+    ticks.innerHTML = Array.from({length: tickCount}, (_, index) => {
+      const ratio = index / (tickCount - 1);
+      const timestamp = durationFromSeconds(Math.round(inferredDuration * ratio));
+      return `<span style="left:${ratio * 100}%">${escapeHtml(timestamp)}</span>`;
+    }).join("");
+  }
   if (popover) popover.hidden = true;
   markers.innerHTML = normalized.map((point, index) => {
     const position = Math.min(100, Math.max(1.5, secondsFromTimestamp(point.timestamp) / inferredDuration * 100));
@@ -957,7 +965,17 @@ function renderTimeline(points, durationSeconds = 0) {
   list.innerHTML = normalized.length ? normalized.map((point) => `
     <article class="timeline-point">
       <time>${escapeHtml(point.timestamp)}</time>
-      <div><b>${escapeHtml(point.title)}</b><span>${escapeHtml(point.suggestion)}</span></div>
+      <div>
+        <b>${escapeHtml(point.title)}</b>
+        <span>${escapeHtml(point.suggestion)}</span>
+        ${point.edit ? `
+          <div class="timeline-recommended-edit">
+            <div><strong>Recommended edit</strong><em>${escapeHtml(point.edit.impact)}</em></div>
+            <p>${escapeHtml(point.edit.recommendation)}</p>
+            <small>${escapeHtml(point.edit.segment)}</small>
+          </div>
+        ` : ""}
+      </div>
     </article>
   `).join("") : '<div class="video-library-empty">No timestamped improvement points were available for this analysis.</div>';
 
@@ -968,6 +986,12 @@ function renderTimeline(points, durationSeconds = 0) {
     if (popoverTime) popoverTime.textContent = `${point.timestamp} · ${point.severity} priority`;
     if (popoverTitle) popoverTitle.textContent = point.title;
     if (popoverSuggestion) popoverSuggestion.textContent = point.suggestion;
+    if (popoverEdit) {
+      popoverEdit.textContent = point.edit
+        ? `Recommended edit: ${point.edit.recommendation}`
+        : "";
+      popoverEdit.hidden = !point.edit;
+    }
     popover.hidden = false;
     markers.querySelectorAll(".timeline-marker").forEach((marker) => {
       const isActive = Number(marker.dataset.timelineIndex) === index;
@@ -979,6 +1003,7 @@ function renderTimeline(points, durationSeconds = 0) {
   const closePoint = () => {
     pinnedIndex = -1;
     if (popover) popover.hidden = true;
+    if (popoverEdit) popoverEdit.hidden = true;
     markers.querySelectorAll(".timeline-marker").forEach((marker) => {
       marker.classList.remove("is-active");
       marker.setAttribute("aria-expanded", "false");
@@ -1040,42 +1065,8 @@ function clearAnalyzerResults() {
     item.querySelector("span").textContent = " ";
     item.querySelector("time").textContent = " ";
   });
-  const tbody = document.querySelector("table tbody");
-  if (tbody) {
-    tbody.innerHTML = Array.from({length: 3}, () => "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>").join("");
-  }
   if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
   renderTimeline([], 0);
-}
-
-function updateTable(video, analytics, retentionPoints, geminiAnalysis = null) {
-  const tbody = document.querySelector("table tbody");
-  if (!tbody) return;
-  const stats = video.statistics || {};
-  const retentionRows = retentionEditSuggestions(retentionPoints, video);
-  const rows = geminiAnalysis?.recommendedEdits?.length
-    ? geminiAnalysis.recommendedEdits.map((item) => [
-      item.segment,
-      item.issue,
-      item.recommendation,
-      item.impact
-    ])
-    : retentionRows.length ? retentionRows : [
-    ["Public stats", "Views", wholeNumber(stats.viewCount) || "Unavailable", "Data API"],
-    ["Public stats", "Likes", wholeNumber(stats.likeCount) || "Unavailable", "Data API"],
-    ["Public stats", "Comments", wholeNumber(stats.commentCount) || "Unavailable", "Data API"],
-    ["Private analytics", "Avg. view %", analytics ? percent(analytics.averageViewPercentage) : "Unavailable", analytics ? (analytics.periodLabel || "Analytics API") : "Needs owner access"],
-    ["Private analytics", "Retention curve", retentionPoints.length ? `${retentionPoints.length} samples` : "Unavailable", retentionPoints.length ? "Analytics API" : "Needs owner access"]
-  ];
-
-  tbody.innerHTML = rows.map(([segment, issue, recommendation, impact]) => `
-    <tr>
-      <td>${escapeHtml(segment)}</td>
-      <td>${escapeHtml(issue)}</td>
-      <td>${escapeHtml(recommendation)}</td>
-      <td><span class="trend ${impact.includes("Unavailable") || impact.includes("Needs") ? "warn" : "good"}">${escapeHtml(impact)}</span></td>
-    </tr>
-  `).join("");
 }
 
 function updateMetrics(video, analytics, geminiAnalysis = null) {
@@ -1191,12 +1182,14 @@ async function analyzeVideoById(videoId) {
     updateLibrarySelection(video.id);
     updateMetrics(video, analytics, geminiAnalysis);
     updateSearchTerms(searchTerms);
-    updateTable(video, analytics, retentionPoints, geminiAnalysis);
+    const hasAiTimeline = Boolean(geminiAnalysis?.timelineInterestPoints?.length);
+    const timelinePoints = hasAiTimeline
+      ? geminiAnalysis.timelineInterestPoints
+      : fallbackTimeline(retentionPoints, video, geminiAnalysis?.recommendedEdits || []);
     renderTimeline(
-      geminiAnalysis?.timelineInterestPoints?.length
-        ? geminiAnalysis.timelineInterestPoints
-        : fallbackTimeline(retentionPoints, video, geminiAnalysis?.recommendedEdits || []),
-      secondsFromIso(video.contentDetails?.duration) || 0
+      timelinePoints,
+      secondsFromIso(video.contentDetails?.duration) || 0,
+      hasAiTimeline ? (geminiAnalysis?.recommendedEdits || []) : []
     );
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
@@ -1307,8 +1300,11 @@ async function analyzeUploadedVideo(file) {
     updateMetrics(localVideo, null, {metricLabels: {views: "Uploaded file", likes: "Unavailable", comments: "Unavailable", averageViewDuration: "File length"}});
     setMetric(3, durationFromSeconds(durationSeconds), "File length");
     updateSearchTerms([]);
-    updateTable(localVideo, null, [], analysis);
-    renderTimeline(analysis.timelineInterestPoints, durationSeconds);
+    renderTimeline(
+      analysis.timelineInterestPoints,
+      durationSeconds,
+      analysis.recommendedEdits || []
+    );
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);

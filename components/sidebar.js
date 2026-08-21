@@ -19,16 +19,16 @@
       icon: '<rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m21 15-5-5L5 20" />'
     },
     {
-      id: "channel",
-      label: "My Channel",
-      file: "channel.html",
-      icon: '<rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3z" />'
-    },
-    {
       id: "insights",
       label: "AI Insights",
       file: "insights.html",
       icon: '<path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /><path d="M9 21h6" /><path d="M10 17h4" />'
+    },
+    {
+      id: "channel",
+      label: "My Channel",
+      file: "channel.html",
+      icon: '<rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3z" />'
     },
     {
       id: "settings",

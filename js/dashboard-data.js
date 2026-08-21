@@ -8,6 +8,7 @@ import {
   getDoc,
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
+import {getRenewedYouTubeAccessToken} from "./youtube-auth.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const emptyValue = "\u00a0";
@@ -131,15 +132,17 @@ function secondsFromIso(value = "") {
 }
 
 function readCachedAccessToken(user) {
-  localStorage.removeItem(tokenStorageKey);
   try {
-    const token = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
+    const token = JSON.parse(
+      localStorage.getItem(tokenStorageKey) || sessionStorage.getItem(tokenStorageKey) || "null"
+    );
     if (!token?.accessToken || !token.expiresAt) return "";
     if (user?.uid && token.uid && token.uid !== user.uid) return "";
     if (token.channelId !== readActiveConnection()?.channel?.id) return "";
     if (Date.now() >= token.expiresAt) return "";
     return token.accessToken;
   } catch (error) {
+    localStorage.removeItem(tokenStorageKey);
     sessionStorage.removeItem(tokenStorageKey);
     return "";
   }
@@ -882,7 +885,10 @@ async function loadYouTubeData(user, db, days = 30) {
   const currentActive = connections.find(c => c.channel.id === activeConnection?.channel?.id) || connections[0];
   if (currentActive) saveCachedConnection(currentActive);
 
-  const accessToken = readCachedAccessToken(user);
+  const accessToken = readCachedAccessToken(user) || await getRenewedYouTubeAccessToken(
+    user.uid,
+    currentActive.channel.id
+  ).catch(() => "");
   if (!currentActive || !accessToken) return;
 
   try {

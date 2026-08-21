@@ -1,3 +1,5 @@
+import {revokeStoredYouTubeAuthorization} from "./youtube-auth.js";
+
 const TOKEN_KEY = "viewcastYouTubeAccessToken";
 
 const exactKeys = new Set([
@@ -25,7 +27,9 @@ const prefixes = [
 
 function cachedYouTubeToken() {
   try {
-    return JSON.parse(sessionStorage.getItem(TOKEN_KEY) || "null")?.accessToken || "";
+    return JSON.parse(
+      localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || "null"
+    )?.accessToken || "";
   } catch {
     return "";
   }
@@ -53,7 +57,7 @@ export function clearCreatorDataCaches() {
 }
 
 export async function secureSignOut(auth, signOut) {
-  await revokeYouTubeAccessToken();
+  await revokeStoredYouTubeAuthorization().catch(() => revokeYouTubeAccessToken());
   clearCreatorDataCaches();
   await signOut(auth);
 }

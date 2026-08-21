@@ -67,7 +67,7 @@ Setup completed for this Firebase project:
 
 The dashboard requests these scopes: `youtube.readonly`, `yt-analytics.readonly`, and `yt-analytics-monetary.readonly`. Use the **My Channel** page to connect or unlink a YouTube channel. Estimated revenue is shown when the connected channel has monetization data available.
 
-YouTube access tokens are kept in session storage, cleared on sign-out, and sent to Google's revocation endpoint when a channel is unlinked or the user signs out. Creator analytics and AI results are also session-only; only small, non-sensitive usage counters and dashboard summaries persist between browser sessions.
+YouTube is linked with Google's authorization-code flow. The renewable credential is stored only in a server-restricted Firestore document and is exchanged by authenticated Firebase Functions for short-lived access tokens used across Overview, My Channel, Analyzer, and Insights. Users authorize Google once when linking a channel; reopening the site and moving between tools renews access without another Google prompt. Unlinking, signing out, or deleting the account revokes the Google credential and removes the server-side copy. Creator analytics and AI results remain session-only; only small, non-sensitive usage counters and dashboard summaries persist between browser sessions.
 
 ## App Check and AI quotas
 

@@ -12,7 +12,10 @@ import {
   updateDoc
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
-import { revokeYouTubeAccessToken } from "./privacy.js";
+import {
+  exchangeYouTubeCode,
+  revokeStoredYouTubeAuthorization
+} from "./youtube-auth.js";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -41,7 +44,6 @@ const BASIC_LINKED_CHANNELS = 1;
 let currentUser = null;
 let auth = null;
 let db = null;
-let linkedConnections = [];
 let googleIdentityScriptPromise = null;
 
 function currentPlan() {
@@ -162,8 +164,7 @@ function saveConnections(connections, activeId = null) {
 
 function saveCachedAccessToken(accessToken, channelId) {
   if (!accessToken || !currentUser) return;
-  localStorage.removeItem(tokenStorageKey);
-  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
+  localStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
     channelId,
@@ -286,7 +287,7 @@ function loadGoogleIdentityServices() {
   return googleIdentityScriptPromise;
 }
 
-async function requestYouTubeAccessToken() {
+async function requestYouTubeAccessToken({selectAccount = false} = {}) {
   if (!googleOAuthClientId) {
     throw new Error("Missing Google OAuth client ID. Add your Web OAuth client ID in js/firebase-config.js.");
   }
@@ -294,16 +295,29 @@ async function requestYouTubeAccessToken() {
   await loadGoogleIdentityServices();
 
   return new Promise((resolve, reject) => {
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+    const codeClient = window.google.accounts.oauth2.initCodeClient({
       client_id: googleOAuthClientId,
       scope: scopes.join(" "),
-      prompt: "consent select_account",
-      callback: (response) => {
+      access_type: "offline",
+      include_granted_scopes: true,
+      // Only show the account chooser when the user is linking another channel.
+      // For a previously linked channel Google can reuse the existing grant.
+      prompt: selectAccount ? "consent select_account" : "",
+      callback: async (response) => {
         if (response.error) {
           reject(new Error(response.error_description || response.error));
           return;
         }
-        resolve(response.access_token);
+        try {
+          const result = await exchangeYouTubeCode(
+            response.code,
+            window.location.origin,
+            currentUser.uid
+          );
+          resolve(result.accessToken);
+        } catch (error) {
+          reject(error);
+        }
       },
       error_callback: (error) => {
         if (error.type === "popup_closed") {
@@ -314,7 +328,7 @@ async function requestYouTubeAccessToken() {
       }
     });
 
-    tokenClient.requestAccessToken();
+    codeClient.requestCode();
   });
 }
 
@@ -375,7 +389,7 @@ async function connectYouTube() {
   }
   try {
     setButton("Connecting...", true);
-    const accessToken = await requestYouTubeAccessToken();
+    const accessToken = await requestYouTubeAccessToken({selectAccount: readAllConnections().length > 0});
 
     const channel = await fetchChannel(accessToken);
     const connections = readAllConnections();
@@ -424,18 +438,12 @@ async function unlinkYouTube() {
   if (!currentUser || !active) return;
   try {
     setUnlinkButton({visible: true, disabled: true});
-    let token = "";
-    try {
-      token = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null")?.accessToken || "";
-    } catch {
-      token = "";
-    }
     const connections = readAllConnections().filter(c => c.channel.id !== active.channel.id);
     await updateDoc(doc(db, "users", currentUser.uid), {
       youtubeConnections: connections,
       updatedAt: serverTimestamp()
     });
-    await revokeYouTubeAccessToken(token);
+    await revokeStoredYouTubeAuthorization();
     sessionStorage.removeItem(tokenStorageKey);
     localStorage.removeItem(tokenStorageKey);
     saveConnections(connections);
@@ -484,6 +492,7 @@ if (connectButton && firebaseConfigured) {
 
   channelSelector?.addEventListener("change", () => {
     const connections = readAllConnections();
+    localStorage.removeItem(tokenStorageKey);
     sessionStorage.removeItem(tokenStorageKey);
     saveConnections(connections, channelSelector.value);
     window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", {

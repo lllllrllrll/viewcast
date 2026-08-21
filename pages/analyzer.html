@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ViewCast - Video Analyzer</title>
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../css/style.css?v=8">
+    <link rel="stylesheet" href="../css/style.css?v=10">
   </head>
   <body>
     <div class="app">
@@ -128,58 +128,18 @@
             </div>
           </article>
 
-          <article class="panel full analyzer-result">
-            <div class="panel-head">
-              <div>
-                <h3>Recommended Edits</h3>
-                <p>Automated suggestions to improve this video's performance.</p>
-              </div>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Segment</th>
-                    <th>Issue</th>
-                    <th>Recommendation</th>
-                    <th>Impact</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-                  <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-                  <tr>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                    <td>&nbsp;</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </article>
-
           <article class="panel full analyzer-result video-timeline-panel" id="videoTimelinePanel">
             <div class="panel-head">
               <div>
                 <h3>Video Improvement Timeline</h3>
-                <p>Jump to moments where pacing, clarity, visuals, or engagement could be improved.</p>
+                <p>See every improvement opportunity and its recommended edit at the exact moment it matters.</p>
               </div>
               <span class="timeline-duration" id="timelineDuration"></span>
             </div>
             <div class="video-timeline" id="videoTimeline">
               <div class="timeline-track" aria-hidden="true"></div>
               <div class="timeline-markers" id="timelineMarkers"></div>
+              <div class="timeline-ticks" id="timelineTicks" aria-hidden="true"></div>
             </div>
             <aside class="timeline-popover" id="timelinePopover" aria-live="polite" hidden>
               <div class="timeline-popover-head">
@@ -188,16 +148,17 @@
               </div>
               <strong id="timelinePopoverTitle"></strong>
               <p id="timelinePopoverSuggestion"></p>
+              <p class="timeline-popover-edit" id="timelinePopoverEdit" hidden></p>
             </aside>
             <div class="timeline-points" id="timelinePoints"></div>
           </article>
         </section>
       </main>
     </div>
-    <script src="../components/sidebar.js?v=2"></script>
+    <script src="../components/sidebar.js?v=3"></script>
     <script src="../components/plan-modal.js?v=3"></script>
     <script src="../js/script.js?v=10"></script>
     <script type="module" src="../js/dashboard-data.js?v=12"></script>
-    <script type="module" src="../js/analyzer.js?v=14"></script>
+    <script type="module" src="../js/analyzer.js?v=16"></script>
   </body>
 </html>
