@@ -134,7 +134,7 @@ function secondsFromIso(value = "") {
 function readCachedAccessToken(user) {
   try {
     const token = JSON.parse(
-      localStorage.getItem(tokenStorageKey) || sessionStorage.getItem(tokenStorageKey) || "null"
+      sessionStorage.getItem(tokenStorageKey) || "null"
     );
     if (!token?.accessToken || !token.expiresAt) return "";
     if (user?.uid && token.uid && token.uid !== user.uid) return "";
@@ -378,7 +378,7 @@ function setProgress(name, value, label) {
     const valueEl = item.querySelector(".progress-meta span");
     const barEl = item.querySelector(".bar i");
     if (valueEl) valueEl.textContent = label || emptyValue;
-    if (barEl) barEl.style.setProperty("--value", `${Math.max(0, Math.min(100, value || 0))}%`);
+    if (barEl) barEl.dataset.value = String(Math.round(Math.max(0, Math.min(100, value || 0))));
   });
 }
 
@@ -492,7 +492,7 @@ function renderUploadFrequency(overviewData) {
   container.innerHTML = rows.map((row) => {
     const value = Math.round((row.count / max) * 100);
     const label = row.count === 1 ? "1 upload" : `${row.count} uploads`;
-    return `<div class="region-row"><span>${escapeHtml(row.label)}</span><div class="bar"><i style="--value: ${value}%"></i></div><b>${escapeHtml(label)}</b></div>`;
+    return `<div class="region-row"><span>${escapeHtml(row.label)}</span><div class="bar"><i data-value="${value}"></i></div><b>${escapeHtml(label)}</b></div>`;
   }).join("");
 }
 
@@ -522,8 +522,9 @@ function renderTrafficSources(overviewData) {
   }
   container.innerHTML = rows.map((row) => {
     const label = trafficSourceLabels[row[0]] || String(row[0] || "Other").replace(/_/g, " ");
-    const share = percent(row[1], total);
-    return `<div class="region-row"><span>${escapeHtml(label)}</span><div class="bar"><i style="--value: ${share}"></i></div><b>${share}</b></div>`;
+    const shareValue = Math.max(0, Math.min(100, Math.round((numberValue(row[1]) || 0) / total * 100)));
+    const share = `${shareValue}%`;
+    return `<div class="region-row"><span>${escapeHtml(label)}</span><div class="bar"><i data-value="${shareValue}"></i></div><b>${share}</b></div>`;
   }).join("");
 }
 

@@ -4,7 +4,7 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
-import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=5";
+import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=7";
 import { addNotifications } from "./notifications.js";
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js";
 
@@ -351,7 +351,7 @@ function parseVideoId(value) {
 function readCachedAccessToken() {
   try {
     const saved = JSON.parse(
-      localStorage.getItem(tokenStorageKey) || sessionStorage.getItem(tokenStorageKey) || "null"
+      sessionStorage.getItem(tokenStorageKey) || "null"
     );
     if (saved?.accessToken && saved.uid === currentUser?.uid && saved.channelId === activeChannelId() && saved.expiresAt > Date.now() + 60 * 1000) {
       return saved.accessToken;
@@ -366,12 +366,13 @@ function readCachedAccessToken() {
 
 function saveCachedAccessToken(accessToken) {
   if (!accessToken || !currentUser) return;
-  localStorage.setItem(tokenStorageKey, JSON.stringify({
+  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
     channelId: activeChannelId(),
     expiresAt: Date.now() + 50 * 60 * 1000
   }));
+  localStorage.removeItem(tokenStorageKey);
 }
 
 function clearCachedAccessToken() {
@@ -954,13 +955,13 @@ function renderTimeline(points, durationSeconds = 0, recommendedEdits = []) {
     ticks.innerHTML = Array.from({length: tickCount}, (_, index) => {
       const ratio = index / (tickCount - 1);
       const timestamp = durationFromSeconds(Math.round(inferredDuration * ratio));
-      return `<span style="left:${ratio * 100}%">${escapeHtml(timestamp)}</span>`;
+      return `<span class="timeline-position-${Math.round(ratio * 100)}">${escapeHtml(timestamp)}</span>`;
     }).join("");
   }
   if (popover) popover.hidden = true;
   markers.innerHTML = normalized.map((point, index) => {
-    const position = Math.min(100, Math.max(1.5, secondsFromTimestamp(point.timestamp) / inferredDuration * 100));
-    return `<button class="timeline-marker ${escapeHtml(point.severity)}" type="button" data-timeline-index="${index}" style="left:${position}%" aria-label="${escapeHtml(point.timestamp + ": " + point.title)}" aria-expanded="false"></button>`;
+    const position = Math.round(Math.min(100, Math.max(2, secondsFromTimestamp(point.timestamp) / inferredDuration * 100)));
+    return `<button class="timeline-marker ${escapeHtml(point.severity)} timeline-position-${position}" type="button" data-timeline-index="${index}" aria-label="${escapeHtml(point.timestamp + ": " + point.title)}" aria-expanded="false"></button>`;
   }).join("");
   list.innerHTML = normalized.length ? normalized.map((point) => `
     <article class="timeline-point">

@@ -64,8 +64,7 @@ function promptForChannelUpgrade() {
   const prompt = document.getElementById("connectionPrompt");
   if (prompt) {
     prompt.textContent = message;
-    prompt.style.color = "var(--rose)";
-    prompt.style.fontWeight = "bold";
+    prompt.classList.add("connection-prompt-error");
   }
 }
 
@@ -164,12 +163,13 @@ function saveConnections(connections, activeId = null) {
 
 function saveCachedAccessToken(accessToken, channelId) {
   if (!accessToken || !currentUser) return;
-  localStorage.setItem(tokenStorageKey, JSON.stringify({
+  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
     channelId,
     expiresAt: Date.now() + 50 * 60 * 1000
   }));
+  localStorage.removeItem(tokenStorageKey);
 }
 
 function channelContextStorageKey(user = currentUser) {
@@ -428,7 +428,7 @@ async function connectYouTube() {
     const prompt = document.getElementById("connectionPrompt");
     if (prompt) {
       prompt.textContent = "Failed to link channel: " + (error.message || "Unknown error");
-      prompt.style.color = "var(--rose)";
+      prompt.classList.add("connection-prompt-error");
     }
   }
 }
@@ -471,8 +471,7 @@ if (connectButton && firebaseConfigured) {
       const prompt = document.getElementById("connectionPrompt");
       if (prompt) {
         prompt.textContent = "Please link a YouTube channel before analyzing videos.";
-        prompt.style.color = "var(--rose)";
-        prompt.style.fontWeight = "bold";
+        prompt.classList.add("connection-prompt-error");
       }
     }
 

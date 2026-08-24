@@ -5,6 +5,7 @@ const {getApps, initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
 const {getFirestore} = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
+const {createHash} = require("crypto");
 
 if (!getApps().length) initializeApp();
 
@@ -31,6 +32,50 @@ const MAX_RATE_LIMIT_USERS = 5000;
 const DAILY_USER_REQUESTS = 50;
 const DAILY_PROJECT_REQUESTS = 5000;
 const recentRequests = new Map();
+const geminiResponseCache = new Map();
+const GEMINI_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const GEMINI_CACHE_MAX_ENTRIES = 500;
+
+/**
+ * Creates a private cache key for one user's exact Gemini request.
+ * @param {string} uid Firebase user ID.
+ * @param {object} value Validated Gemini request fields.
+ * @return {string} Stable cache key.
+ */
+function geminiCacheKey(uid, value) {
+  return `${uid}:${createHash("sha256")
+      .update(JSON.stringify(value))
+      .digest("base64url")}`;
+}
+
+/**
+ * Reads a non-expired Gemini result from this warm function instance.
+ * @param {string} key Cache key.
+ * @return {object|null} Cached callable response.
+ */
+function readGeminiCache(key) {
+  const cached = geminiResponseCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.savedAt > GEMINI_CACHE_MAX_AGE_MS) {
+    geminiResponseCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+/**
+ * Stores a Gemini result while keeping the in-memory cache bounded.
+ * @param {string} key Cache key.
+ * @param {object} value Callable response.
+ * @return {void}
+ */
+function saveGeminiCache(key, value) {
+  if (geminiResponseCache.size >= GEMINI_CACHE_MAX_ENTRIES) {
+    const oldestKey = geminiResponseCache.keys().next().value;
+    if (oldestKey) geminiResponseCache.delete(oldestKey);
+  }
+  geminiResponseCache.set(key, {savedAt: Date.now(), value});
+}
 
 /**
  * Exchanges an OAuth code or refresh token with Google.
@@ -83,6 +128,7 @@ async function youtubeChannelId(accessToken) {
 exports.exchangeYouTubeAuthorizationCode = onCall(
     {
       secrets: [googleOAuthClientSecret],
+      enforceAppCheck,
       region: "us-central1",
       timeoutSeconds: 30,
     },
@@ -141,6 +187,7 @@ exports.exchangeYouTubeAuthorizationCode = onCall(
 exports.getYouTubeAccessToken = onCall(
     {
       secrets: [googleOAuthClientSecret],
+      enforceAppCheck,
       region: "us-central1",
       timeoutSeconds: 30,
     },
@@ -191,7 +238,7 @@ exports.getYouTubeAccessToken = onCall(
 );
 
 exports.revokeYouTubeAuthorization = onCall(
-    {region: "us-central1", timeoutSeconds: 30},
+    {enforceAppCheck, region: "us-central1", timeoutSeconds: 30},
     async (request) => {
       if (!request.auth) {
         throw new HttpsError(
@@ -528,6 +575,15 @@ exports.generateGeminiContent = onCall(
         );
       }
 
+      const responseCacheKey = geminiCacheKey(request.auth.uid, {
+        contents,
+        systemInstruction: safeSystemInstruction,
+        generationConfig: safeGenerationConfig,
+        modelName: selectedModel,
+      });
+      const cachedResponse = readGeminiCache(responseCacheKey);
+      if (cachedResponse) return cachedResponse;
+
       await enforceDailyQuota(request.auth.uid);
 
       try {
@@ -555,10 +611,12 @@ exports.generateGeminiContent = onCall(
         const response = await result.response;
 
         // 5. Return the response object.
-        return {
+        const responseValue = {
           candidates: response.candidates,
           usageMetadata: response.usageMetadata,
         };
+        saveGeminiCache(responseCacheKey, responseValue);
+        return responseValue;
       } catch (error) {
         logger.error("Gemini API error:", error);
 

@@ -120,7 +120,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
   function updateUsageBar(type, value, limit) {
     if (usageLabels[type]) usageLabels[type].textContent = usageText(value, limit);
-    if (usageBars[type]) usageBars[type].style.setProperty("--value", `${usagePercent(value, limit)}%`);
+    if (usageBars[type]) usageBars[type].dataset.value = String(usagePercent(value, limit));
   }
 
   function updatePlanDisplay() {
@@ -151,13 +151,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
             : button.dataset.planChoice === "pro"
               ? "Upgrade to Pro"
               : "Choose Premium";
-        if (isCurrent) {
-          button.style.background = "var(--line)";
-          button.style.color = "var(--muted)";
-        } else {
-          button.style.background = "";
-          button.style.color = "";
-        }
+        button.classList.toggle("is-current-plan", isCurrent);
       }
     });
 

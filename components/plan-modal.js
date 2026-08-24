@@ -19,7 +19,7 @@
               <li>Swap channels anytime</li>
               <li>Community support</li>
             </ul>
-            <button class="primary-button" data-plan-choice="basic" style="width: 100%;">Active Plan</button>
+            <button class="primary-button plan-choice-button" data-plan-choice="basic">Active Plan</button>
           </div>
           <div class="plan-card" data-plan-card="pro">
             <div class="plan-badge">Popular</div>
@@ -33,7 +33,7 @@
               <li>Custom alert rules</li>
               <li>AI prediction (50/mo)</li>
             </ul>
-            <button class="primary-button" data-plan-choice="pro" style="width: 100%;">Upgrade to Pro</button>
+            <button class="primary-button plan-choice-button" data-plan-choice="pro">Upgrade to Pro</button>
           </div>
           <div class="plan-card" data-plan-card="premium">
             <div class="plan-badge"></div>
@@ -46,10 +46,10 @@
               <li>API access for reporting</li>
               <li>Priority AI support</li>
             </ul>
-            <button class="primary-button" data-plan-choice="premium" style="width: 100%;">Choose Premium</button>
+            <button class="primary-button plan-choice-button" data-plan-choice="premium">Choose Premium</button>
           </div>
         </div>
-        <p id="modalStatus" style="text-align: center; padding: 0 32px 24px; color: var(--rose); font-size: 13px; font-weight: 600;" hidden></p>
+        <p class="modal-status-message" id="modalStatus" hidden></p>
       </div>
     </div>
   `;
@@ -80,7 +80,7 @@
       const badge = card.querySelector(".plan-badge");
       if (badge) {
         badge.textContent = isCurrent ? "Current" : planKey === "pro" ? "Popular" : "";
-        badge.style.display = badge.textContent ? "block" : "none";
+        badge.hidden = !badge.textContent;
       }
 
       const btn = card.querySelector("[data-plan-choice]");
@@ -96,16 +96,8 @@
           btn.removeAttribute("title");
           btn.removeAttribute("aria-label");
         }
-        if (isCurrent) {
-          btn.style.background = "var(--line)";
-          btn.style.color = "var(--muted)";
-        } else if (isUnavailable) {
-          btn.style.background = "var(--surface-2)";
-          btn.style.color = "var(--muted)";
-        } else {
-          btn.style.background = "var(--teal)";
-          btn.style.color = "white";
-        }
+        btn.classList.toggle("is-current-plan", isCurrent);
+        btn.classList.toggle("is-unavailable-plan", isUnavailable && !isCurrent);
       }
     });
   }

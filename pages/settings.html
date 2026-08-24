@@ -39,7 +39,7 @@
               </div>
               <div class="showcase-item">
                 <b>Current Plan</b>
-                <span class="plan-indicator" id="planLabel" data-current-plan style="margin-top: 8px;">Basic</span>
+                <span class="plan-indicator plan-indicator-spaced" id="planLabel" data-current-plan>Basic</span>
               </div>
             </div>
           </article>
@@ -80,18 +80,18 @@
             <div class="progress-stack">
               <div class="progress-item" data-usage-item="videos">
                 <div class="progress-meta"><b>Video analysis access</b><span data-usage-label="videos">&nbsp;</span></div>
-                <div class="bar"><i data-usage-bar="videos" style="--value: 0%"></i></div>
+                <div class="bar"><i data-usage-bar="videos" data-value="0"></i></div>
               </div>
               <div class="progress-item" data-usage-item="channels">
                 <div class="progress-meta"><b>Channels connected</b><span data-usage-label="channels">&nbsp;</span></div>
-                <div class="bar"><i data-usage-bar="channels" style="--value: 0%"></i></div>
+                <div class="bar"><i data-usage-bar="channels" data-value="0"></i></div>
               </div>
               <div class="progress-item" data-usage-item="aiAnalyses">
                 <div class="progress-meta"><b>AI feature access</b><span data-usage-label="aiAnalyses">&nbsp;</span></div>
-                <div class="bar"><i data-usage-bar="aiAnalyses" style="--value: 0%"></i></div>
+                <div class="bar"><i data-usage-bar="aiAnalyses" data-value="0"></i></div>
               </div>
-              <div style="margin-top: 10px;">
-                <button class="primary-button" id="upgradePlan" type="button" style="width: 100%; background: var(--blue);">Upgrade Plan</button>
+              <div class="settings-upgrade-row">
+                <button class="primary-button settings-upgrade-button" id="upgradePlan" type="button">Upgrade Plan</button>
               </div>
             </div>
           </article>
@@ -106,7 +106,7 @@
             <div class="settings-stack">
               <div class="settings-row">
                 <span>Account ID</span>
-                <code id="accountId" style="font-size: 12px; color: var(--muted);">Loading...</code>
+                <code class="account-id-code" id="accountId">Loading...</code>
               </div>
               <div class="settings-row">
                 <span>Member Since</span>

@@ -3,6 +3,9 @@ import {getFunctions, httpsCallable} from "https://www.gstatic.com/firebasejs/12
 import {firebaseConfig} from "./firebase-config.js";
 
 const tokenStorageKey = "viewcastYouTubeAccessToken";
+// Remove bearer tokens left by older builds. Renewable credentials stay on the
+// authenticated backend, so reopening still works without persistent JS access.
+localStorage.removeItem(tokenStorageKey);
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const functions = getFunctions(app, "us-central1");
 
@@ -13,8 +16,8 @@ function saveToken(result, uid) {
     channelId: result.channelId || "",
     uid
   };
-  localStorage.setItem(tokenStorageKey, JSON.stringify(token));
-  sessionStorage.removeItem(tokenStorageKey);
+  sessionStorage.setItem(tokenStorageKey, JSON.stringify(token));
+  localStorage.removeItem(tokenStorageKey);
   return token.accessToken;
 }
 
@@ -29,14 +32,14 @@ export async function exchangeYouTubeCode(code, redirectUri, uid) {
 
 export async function getRenewedYouTubeAccessToken(uid, channelId = "") {
   try {
-    const cached = JSON.parse(localStorage.getItem(tokenStorageKey) || "null");
+    const cached = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
     if (cached?.accessToken && cached.uid === uid &&
         (!channelId || cached.channelId === channelId) &&
         cached.expiresAt > Date.now() + 60 * 1000) {
       return cached.accessToken;
     }
   } catch {
-    localStorage.removeItem(tokenStorageKey);
+    sessionStorage.removeItem(tokenStorageKey);
   }
   const call = httpsCallable(functions, "getYouTubeAccessToken");
   const response = await call();

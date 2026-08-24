@@ -9,7 +9,7 @@ import {
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
-import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=6";
+import { isGeminiAvailable, requestGeminiContent, requestGeminiText } from "./gemini-client.js?v=7";
 import { addNotifications } from "./notifications.js";
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js";
 
@@ -45,7 +45,7 @@ const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 26;
+const insightsCacheVersion = 29;
 const insightsCacheMaxAge = 24 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -417,7 +417,7 @@ function renderVideoLibrary(videos = channelVideos) {
 function readCachedAccessToken() {
   try {
     const saved = JSON.parse(
-      localStorage.getItem(tokenStorageKey) || sessionStorage.getItem(tokenStorageKey) || "null"
+      sessionStorage.getItem(tokenStorageKey) || "null"
     );
     if (saved?.accessToken && saved.uid === currentUser?.uid && saved.channelId === activeChannelId() && saved.expiresAt > Date.now() + 60 * 1000) {
       return saved.accessToken;
@@ -432,12 +432,13 @@ function readCachedAccessToken() {
 
 function saveCachedAccessToken(accessToken) {
   if (!accessToken || !currentUser) return;
-  localStorage.setItem(tokenStorageKey, JSON.stringify({
+  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
     accessToken,
     uid: currentUser.uid,
     channelId: activeChannelId(),
     expiresAt: Date.now() + 50 * 60 * 1000
   }));
+  localStorage.removeItem(tokenStorageKey);
 }
 
 function clearCachedAccessToken() {
@@ -836,21 +837,29 @@ async function fetchLaneTrendVideos(accessToken, videos) {
 
 async function fetchGeminiTrendVideos(accessToken, trendPlan) {
   if (!trendPlan?.queries?.length) return {lane: null, videos: []};
-  const query = trendPlan.queries[0];
   let videos = [];
   let recentError = null;
   try {
-    videos = (await searchVideosByQuery(
-      accessToken,
-      `${query} shorts`,
-      12,
-      30,
-      true
-    )).map((video) => ({
-      ...video,
-      trendSource: "Niche YouTube trend search",
-      trendQuery: query
-    }));
+    const results = await Promise.allSettled(
+      trendPlan.queries.slice(0, 3).map((query) => searchVideosByQuery(
+        accessToken,
+        `${query} shorts`,
+        8,
+        45,
+        true
+      ))
+    );
+    videos = results.flatMap((result, index) => {
+      if (result.status === "rejected") {
+        recentError = result.reason;
+        return [];
+      }
+      return result.value.map((video) => ({
+        ...video,
+        trendSource: "Niche YouTube trend search",
+        trendQuery: trendPlan.queries[index]
+      }));
+    });
   } catch (error) {
     recentError = error;
     console.warn("Current niche trends were not available.", error);
@@ -862,14 +871,14 @@ async function fetchGeminiTrendVideos(accessToken, trendPlan) {
     try {
       videos = (await searchVideosByQuery(
         accessToken,
-        `${query} shorts`,
+        `${trendPlan.queries[0]} shorts`,
         12,
         90,
         true
       )).map((video) => ({
         ...video,
         trendSource: "Expanded niche YouTube trend search",
-        trendQuery: query
+        trendQuery: trendPlan.queries[0]
       }));
     } catch (error) {
       console.warn("Expanded niche trends were not available.", error);
@@ -952,6 +961,7 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
     if (!isShortTrendVideo(video)) return false;
     if (!isEnglishTrendVideo(video)) return false;
     if (contextControlsTrends && !trendMatchesCreatorContext(video)) return false;
+    if (!trendMatchesNichePlan(video, trendPlan)) return false;
     seen.add(video.id);
     return true;
   }).sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
@@ -983,12 +993,13 @@ async function fetchTrendReferenceVideos(accessToken, videos, trendPlan = null) 
         video?.id &&
         !ownVideoIds.has(video.id) &&
         values.findIndex((candidate) => candidate.id === video.id) === index &&
-        trendMatchesCreatorContext(video)
+        trendMatchesCreatorContext(video) &&
+        trendMatchesNichePlan(video, trendPlan)
       ))
       .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
   }
 
-  if (!filteredTrendVideos.length && !quotaLimited) {
+  if (!filteredTrendVideos.length && !quotaLimited && !trendPlan?.queries?.length) {
     const categoryFallback = await fetchTrendingVideos(accessToken, videos);
     filteredTrendVideos = categoryFallback
       .filter((video, index, values) => (
@@ -1069,6 +1080,29 @@ function trendMatchesCreatorContext(video) {
   const matches = contextWords.filter((word) => candidateWords.has(word)).length;
   const requiredMatches = contextWords.length >= 4 ? 2 : 1;
   return matches >= requiredMatches;
+}
+
+function trendMatchesNichePlan(video, trendPlan) {
+  if (!trendPlan) return true;
+  const snippet = video.snippet || {};
+  const candidateWords = new Set(importantWords([
+    snippet.title || "",
+    shortText(snippet.description || "", 320),
+    ...(snippet.tags || []).slice(0, 12)
+  ].join(" ")));
+  const nicheWords = importantWords([
+    ...(trendPlan.nicheTerms || []),
+    trendPlan.lane?.specificCategory || "",
+    ...(trendPlan.contentInterpretations || []).flatMap(
+      (item) => item.mediaReferences || []
+    )
+  ].join(" ")).filter((word) => ![
+    "general", "gaming", "games", "videos", "shorts", "content"
+  ].includes(word));
+  if (!nicheWords.length) return true;
+  const uniqueNicheWords = [...new Set(nicheWords)];
+  const matches = uniqueNicheWords.filter((word) => candidateWords.has(word));
+  return matches.length >= (uniqueNicheWords.length >= 6 ? 2 : 1);
 }
 
 function outsideContextBridgeMultiplier(video) {
@@ -2185,23 +2219,17 @@ function trendSectionFallbackItems(type, summary) {
 }
 
 function renderTrendSections(summary) {
-  const platformGroups = buildPlatformTrendGroups(summary.globalTrendVideos || []);
+  const adjacentGroups = buildPlatformTrendGroups(summary.outsideTrendVideos || []);
   const nicheGroups = buildTrendGroups(summary.trendVideos || []);
-  const crossoverGroups = opportunityGroups(platformGroups, nicheGroups);
-  const platformItems = platformGroups.length
-    ? trendGroupItems(platformGroups, "Platform Shorts")
-    : trendSectionFallbackItems("platform", summary);
+  const crossoverGroups = opportunityGroups(adjacentGroups, nicheGroups);
   const nicheItems = nicheGroups.length
     ? trendGroupItems(nicheGroups, "Niche Shorts")
     : trendSectionFallbackItems("niche", summary);
   const opportunities = crossoverGroups.length
     ? opportunityItems(crossoverGroups, summary)
     : trendSectionFallbackItems("opportunities", summary);
-  updateActivityItems(
-    "#platformWideTrends .activity-item",
-    platformItems,
-    platformGroups.map((group) => group.videos)
-  );
+  const nicheTitle = document.getElementById("nicheTrendsTitle");
+  if (nicheTitle) nicheTitle.textContent = `Trends for ${creatorContextLabel(summary)}`;
   updateActivityItems(
     "#nicheTrends .activity-item",
     nicheItems,
@@ -2215,8 +2243,7 @@ function renderTrendSections(summary) {
 }
 
 function hasLiveTrendResults(summary) {
-  return buildPlatformTrendGroups(summary?.globalTrendVideos || []).length > 0 &&
-    buildTrendGroups(summary?.trendVideos || []).length > 0;
+  return buildTrendGroups(summary?.trendVideos || []).length > 0;
 }
 
 function orderExpansionVideosByCrossover(videos = [], items = []) {
@@ -2294,10 +2321,10 @@ function compactAdviceSummary(summary) {
 }
 
 function channelVideoContext(videos) {
-  return videos.slice(0, 8).map((video) => ({
+  return videos.slice(0, 40).map((video) => ({
     title: video.snippet?.title || "Untitled video",
-    description: shortText(video.snippet?.description || "", 60),
-    tags: (video.snippet?.tags || []).slice(0, 3),
+    description: shortText(video.snippet?.description || "", 260),
+    tags: (video.snippet?.tags || []).slice(0, 12),
     publishedAt: video.snippet?.publishedAt || "",
     views: numberValue(video.statistics?.viewCount) || 0,
     likes: numberValue(video.statistics?.likeCount) || 0,
@@ -2307,6 +2334,71 @@ function channelVideoContext(videos) {
     youtubeCategoryId: video.snippet?.categoryId || "",
     youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId)
   }));
+}
+
+function channelScanContext(videos, profile = {}, {includeCatalog = true} = {}) {
+  const uploads = Array.isArray(videos) ? videos : [];
+  const sortedByViews = [...uploads].sort(
+    (a, b) => numberValue(b.statistics?.viewCount) - numberValue(a.statistics?.viewCount)
+  );
+  const tagCounts = new Map();
+  const categoryCounts = new Map();
+  let shorts = 0;
+
+  uploads.forEach((video) => {
+    if (isShort(video)) shorts += 1;
+    const category = youtubeCategoryName(video.snippet?.categoryId) || "Uncategorized";
+    categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+    (video.snippet?.tags || []).forEach((tag) => {
+      const normalized = String(tag || "").trim();
+      if (!normalized) return;
+      const key = normalized.toLowerCase();
+      const existing = tagCounts.get(key) || {label: normalized, count: 0};
+      existing.count += 1;
+      tagCounts.set(key, existing);
+    });
+  });
+
+  const compactUpload = (video) => ({
+    title: video.snippet?.title || "Untitled video",
+    description: shortText(video.snippet?.description || "", 220),
+    tags: (video.snippet?.tags || []).slice(0, 10),
+    publishedAt: video.snippet?.publishedAt || "",
+    views: numberValue(video.statistics?.viewCount) || 0,
+    likes: numberValue(video.statistics?.likeCount) || 0,
+    comments: numberValue(video.statistics?.commentCount) || 0,
+    duration: durationFromIso(video.contentDetails?.duration),
+    format: isShort(video) ? "Short" : "Video"
+  });
+
+  return {
+    scanAvailable: uploads.length > 0,
+    channel: compactChannelProfile(profile),
+    uploadsScanned: uploads.length,
+    totalChannelVideos: numberValue(profile.videoCount) || uploads.length,
+    scanCoveragePercent: profile.videoCount
+      ? Math.min(100, Math.round((uploads.length / numberValue(profile.videoCount)) * 100))
+      : 100,
+    formatMix: {shorts, longForm: Math.max(0, uploads.length - shorts)},
+    categories: [...categoryCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, count]) => ({name, count})),
+    recurringTags: [...tagCounts.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 25),
+    inferredNicheTerms: inferChannelNicheTerms(uploads, profile),
+    uploadCatalog: includeCatalog ? uploads.slice(0, 200).map((video) => ({
+      title: video.snippet?.title || "Untitled video",
+      tags: (video.snippet?.tags || []).slice(0, 4),
+      category: youtubeCategoryName(video.snippet?.categoryId),
+      format: isShort(video) ? "Short" : "Video",
+      publishedAt: video.snippet?.publishedAt || "",
+      views: numberValue(video.statistics?.viewCount) || 0
+    })) : [],
+    recentUploads: uploads.slice(0, 24).map(compactUpload),
+    topPerformers: sortedByViews.slice(0, 10).map(compactUpload)
+  };
 }
 
 function uploadPerformanceContext(videos) {
@@ -2344,6 +2436,44 @@ function compactChannelProfile(profile = {}) {
     subscriberCount: profile.subscriberCount || profile.statistics?.subscriberCount || "",
     videoCount: profile.videoCount || profile.statistics?.videoCount || ""
   };
+}
+
+function inferChannelNicheTerms(videos, profile = {}) {
+  const scores = new Map();
+  const generic = new Set([
+    "gaming", "games", "gameplay", "video", "videos", "short", "shorts",
+    "youtube", "viral", "trending", "funny", "official", "channel"
+  ]);
+  const add = (value, weight) => importantWords(value).forEach((word) => {
+    if (!generic.has(word)) scores.set(word, (scores.get(word) || 0) + weight);
+  });
+  add(profile.keywords || "", 5);
+  add(profile.description || "", 3);
+  videos.slice(0, 30).forEach((video, index) => {
+    const performanceWeight = index < 8 ? 3 : 1;
+    add(video.snippet?.title || "", performanceWeight);
+    (video.snippet?.tags || []).slice(0, 12).forEach(
+      (tag) => add(tag, performanceWeight + 2)
+    );
+  });
+  return [...scores.entries()]
+    .filter(([, score]) => score >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .map(([word]) => word)
+    .slice(0, 10);
+}
+
+function nicheQueriesFromTerms(terms, fallbackLane) {
+  if (!terms.length) return trendQueriesForLane(fallbackLane);
+  const pairs = [
+    terms.slice(0, 2),
+    [terms[0], terms[2]].filter(Boolean),
+    [terms[1] || terms[0], terms[3]].filter(Boolean),
+    [terms[0], terms[4]].filter(Boolean)
+  ];
+  return pairs.map((parts, index) => `${parts.join(" ")} ${[
+    "updates", "challenge", "explained", "community"
+  ][index]}`.trim());
 }
 
 function normalizeGeminiTrendPlan(value, fallbackLane) {
@@ -2400,6 +2530,10 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
       values.indexOf(categoryId) === index
     ))
     .slice(0, 5);
+  const nicheTerms = (Array.isArray(value.nicheTerms) ? value.nicheTerms : [])
+    .map((term) => String(term || "").trim().slice(0, 60))
+    .filter((term, index, values) => term && values.indexOf(term) === index)
+    .slice(0, 10);
 
   return {
     lane: {
@@ -2411,6 +2545,7 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
       confidence: String(value.categoryConfidence || "medium").slice(0, 20)
     },
     queries,
+    nicheTerms,
     contentInterpretations,
     expansionCategoryIds
   };
@@ -2418,10 +2553,13 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
 
 async function buildGeminiTrendPlan(videos, channelProfile = null) {
   const fallbackLane = detectChannelLane(videos);
+  const inferredNicheTerms = inferChannelNicheTerms(videos, channelProfile || {});
+  const fallbackQueries = nicheQueriesFromTerms(inferredNicheTerms, fallbackLane);
   if (!isGeminiAvailable()) {
     return {
       lane: fallbackLane,
-      queries: trendQueriesForLane(fallbackLane),
+      queries: fallbackQueries,
+      nicheTerms: inferredNicheTerms,
       contentInterpretations: [],
       expansionCategoryIds: []
     };
@@ -2429,7 +2567,8 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
 
   const prompt = [
     "You are classifying a YouTube channel for ViewCast.",
-    "Use the creator-provided topic and context first, then the channel profile and repeated patterns across uploads, descriptions, tags, YouTube category names, formats, dates, and performance.",
+    "Scan the complete channel evidence supplied below before choosing trends. Use the creator-provided topic and context first, then repeated patterns across the channel profile, recent uploads, top performers, descriptions, tags, YouTube categories, formats, dates, and performance.",
+    "Treat uploadsScanned and scanCoveragePercent as confidence signals. When only part of the channel is available, say so internally and rely only on repeated evidence; never invent unavailable channel details.",
     "TREND SOURCE RULE: when creator-provided context is non-empty, it is the exclusive source for queries and trend discovery. Do not use, quote, paraphrase, or derive any trend query from upload titles. Uploads may still be interpreted for later performance analysis, but they must not steer what counts as a current trend.",
     "Decide the channel's broad category and, when possible, a specific subcategory. Do not classify from one ambiguous word or one outlier upload.",
     "Use clean creator categories. Examples: Music, Gaming, Roblox, Minecraft, Fortnite, Anime, Memes, Sports, Beauty, Education, Tech, Vlogs, Cooking.",
@@ -2440,20 +2579,23 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
     "Do not treat title wording as the topic by itself. Resolve slang, abbreviations, character names, quotes, episode references, memes, and fandom-specific language when the surrounding metadata supports it.",
     "Never invent a media reference. If a reference is ambiguous, use an empty mediaReferences list, explain the likely premise conservatively, and set confidence to low.",
     "Then choose exactly 4 trend-search queries from the resolved media references and premises, not by copying full upload titles. The queries must cover 4 meaningfully different subtopics within the same category—not synonyms, rephrasings, or the same event/person/title. For example, a gaming category could cover a new release, a competitive meta, a creator challenge format, and an industry event.",
+    "Every query must contain a specific named game, franchise, fandom, genre, product, skill, audience problem, or recurring subject proven by the channel evidence. Never return broad queries such as gaming trends, viral gaming, popular games, YouTube trends, or general entertainment.",
+    "Return 4-10 nicheTerms that uniquely identify this creator's actual lane. Prefer repeated named entities, subgenres, recurring audience problems, and signature formats. Exclude generic category words such as gaming, videos, Shorts, trends, funny, and viral.",
     "When creator-provided context exists, ignore resolved upload media references while choosing queries and use only that creator context. Each query must contain at least one meaningful term written in the creator context.",
     "Also choose exactly 5 expansionCategoryIds for popular trends outside the current topic. Choose from Film & Animation=1, Music=10, Sports=17, Gaming=20, Comedy=23, Entertainment=24, Education=27, and Science & Technology=28.",
     "The expansion categories must remain outside the creator's current topic, but they must offer a credible bridge to the audience interests, tone, skills, goals, or presentation style explicitly described in creator-provided context. Rank the strongest bridge first.",
-    "Return JSON only with this shape. No trailing commas:",
+    "Return JSON only with this shape. No trailing commas. Also include nicheTerms as a top-level array of 4-10 strings:",
     `{"categoryKey":"","primaryCategory":"","specificCategory":"","categoryLabel":"","categorySeed":"","categoryConfidence":"high","contentInterpretations":[{"title":"","mediaReferences":[""],"premise":"","audienceAppeal":"","confidence":"high"}],"queries":["","","",""],"expansionCategoryIds":["","","","",""]}`,
     "",
     "Channel profile:",
     JSON.stringify(channelProfile || {}),
     "",
+    "Channel-wide scan (available YouTube metadata, up to 200 uploads):",
+    JSON.stringify(channelScanContext(videos, channelProfile || {})),
+    "",
     "Creator-provided channel topic and context (use this as the primary niche guidance):",
     JSON.stringify(savedChannelContext),
-    "",
-    "Channel uploads:",
-    JSON.stringify(channelVideoContext(videos))
+    ""
   ].join("\n");
 
   try {
@@ -2473,9 +2615,15 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
       ?.map((part) => part.text || "")
       .join("")
       .trim();
-    return normalizeGeminiTrendPlan(safeJsonParse(text), fallbackLane) || {
+    const plan = normalizeGeminiTrendPlan(safeJsonParse(text), fallbackLane);
+    if (plan) {
+      if (!plan.nicheTerms.length) plan.nicheTerms = inferredNicheTerms;
+      return plan;
+    }
+    return {
       lane: fallbackLane,
-      queries: trendQueriesForLane(fallbackLane),
+      queries: fallbackQueries,
+      nicheTerms: inferredNicheTerms,
       contentInterpretations: [],
       expansionCategoryIds: []
     };
@@ -2483,7 +2631,8 @@ async function buildGeminiTrendPlan(videos, channelProfile = null) {
     console.warn("Gemini trend plan failed.", error);
     return {
       lane: fallbackLane,
-      queries: trendQueriesForLane(fallbackLane),
+      queries: fallbackQueries,
+      nicheTerms: inferredNicheTerms,
       contentInterpretations: [],
       expansionCategoryIds: []
     };
@@ -2537,7 +2686,12 @@ function geminiPageContext(summary, videos) {
     ...geminiContext(summary),
     averageViews: Math.round(summary.avgViews || 0),
     bestUploadViews: summary.bestViews || 0,
-    uploadPerformance: uploadPerformanceContext(videos)
+    uploadPerformance: uploadPerformanceContext(videos),
+    channelWideScan: channelScanContext(
+      videos,
+      summary.channelProfile || {},
+      {includeCatalog: false}
+    )
   };
 }
 
@@ -2719,6 +2873,8 @@ async function buildGeminiPageInsights(summary, videos) {
   const prompt = [
     "You are ViewCast's YouTube strategist. Return compact JSON only. No trailing commas.",
     "Use only supplied channel stats, trend references, and upload patterns. Do not invent analytics.",
+    "Before writing any card or recommendation, scan channelWideScan across the available uploadCatalog, recurringTags, categories, formatMix, recentUploads, and topPerformers. Base advice on repeated channel-wide evidence rather than one upload.",
+    "Use uploadsScanned and scanCoveragePercent as confidence signals. If the scan is partial or metadata is missing, make narrower claims and never imply Gemini watched video or accessed data that is not supplied.",
     "Treat creatorProvidedContext as the primary source for the channel niche, audience, goals, and requested content direction.",
     "Classify the channel niche from repeated upload patterns, then make every card and suggestion match that niche.",
     "Use contentInterpretations to understand what the creator's titles mean and which media they reference. Treat the raw title only as a lookup key and performance label, never as a ready-made topic.",
@@ -3037,7 +3193,7 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
       }
       if (requestId !== analysisRequestId) return;
     }
-    setStatus("Classifying your channel...");
+    setStatus(`Gemini is scanning ${videos.length} available channel upload${videos.length === 1 ? "" : "s"}...`);
     const trendPlan = await buildGeminiTrendPlan(videos, channelProfile);
     if (requestId !== analysisRequestId) return;
     setStatus("Searching trends chosen by Gemini...");

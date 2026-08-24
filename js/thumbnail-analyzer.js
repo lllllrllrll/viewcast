@@ -1,4 +1,4 @@
-import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=5";
+import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=7";
 import { addNotifications } from "./notifications.js";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -31,7 +31,7 @@ const comparisonFiles = {v1: null, v2: null};
 const comparisonUrls = {v1: "", v2: ""};
 const thumbnailCachePrefix = "viewcastThumbnailAnalysis:";
 const comparisonCachePrefix = "viewcastThumbnailComparison:";
-const RESULT_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
+const RESULT_CACHE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const MAX_IMAGE_DIMENSION = 960;
 const IMAGE_QUALITY = 0.76;
 
@@ -209,7 +209,7 @@ function renderAnalysis(analysis) {
   );
   renderList(document.querySelector("#thumbnailStrengths"), Array.isArray(analysis.strengths) ? analysis.strengths : []);
   renderList(document.querySelector("#thumbnailImprovements"), Array.isArray(analysis.improvements) ? analysis.improvements : []);
-  document.querySelector("#thumbnailScore").style.setProperty("--score", `${score * 36}deg`);
+  document.querySelector("#thumbnailScore").dataset.score = String(Math.round(score * 10));
   emptyState.hidden = true;
   output.hidden = false;
   thumbnailChat.hidden = false;
