@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ViewCast Thumbnail Analyzer Experiment</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #f3f6fa; color: #172033; }
+    main { max-width: 1500px; margin: 0 auto; padding: 32px; }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    .subtitle { margin: 0 0 24px; color: #64748b; }
+    .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .summary span { background: white; border: 1px solid #dbe3ee; border-radius: 10px; padding: 10px 14px; font-weight: 700; }
+    .table-wrap { overflow: auto; background: white; border: 1px solid #dbe3ee; border-radius: 14px; box-shadow: 0 8px 24px rgb(15 23 42 / 7%); }
+    table { width: 100%; border-collapse: collapse; min-width: 1300px; font-size: 14px; }
+    th { position: sticky; top: 0; z-index: 1; padding: 13px 12px; background: #172033; color: white; text-align: left; white-space: nowrap; }
+    td { padding: 12px; border-bottom: 1px solid #e7edf5; vertical-align: top; line-height: 1.45; }
+    .thumb { width: 180px; aspect-ratio: 16 / 9; object-fit: contain; background: #e2e8f0; border-radius: 7px; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    tr:hover td { background: #eef6ff; }
+    td:nth-child(1), td:nth-child(3), td:nth-child(9), td:nth-child(11) { text-align: center; }
+    a { color: #1769aa; font-weight: 650; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-weight: 750; white-space: nowrap; }
+    .effective, .yes { background: #dcfce7; color: #166534; }
+    .average { background: #fef3c7; color: #92400e; }
+    .ineffective, .no { background: #fee2e2; color: #991b1b; }
+    .notes { min-width: 280px; color: #475569; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Thumbnail Analyzer Experiment</h1>
+    <p class="subtitle">Twenty public YouTube thumbnails compared with their expected outcomes.</p>
+    <div class="summary" id="summary"></div>
+    <div class="table-wrap"><table id="table"></table></div>
+  </main>
+  <script>
+    function parseCsv(text) {
+      const rows = [];
+      let row = [], field = "", quoted = false;
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (quoted && char === '"' && text[i + 1] === '"') { field += '"'; i++; }
+        else if (char === '"') quoted = !quoted;
+        else if (char === ',' && !quoted) { row.push(field); field = ""; }
+        else if ((char === '\n' || char === '\r') && !quoted) {
+          if (char === '\r' && text[i + 1] === '\n') i++;
+          row.push(field); field = "";
+          if (row.some(Boolean)) rows.push(row);
+          row = [];
+        } else field += char;
+      }
+      if (field || row.length) { row.push(field); rows.push(row); }
+      return rows;
+    }
+
+    function badge(value) {
+      const key = value.toLowerCase();
+      return ['effective', 'average', 'ineffective', 'yes', 'no'].includes(key)
+        ? `<span class="badge ${key}">${value}</span>` : value;
+    }
+
+    fetch('thumbnail-test-manifest.csv')
+      .then(response => response.text())
+      .then(text => {
+        const [headers, ...rows] = parseCsv(text);
+        const correctIndex = headers.indexOf('Correct?');
+        const scoreIndex = headers.indexOf('Actual Score');
+        const completed = rows.filter(row => row[scoreIndex].trim());
+        const correct = completed.filter(row => row[correctIndex] === 'Yes').length;
+        const average = completed.length ? completed.reduce((sum, row) => sum + Number(row[scoreIndex]), 0) / completed.length : 0;
+        document.querySelector('#summary').innerHTML = completed.length ? `
+          <span>${rows.length} tests</span><span>${correct} correct</span>
+          <span>${Math.round(correct / completed.length * 100)}% accuracy</span>
+          <span>${average.toFixed(2)}/10 average score</span>` : `
+          <span>${rows.length} new thumbnails</span><span>Expected scores ready</span><span>Actual results pending</span>`;
+        document.querySelector('#table').innerHTML = `
+          <thead><tr>${headers.map(header => `<th>${header}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map(row => `<tr>${row.map((value, index) => {
+            if (headers[index] === 'Video URL') return `<td><a href="${value}" target="_blank">YouTube source</a></td>`;
+            if (headers[index] === 'Image File') return `<td><img class="thumb" src="${value}" alt="Thumbnail for ${row[headers.indexOf('Video Title')]}"></td>`;
+            const content = ['Expected Category', 'Actual Category', 'Correct?'].includes(headers[index]) ? badge(value) : value;
+            return `<td class="${headers[index] === 'Notes' ? 'notes' : ''}">${content}</td>`;
+          }).join('')}</tr>`).join('')}</tbody>`;
+      });
+  </script>
+</body>
+</html>

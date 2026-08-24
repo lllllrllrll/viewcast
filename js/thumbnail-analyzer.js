@@ -1,4 +1,4 @@
-import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=7";
+import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=8";
 import { addNotifications } from "./notifications.js";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;

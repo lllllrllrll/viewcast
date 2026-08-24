@@ -2,16 +2,11 @@ import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
 import {
-  firebaseAppCheckSiteKey,
   firebaseConfig,
   firebaseConfigured,
   geminiModel
 } from "./firebase-config.js?v=2";
-import {
-  getToken,
-  initializeAppCheck,
-  ReCaptchaEnterpriseProvider
-} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app-check.js";
+import {ensureAppCheck, ensureAppCheckToken} from "./firebase-app-check.js";
 
 const fallbackGeminiModel = "gemini-3.1-flash-lite";
 const allowedGeminiModels = new Set([
@@ -20,20 +15,7 @@ const allowedGeminiModels = new Set([
 const pendingRequests = new Map();
 const responseCachePrefix = "viewcastGeminiResponse:v1:";
 const responseCacheMaxAge = 6 * 60 * 60 * 1000;
-let appCheckInitialized = false;
 let appCheckInstance = null;
-
-function ensureAppCheck(app) {
-  if (!firebaseAppCheckSiteKey) return null;
-  if (!appCheckInitialized) {
-    appCheckInstance = initializeAppCheck(app, {
-      provider: new ReCaptchaEnterpriseProvider(firebaseAppCheckSiteKey),
-      isTokenAutoRefreshEnabled: true
-    });
-    appCheckInitialized = true;
-  }
-  return appCheckInstance;
-}
 
 // App Check must be initialized before the page starts using Firebase services.
 // Doing this only when the user clicked Generate allowed Auth/Firestore to win the
@@ -48,20 +30,6 @@ function geminiText(payload = {}) {
     ?.map((part) => part.text || "")
     .join("")
     .trim() || "";
-}
-
-function wait(milliseconds) {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-}
-
-async function ensureAppCheckToken(appCheck) {
-  try {
-    return await getToken(appCheck, false);
-  } catch (error) {
-    if (error.code !== "appCheck/initial-throttle") throw error;
-    await wait(2000);
-    return getToken(appCheck, true);
-  }
 }
 
 function safeGeminiModel(modelName) {
@@ -99,7 +67,7 @@ async function requestGeminiFunction({contents, systemInstruction, generationCon
   const app = firebaseApp || (getApps().length ? getApps()[0] : initializeApp(firebaseConfig));
   const appCheck = appCheckInstance || ensureAppCheck(app);
   if (!appCheck) throw new Error("App Check is not configured.");
-  await ensureAppCheckToken(appCheck);
+  await ensureAppCheckToken(app);
   const callGenerateGeminiContent = httpsCallable(getFunctions(app), "generateGeminiContent");
   const result = await callGenerateGeminiContent({
     contents,

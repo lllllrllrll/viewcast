@@ -1,0 +1,108 @@
+<mxfile host="app.diagrams.net" modified="2026-08-05T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="viewcast-architecture" name="ViewCast System Flowchart">
+    <mxGraphModel dx="1600" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="ViewCast — Complete Program Flowchart" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=26;fontStyle=1;fontColor=#172554;" vertex="1" parent="1">
+          <mxGeometry x="400" y="20" width="800" height="45" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="user" value="&lt;b&gt;Creator / User&lt;/b&gt;&lt;br&gt;Browser or mobile device" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#2e1065;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="660" y="85" width="280" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="hosting" value="&lt;b&gt;Firebase Hosting&lt;/b&gt;&lt;br&gt;Serves HTML, CSS, and JavaScript" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#451a03;fontSize=13;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="650" y="185" width="300" height="65" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="clientGroup" value="VIEWCAST WEB APPLICATION (CLIENT)" style="swimlane;html=1;startSize=34;horizontal=1;rounded=1;fillColor=#eff6ff;strokeColor=#2563eb;fontColor=#172554;fontStyle=1;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="80" y="290" width="920" height="440" as="geometry"/>
+        </mxCell>
+        <mxCell id="authui" value="&lt;b&gt;Authentication UI&lt;/b&gt;&lt;br&gt;Sign up • Sign in&lt;br&gt;Email verification • Reset password" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#172554;fontSize=13;" vertex="1" parent="clientGroup">
+          <mxGeometry x="35" y="65" width="210" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="dashboard" value="&lt;b&gt;Overview Dashboard&lt;/b&gt;&lt;br&gt;KPIs • Charts&lt;br&gt;Video performance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#172554;fontSize=13;" vertex="1" parent="clientGroup">
+          <mxGeometry x="270" y="65" width="190" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="channel" value="&lt;b&gt;My Channel&lt;/b&gt;&lt;br&gt;YouTube connection&lt;br&gt;Channel analytics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#172554;fontSize=13;" vertex="1" parent="clientGroup">
+          <mxGeometry x="485" y="65" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="account" value="&lt;b&gt;Account &amp;amp; Settings&lt;/b&gt;&lt;br&gt;Profile • Preferences&lt;br&gt;Sign out • Delete account" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#172554;fontSize=13;" vertex="1" parent="clientGroup">
+          <mxGeometry x="690" y="65" width="195" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="insights" value="&lt;b&gt;AI Insights&lt;/b&gt;&lt;br&gt;Channel recommendations&lt;br&gt;Advice chat" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fae8ff;strokeColor=#c026d3;fontColor=#4a044e;fontSize=13;" vertex="1" parent="clientGroup">
+          <mxGeometry x="165" y="200" width="190" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="videoAnalyzer" value="&lt;b&gt;Video Analyzer&lt;/b&gt;&lt;br&gt;Video statistics&lt;br&gt;AI performance analysis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fae8ff;strokeColor=#c026d3;fontColor=#4a044e;fontSize=13;" vertex="1" parent="clientGroup">
+          <mxGeometry x="385" y="200" width="190" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="thumbAnalyzer" value="&lt;b&gt;Thumbnail Analyzer&lt;/b&gt;&lt;br&gt;Image upload&lt;br&gt;AI visual feedback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fae8ff;strokeColor=#c026d3;fontColor=#4a044e;fontSize=13;" vertex="1" parent="clientGroup">
+          <mxGeometry x="605" y="200" width="190" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="storage" value="&lt;b&gt;Browser Storage&lt;/b&gt;&lt;br&gt;Session tokens • Cached creator data • UI preferences" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0c4a6e;fontSize=13;" vertex="1" parent="clientGroup">
+          <mxGeometry x="270" y="330" width="380" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="firebaseGroup" value="FIREBASE / GOOGLE CLOUD BACKEND" style="swimlane;html=1;startSize=34;horizontal=1;rounded=1;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#451a03;fontStyle=1;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="290" width="480" height="440" as="geometry"/>
+        </mxCell>
+        <mxCell id="firebaseAuth" value="&lt;b&gt;Firebase Authentication&lt;/b&gt;&lt;br&gt;Email/password identity&lt;br&gt;Google OAuth session" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#451a03;fontSize=13;" vertex="1" parent="firebaseGroup">
+          <mxGeometry x="30" y="65" width="200" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="firestore" value="&lt;b&gt;Cloud Firestore&lt;/b&gt;&lt;br&gt;User profiles • Channel summaries&lt;br&gt;Settings • AI quota counters" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#451a03;fontSize=13;" vertex="1" parent="firebaseGroup">
+          <mxGeometry x="255" y="65" width="195" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="functions" value="&lt;b&gt;Cloud Functions&lt;/b&gt;&lt;br&gt;Authenticated callable API&lt;br&gt;Validation • Rate limits • Daily quotas&lt;br&gt;Gemini proxy • Account deletion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fed7aa;strokeColor=#ea580c;fontColor=#431407;fontSize=13;strokeWidth=2;" vertex="1" parent="firebaseGroup">
+          <mxGeometry x="105" y="195" width="270" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="appcheck" value="&lt;b&gt;Firebase App Check&lt;/b&gt;&lt;br&gt;reCAPTCHA Enterprise" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#451a03;fontSize=12;" vertex="1" parent="firebaseGroup">
+          <mxGeometry x="30" y="340" width="190" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="secret" value="&lt;b&gt;Secret Manager&lt;/b&gt;&lt;br&gt;Gemini API key" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#451a03;fontSize=12;" vertex="1" parent="firebaseGroup">
+          <mxGeometry x="260" y="340" width="190" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="youtubeGroup" value="GOOGLE / YOUTUBE SERVICES" style="swimlane;html=1;startSize=34;horizontal=1;rounded=1;fillColor=#f0fdf4;strokeColor=#16a34a;fontColor=#052e16;fontStyle=1;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="80" y="780" width="920" height="245" as="geometry"/>
+        </mxCell>
+        <mxCell id="oauth" value="&lt;b&gt;Google OAuth Consent&lt;/b&gt;&lt;br&gt;YouTube read and analytics scopes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#052e16;fontSize=13;" vertex="1" parent="youtubeGroup">
+          <mxGeometry x="60" y="75" width="230" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="dataApi" value="&lt;b&gt;YouTube Data API&lt;/b&gt;&lt;br&gt;Channel details&lt;br&gt;Videos and public statistics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#052e16;fontSize=13;" vertex="1" parent="youtubeGroup">
+          <mxGeometry x="345" y="75" width="230" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="analyticsApi" value="&lt;b&gt;YouTube Analytics API&lt;/b&gt;&lt;br&gt;Watch time • Revenue&lt;br&gt;Owner-only metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#052e16;fontSize=13;" vertex="1" parent="youtubeGroup">
+          <mxGeometry x="630" y="75" width="230" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="geminiGroup" value="GENERATIVE AI SERVICE" style="swimlane;html=1;startSize=34;horizontal=1;rounded=1;fillColor=#fdf4ff;strokeColor=#c026d3;fontColor=#4a044e;fontStyle=1;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="780" width="480" height="245" as="geometry"/>
+        </mxCell>
+        <mxCell id="gemini" value="&lt;b&gt;Google Gemini 3.1 Flash Lite&lt;/b&gt;&lt;br&gt;&lt;br&gt;Text recommendations&lt;br&gt;Video performance analysis&lt;br&gt;Thumbnail image analysis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fae8ff;strokeColor=#c026d3;fontColor=#4a044e;fontSize=14;strokeWidth=2;" vertex="1" parent="geminiGroup">
+          <mxGeometry x="85" y="70" width="310" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_user_host" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#475569;strokeWidth=2;" edge="1" parent="1" source="user" target="hosting"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_host_client" value="Loads application" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#475569;strokeWidth=2;fontSize=11;" edge="1" parent="1" source="hosting" target="clientGroup"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_auth" value="Sign in / identity state" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;startArrow=block;startFill=1;endFill=1;strokeColor=#7c3aed;strokeWidth=2;fontSize=11;" edge="1" parent="1" source="authui" target="firebaseAuth"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_dash_fs" value="Read saved analytics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;startArrow=block;startFill=1;endFill=1;strokeColor=#d97706;strokeWidth=2;fontSize=11;" edge="1" parent="1" source="dashboard" target="firestore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_account_fs" value="Profile / settings" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;startArrow=block;startFill=1;endFill=1;strokeColor=#d97706;strokeWidth=2;fontSize=11;" edge="1" parent="1" source="account" target="firestore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_ai_functions" value="Authenticated AI request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#c026d3;strokeWidth=2;fontSize=11;" edge="1" parent="1" source="videoAnalyzer" target="functions"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_insights_functions" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#c026d3;strokeWidth=2;" edge="1" parent="1" source="insights" target="functions"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_thumb_functions" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#c026d3;strokeWidth=2;" edge="1" parent="1" source="thumbAnalyzer" target="functions"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_fn_auth" value="Verify caller / delete identity" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;startArrow=block;startFill=1;endFill=1;strokeColor=#d97706;strokeWidth=2;fontSize=11;" edge="1" parent="firebaseGroup" source="functions" target="firebaseAuth"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_fn_fs" value="Quota / profile data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;startArrow=block;startFill=1;endFill=1;strokeColor=#d97706;strokeWidth=2;fontSize=11;" edge="1" parent="firebaseGroup" source="functions" target="firestore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_appcheck_fn" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#d97706;strokeWidth=2;" edge="1" parent="firebaseGroup" source="appcheck" target="functions"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_secret_fn" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#d97706;strokeWidth=2;" edge="1" parent="firebaseGroup" source="secret" target="functions"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_channel_oauth" value="Connect YouTube" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#16a34a;strokeWidth=2;fontSize=11;" edge="1" parent="1" source="channel" target="oauth"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_oauth_data" value="Access token" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#16a34a;strokeWidth=2;fontSize=11;" edge="1" parent="youtubeGroup" source="oauth" target="dataApi"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_oauth_analytics" value="Access token" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#16a34a;strokeWidth=2;fontSize=11;" edge="1" parent="youtubeGroup" source="oauth" target="analyticsApi"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_data_client" value="Channel / video data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#16a34a;strokeWidth=2;fontSize=11;" edge="1" parent="1" source="dataApi" target="dashboard"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_analytics_client" value="Owner analytics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#16a34a;strokeWidth=2;fontSize=11;" edge="1" parent="1" source="analyticsApi" target="videoAnalyzer"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_functions_gemini" value="Validated prompt + image / AI response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;startArrow=block;startFill=1;endFill=1;strokeColor=#c026d3;strokeWidth=2;fontSize=11;" edge="1" parent="1" source="functions" target="gemini"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_client_storage" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;startArrow=block;startFill=1;endFill=1;strokeColor=#0284c7;strokeWidth=2;" edge="1" parent="clientGroup" source="dashboard" target="storage"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

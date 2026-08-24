@@ -15,7 +15,7 @@ import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./fireb
 import {
   exchangeYouTubeCode,
   revokeStoredYouTubeAuthorization
-} from "./youtube-auth.js";
+} from "./youtube-auth.js?v=2";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
