@@ -1,7 +1,7 @@
 import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=8";
 import { addNotifications } from "./notifications.js";
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+export const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MIME_BY_EXTENSION = {
   jpg: "image/jpeg",
@@ -27,15 +27,12 @@ let selectedFile = null;
 let previewUrl = "";
 let latestAnalysis = null;
 let thumbnailChatHistory = [];
-const comparisonFiles = {v1: null, v2: null};
-const comparisonUrls = {v1: "", v2: ""};
 const thumbnailCachePrefix = "viewcastThumbnailAnalysis:";
-const comparisonCachePrefix = "viewcastThumbnailComparison:";
 const RESULT_CACHE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const MAX_IMAGE_DIMENSION = 960;
 const IMAGE_QUALITY = 0.76;
 
-function imageMimeType(file) {
+export function imageMimeType(file) {
   if (ALLOWED_TYPES.has(file?.type)) return file.type;
   const extension = String(file?.name || "").split(".").pop().toLowerCase();
   return MIME_BY_EXTENSION[extension] || "";
@@ -130,7 +127,7 @@ function loadImage(source) {
   });
 }
 
-async function optimizedImage(file) {
+export async function optimizedImage(file) {
   const source = await fileToDataUrl(file);
   const bitmap = typeof createImageBitmap === "function"
     ? await createImageBitmap(file)
@@ -152,11 +149,11 @@ async function optimizedImage(file) {
   return {data: optimized.split(",")[1], mimeType: "image/webp"};
 }
 
-function fileFingerprint(file) {
+export function fileFingerprint(file) {
   return [file?.name || "", file?.size || 0, file?.lastModified || 0].join(":");
 }
 
-function readCachedResult(key) {
+export function readCachedResult(key) {
   try {
     const saved = JSON.parse(localStorage.getItem(key) || "null");
     if (!saved?.value || Date.now() - saved.savedAt > RESULT_CACHE_MAX_AGE) {
@@ -170,11 +167,11 @@ function readCachedResult(key) {
   }
 }
 
-function saveCachedResult(key, value) {
+export function saveCachedResult(key, value) {
   if (value) localStorage.setItem(key, JSON.stringify({value, savedAt: Date.now()}));
 }
 
-function parseJson(text) {
+export function parseJson(text) {
   const cleaned = String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   return JSON.parse(cleaned);
 }
@@ -183,7 +180,7 @@ function cleanText(value, maxLength) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
-function renderList(element, items) {
+export function renderList(element, items) {
   element.replaceChildren(...items.slice(0, 5).map((item) => {
     const li = document.createElement("li");
     li.textContent = cleanText(item, 220);
@@ -273,8 +270,13 @@ thumbnailChatForm.addEventListener("submit", async (event) => {
   }
 });
 
+let comparisonModulePromise = null;
+
 document.querySelectorAll("[data-thumbnail-tab]").forEach((tab) => tab.addEventListener("click", () => {
   const comparisonActive = tab.dataset.thumbnailTab === "comparison";
+  if (comparisonActive && !comparisonModulePromise) {
+    comparisonModulePromise = import("./thumbnail-comparison.js?v=2");
+  }
   document.querySelectorAll("[data-thumbnail-tab]").forEach((button) => {
     const active = button === tab;
     button.classList.toggle("active", active);
@@ -364,184 +366,6 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-const comparisonForm = document.querySelector("#comparisonForm");
-const comparisonButton = document.querySelector("#compareThumbnails");
-const comparisonStatus = document.querySelector("#comparisonStatus");
-const comparisonTitle = document.querySelector("#comparisonTitle");
-
-function setComparisonStatus(message, type = "") {
-  comparisonStatus.textContent = message;
-  comparisonStatus.dataset.type = type;
-}
-
-function updateComparisonButton() {
-  comparisonButton.disabled = !(comparisonFiles.v1 && comparisonFiles.v2 && comparisonTitle.value.trim());
-}
-
-comparisonTitle.addEventListener("input", () => {
-  updateComparisonButton();
-  if (comparisonFiles.v1 && comparisonFiles.v2) {
-    setComparisonStatus(comparisonTitle.value.trim() ? "Ready to compare." : "Enter the video title to continue.");
-  }
-});
-
-function comparisonSlotElements(slot) {
-  const card = document.querySelector(`[data-comparison-slot="${slot}"]`);
-  return {
-    card,
-    input: card.querySelector(".comparison-input"),
-    dropzone: card.querySelector(".comparison-dropzone"),
-    preview: card.querySelector(".comparison-preview"),
-    image: card.querySelector(".comparison-preview img"),
-    name: card.querySelector(".thumbnail-file-meta strong"),
-    size: card.querySelector(".thumbnail-file-meta span"),
-    remove: card.querySelector(".comparison-remove")
-  };
-}
-
-function clearComparisonFile(slot) {
-  const elements = comparisonSlotElements(slot);
-  comparisonFiles[slot] = null;
-  elements.input.value = "";
-  if (comparisonUrls[slot]) URL.revokeObjectURL(comparisonUrls[slot]);
-  comparisonUrls[slot] = "";
-  elements.image.removeAttribute("src");
-  elements.preview.hidden = true;
-  elements.dropzone.hidden = false;
-  updateComparisonButton();
-  setComparisonStatus("");
-}
-
-function selectComparisonFile(slot, file) {
-  if (!file) return;
-  if (!imageMimeType(file)) {
-    setComparisonStatus("Choose JPG, PNG, or WebP files for both versions.", "error");
-    return;
-  }
-  if (file.size > MAX_FILE_SIZE) {
-    setComparisonStatus("Each image must be 5 MB or smaller.", "error");
-    return;
-  }
-  const elements = comparisonSlotElements(slot);
-  if (comparisonUrls[slot]) URL.revokeObjectURL(comparisonUrls[slot]);
-  comparisonFiles[slot] = file;
-  comparisonUrls[slot] = URL.createObjectURL(file);
-  elements.image.src = comparisonUrls[slot];
-  elements.name.textContent = file.name;
-  elements.size.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
-  elements.preview.hidden = false;
-  elements.dropzone.hidden = true;
-  updateComparisonButton();
-  setComparisonStatus(
-    comparisonFiles.v1 && comparisonFiles.v2
-      ? comparisonTitle.value.trim() ? "Ready to compare." : "Enter the video title to continue."
-      : "Add the other version to continue."
-  );
-}
-
-["v1", "v2"].forEach((slot) => {
-  const elements = comparisonSlotElements(slot);
-  elements.input.addEventListener("change", () => selectComparisonFile(slot, elements.input.files?.[0]));
-  elements.remove.addEventListener("click", () => clearComparisonFile(slot));
-  elements.dropzone.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      elements.input.click();
-    }
-  });
-  ["dragenter", "dragover"].forEach((name) => elements.dropzone.addEventListener(name, (event) => {
-    event.preventDefault();
-    elements.dropzone.classList.add("dragging");
-  }));
-  ["dragleave", "drop"].forEach((name) => elements.dropzone.addEventListener(name, (event) => {
-    event.preventDefault();
-    elements.dropzone.classList.remove("dragging");
-  }));
-  elements.dropzone.addEventListener("drop", (event) => selectComparisonFile(slot, event.dataTransfer?.files?.[0]));
-});
-
-function renderComparison(analysis) {
-  if (analysis._videoTitle) comparisonTitle.value = analysis._videoTitle;
-  const winner = String(analysis.winner || "No clear winner");
-  document.querySelector("#comparisonWinner").textContent = winner;
-  document.querySelector("#comparisonSummary").textContent = String(analysis.summary || "Comparison complete.");
-  const version1Score = Math.max(0, Math.min(10, Number(analysis.version1Score) || 0));
-  const version2Score = Math.max(0, Math.min(10, Number(analysis.version2Score) || 0));
-  document.querySelector("#comparisonScoreV1").textContent = Number(version1Score.toFixed(1));
-  document.querySelector("#comparisonScoreV2").textContent = Number(version2Score.toFixed(1));
-  const normalizedWinner = winner.toLowerCase();
-  document.querySelector("#comparisonCardV1").classList.toggle("winner", normalizedWinner.includes("version 1") || normalizedWinner.includes("tie"));
-  document.querySelector("#comparisonCardV2").classList.toggle("winner", normalizedWinner.includes("version 2") || normalizedWinner.includes("tie"));
-  document.querySelector("#comparisonRecommendation").textContent = String(analysis.recommendation || "Test both versions with your audience.");
-  renderList(document.querySelector("#comparisonReasons"), Array.isArray(analysis.winnerReasons) ? analysis.winnerReasons : []);
-  renderList(document.querySelector("#comparisonFeedback"), Array.isArray(analysis.feedback) ? analysis.feedback : []);
-  document.querySelector("#comparisonOutput").hidden = false;
-}
-
-comparisonForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!comparisonFiles.v1 || !comparisonFiles.v2) return;
-  if (!isGeminiAvailable()) {
-    setComparisonStatus("Gemini is not configured for this workspace.", "error");
-    return;
-  }
-  comparisonButton.disabled = true;
-  comparisonButton.classList.add("is-loading");
-  setComparisonStatus("Gemini is comparing both versions…", "loading");
-  try {
-    const videoTitle = comparisonTitle.value.trim();
-    const cacheKey = `${comparisonCachePrefix}${fileFingerprint(comparisonFiles.v1)}:${fileFingerprint(comparisonFiles.v2)}:${videoTitle}`;
-    const cachedComparison = readCachedResult(cacheKey);
-    if (cachedComparison) {
-      renderComparison(cachedComparison);
-      setComparisonStatus("Showing your saved comparison.", "success");
-      return;
-    }
-
-    const [version1, version2] = await Promise.all([
-      optimizedImage(comparisonFiles.v1),
-      optimizedImage(comparisonFiles.v2)
-    ]);
-    const response = await requestGeminiText({
-      systemInstruction: "You are an expert YouTube thumbnail strategist. Compare the two labeled images objectively and return only valid JSON, without markdown.",
-      contents: [{role: "user", parts: [
-        {text: `Compare two thumbnail versions for the title "${videoTitle}". The following images are Version 1, then Version 2. Score title alignment at 40%; use likely click performance, hierarchy, mobile readability, emotion, curiosity, clarity, and clutter for 60%. Scores are 0-10.`},
-        {inlineData: version1},
-        {inlineData: version2},
-        {text: 'Return this exact JSON shape: {"winner":"Version 1, Version 2, or Tie","version1Score":0.0,"version2Score":0.0,"summary":"2-3 sentence comparison tied to the title","winnerReasons":["reason","reason","reason"],"feedback":["specific Version 1 feedback","specific Version 2 feedback","shared lesson"],"recommendation":"best combined redesign direction for this title"}'}
-      ]}],
-      generationConfig: {temperature: 0.25, maxOutputTokens: 480, responseMimeType: "application/json"}
-    });
-    const comparison = {...parseJson(response), _videoTitle: videoTitle};
-    saveCachedResult(cacheKey, comparison);
-    sessionStorage.setItem("viewcastLatestThumbnailComparison", cacheKey);
-    renderComparison(comparison);
-    addNotifications([
-      {
-        id: `thumbnail-comparison:${cacheKey}:winner`,
-        title: `${comparison.winner || "Thumbnail comparison"} leads`,
-        message: comparison.summary,
-        href: "pages/thumbnail-analyzer.html?comparison=latest",
-        tone: "teal"
-      },
-      {
-        id: `thumbnail-comparison:${cacheKey}:recommendation`,
-        title: "Best combined direction",
-        message: comparison.recommendation,
-        href: "pages/thumbnail-analyzer.html?comparison=latest",
-        tone: "blue"
-      }
-    ]);
-    setComparisonStatus("Comparison complete.", "success");
-  } catch (error) {
-    console.error("Thumbnail comparison failed.", error);
-    setComparisonStatus("Gemini could not compare these images. Please try again.", "error");
-  } finally {
-    updateComparisonButton();
-    comparisonButton.classList.remove("is-loading");
-  }
-});
-
 const notificationParams = new URLSearchParams(window.location.search);
 if (notificationParams.get("result") === "latest") {
   const key = sessionStorage.getItem("viewcastLatestThumbnailResult") || "";
@@ -552,11 +376,5 @@ if (notificationParams.get("result") === "latest") {
   }
 }
 if (notificationParams.get("comparison") === "latest") {
-  const key = sessionStorage.getItem("viewcastLatestThumbnailComparison") || "";
-  const comparison = readCachedResult(key);
-  if (comparison) {
-    document.querySelector("[data-thumbnail-tab='comparison']")?.click();
-    renderComparison(comparison);
-    setComparisonStatus("Showing your latest saved comparison.", "success");
-  }
+  document.querySelector("[data-thumbnail-tab='comparison']")?.click();
 }

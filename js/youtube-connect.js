@@ -15,7 +15,7 @@ import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./fireb
 import {
   exchangeYouTubeCode,
   revokeStoredYouTubeAuthorization
-} from "./youtube-auth.js?v=2";
+} from "./youtube-auth.js?v=3";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -287,7 +287,7 @@ function loadGoogleIdentityServices() {
   return googleIdentityScriptPromise;
 }
 
-async function requestYouTubeAccessToken({selectAccount = false} = {}) {
+async function requestYouTubeAccessToken() {
   if (!googleOAuthClientId) {
     throw new Error("Missing Google OAuth client ID. Add your Web OAuth client ID in js/firebase-config.js.");
   }
@@ -300,9 +300,10 @@ async function requestYouTubeAccessToken({selectAccount = false} = {}) {
       scope: scopes.join(" "),
       access_type: "offline",
       include_granted_scopes: true,
-      // Only show the account chooser when the user is linking another channel.
-      // For a previously linked channel Google can reuse the existing grant.
-      prompt: selectAccount ? "consent select_account" : "",
+      // Linking is always an explicit account choice. Silently reusing Google's
+      // default identity can connect an empty personal channel instead of the
+      // creator/Brand channel the user intended to authorize.
+      prompt: "consent select_account",
       callback: async (response) => {
         if (response.error) {
           reject(new Error(response.error_description || response.error));
@@ -389,7 +390,7 @@ async function connectYouTube() {
   }
   try {
     setButton("Connecting...", true);
-    const accessToken = await requestYouTubeAccessToken({selectAccount: readAllConnections().length > 0});
+    const accessToken = await requestYouTubeAccessToken();
 
     const channel = await fetchChannel(accessToken);
     const connections = readAllConnections();

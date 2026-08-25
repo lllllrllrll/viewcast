@@ -8,7 +8,7 @@ import {
   getDoc,
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
-import {getRenewedYouTubeAccessToken} from "./youtube-auth.js";
+import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
 const emptyValue = "\u00a0";

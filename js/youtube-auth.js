@@ -1,14 +1,13 @@
 import {initializeApp, getApps} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {getFunctions, httpsCallable} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
 import {firebaseConfig} from "./firebase-config.js";
-import {ensureAppCheck, ensureAppCheckToken} from "./firebase-app-check.js";
+import {ensureAppCheckToken} from "./firebase-app-check.js";
 
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 // Remove bearer tokens left by older builds. Renewable credentials stay on the
 // authenticated backend, so reopening still works without persistent JS access.
 localStorage.removeItem(tokenStorageKey);
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-ensureAppCheck(app);
 const functions = getFunctions(app, "us-central1");
 
 function saveToken(result, uid) {

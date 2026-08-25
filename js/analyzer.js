@@ -6,7 +6,7 @@ import {
 import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
 import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=8";
 import { addNotifications } from "./notifications.js";
-import {getRenewedYouTubeAccessToken} from "./youtube-auth.js";
+import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
