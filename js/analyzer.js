@@ -7,6 +7,13 @@ import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./fireb
 import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=8";
 import { addNotifications } from "./notifications.js";
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
+import {
+  fetchRetentionCurve,
+  fetchSearchTerms,
+  fetchVideoAnalytics
+} from "./analyzer-youtube-analytics.js?v=1";
+
+/* global drawLineChart */
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -508,123 +515,6 @@ async function fetchVideo(videoId, accessToken) {
     throw new Error("Livestreams are not supported by the Video Analyzer. Choose a regular video or Short.");
   }
   return video;
-}
-
-async function fetchVideoAnalyticsRange(videoId, accessToken, {startDate, endDate, label}) {
-  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
-  url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", startDate);
-  url.searchParams.set("endDate", endDate);
-  url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage");
-  url.searchParams.set("filters", `video==${videoId}`);
-
-  const payload = await fetchJson(url, accessToken);
-  const row = payload.rows?.[0];
-  if (!row) return null;
-
-  return {
-    periodLabel: label,
-    views: row[0],
-    estimatedMinutesWatched: row[1],
-    averageViewDuration: row[2],
-    averageViewPercentage: row[3]
-  };
-}
-
-async function fetchVideoAnalytics(videoId, accessToken) {
-  const endDate = apiDate(new Date());
-  const ranges = [
-    {startDate: daysAgo(28), endDate, label: "28D"},
-    {startDate: "2005-02-14", endDate, label: "Lifetime"}
-  ];
-
-  try {
-    for (const range of ranges) {
-      const analytics = await fetchVideoAnalyticsRange(videoId, accessToken, range);
-      if (analytics) return analytics;
-    }
-    return null;
-  } catch (error) {
-    if (error.status === 401 || error.status === 403) throw error;
-    console.warn("Video analytics were not available for this video.", error);
-    return null;
-  }
-}
-
-async function fetchRetentionCurveRange(videoId, accessToken, {startDate, endDate}) {
-  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
-  url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", startDate);
-  url.searchParams.set("endDate", endDate);
-  url.searchParams.set("metrics", "audienceWatchRatio");
-  url.searchParams.set("dimensions", "elapsedVideoTimeRatio");
-  url.searchParams.set("filters", `video==${videoId}`);
-  url.searchParams.set("sort", "elapsedVideoTimeRatio");
-
-  const payload = await fetchJson(url, accessToken);
-  return (payload.rows || []).map(([position, ratio]) => ({
-    position: Number(position),
-    ratio: Number(ratio)
-  })).filter((point) => Number.isFinite(point.position) && Number.isFinite(point.ratio));
-}
-
-async function fetchRetentionCurve(videoId, accessToken) {
-  const endDate = apiDate(new Date());
-  const ranges = [
-    {startDate: daysAgo(28), endDate},
-    {startDate: "2005-02-14", endDate}
-  ];
-
-  try {
-    for (const range of ranges) {
-      const points = await fetchRetentionCurveRange(videoId, accessToken, range);
-      if (points.length) return points;
-    }
-    return [];
-  } catch (error) {
-    if (error.status === 401 || error.status === 403) throw error;
-    console.warn("Retention curve was not available for this video.", error);
-    return [];
-  }
-}
-
-async function fetchSearchTermsRange(videoId, accessToken, {startDate, endDate, label}) {
-  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
-  url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", startDate);
-  url.searchParams.set("endDate", endDate);
-  url.searchParams.set("metrics", "views");
-  url.searchParams.set("dimensions", "insightTrafficSourceDetail");
-  url.searchParams.set("filters", `video==${videoId};insightTrafficSourceType==YT_SEARCH`);
-  url.searchParams.set("sort", "-views");
-  url.searchParams.set("maxResults", "3");
-
-  const payload = await fetchJson(url, accessToken);
-  return (payload.rows || []).map(([term, views]) => ({
-    term: term || "Unknown search term",
-    views: Number(views) || 0,
-    periodLabel: label
-  }));
-}
-
-async function fetchSearchTerms(videoId, accessToken) {
-  const endDate = apiDate(new Date());
-  const ranges = [
-    {startDate: daysAgo(28), endDate, label: "28D"},
-    {startDate: "2005-02-14", endDate, label: "Lifetime"}
-  ];
-
-  try {
-    for (const range of ranges) {
-      const terms = await fetchSearchTermsRange(videoId, accessToken, range);
-      if (terms.length) return terms;
-    }
-    return [];
-  } catch (error) {
-    if (error.status === 401 || error.status === 403) throw error;
-    console.warn("YouTube search terms were not available for this video.", error);
-    return [];
-  }
 }
 
 function setMetric(index, value, trend = "") {

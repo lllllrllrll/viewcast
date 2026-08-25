@@ -260,10 +260,9 @@ export async function fetchGeminiTrendVideos(accessToken, trendPlan) {
     const results = await Promise.allSettled(
       trendPlan.queries.slice(0, 3).map((query) => searchVideosByQuery(
         accessToken,
-        `${query} shorts`,
-        8,
-        45,
-        true
+        query,
+        12,
+        90
       ))
     );
     videos = results.flatMap((result, index) => {
@@ -288,10 +287,9 @@ export async function fetchGeminiTrendVideos(accessToken, trendPlan) {
     try {
       videos = (await searchVideosByQuery(
         accessToken,
-        `${trendPlan.queries[0]} shorts`,
-        12,
-        90,
-        true
+        trendPlan.queries[0],
+        15,
+        180
       )).map((video) => ({
         ...video,
         trendSource: "Expanded niche YouTube trend search",
@@ -345,17 +343,29 @@ export async function fetchTrendReferenceVideos(accessToken, videos, trendPlan =
   ];
   const seen = new Set();
   const ownVideoIds = new Set(videos.map((video) => video.id).filter(Boolean));
-  let filteredTrendVideos = merged.filter((video) => {
+  const eligibleTrendVideos = merged.filter((video) => {
     if (!video?.id || seen.has(video.id) || ownVideoIds.has(video.id)) return false;
-    if (!isShortTrendVideo(video)) return false;
     if (!isEnglishTrendVideo(video)) return false;
-    if (contextControlsTrends && !trendMatchesCreatorContext(video)) return false;
-    if (!trendMatchesNichePlan(video, trendPlan)) return false;
     seen.add(video.id);
     return true;
-  }).sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+  });
+  const strictTrendVideos = eligibleTrendVideos.filter((video) => (
+    (!contextControlsTrends || trendMatchesCreatorContext(video)) &&
+    trendMatchesNichePlan(video, trendPlan)
+  ));
+  const broaderTopicVideos = eligibleTrendVideos.filter((video) => (
+    trendMatchesNichePlan(video, trendPlan) ||
+    (contextControlsTrends && trendMatchesCreatorContext(video))
+  ));
+  let filteredTrendVideos = [...strictTrendVideos];
+  broaderTopicVideos.forEach((video) => {
+    if (!filteredTrendVideos.some((candidate) => candidate.id === video.id)) {
+      filteredTrendVideos.push(video);
+    }
+  });
+  filteredTrendVideos.sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
 
-  if (!filteredTrendVideos.length &&
+  if (filteredTrendVideos.length < 3 &&
       nicheVideos.length &&
       contextControlsTrends &&
       trendPlan?.queries?.length) {
@@ -363,14 +373,13 @@ export async function fetchTrendReferenceVideos(accessToken, videos, trendPlan =
       trendPlan.queries.slice(0, 2).map(
         (query) => searchVideosByQuery(
           accessToken,
-          `${query} shorts`,
-          12,
-          90,
-          true
+          query,
+          15,
+          180
         )
       )
     );
-    filteredTrendVideos = expandedResults
+    const expandedVideos = expandedResults
       .flatMap((result, index) => result.status === "fulfilled"
         ? result.value.map((video) => ({
           ...video,
@@ -382,10 +391,16 @@ export async function fetchTrendReferenceVideos(accessToken, videos, trendPlan =
         video?.id &&
         !ownVideoIds.has(video.id) &&
         values.findIndex((candidate) => candidate.id === video.id) === index &&
-        trendMatchesCreatorContext(video) &&
-        trendMatchesNichePlan(video, trendPlan)
+        isEnglishTrendVideo(video) &&
+        (trendMatchesCreatorContext(video) || trendMatchesNichePlan(video, trendPlan))
       ))
       .sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
+    expandedVideos.forEach((video) => {
+      if (!filteredTrendVideos.some((candidate) => candidate.id === video.id)) {
+        filteredTrendVideos.push(video);
+      }
+    });
+    filteredTrendVideos.sort((a, b) => trendMomentumScore(b) - trendMomentumScore(a));
   }
 
   if (!filteredTrendVideos.length && !quotaLimited && !trendPlan?.queries?.length) {
@@ -543,7 +558,14 @@ export function diversifyTrendVideos(videos, queries = []) {
   });
 
   videos.forEach(addIfDistinct);
-  return selected;
+
+  // Variety should not reduce the useful evidence below three examples.
+  videos.forEach((video) => {
+    if (selected.length >= 3 || selectedIds.has(video.id)) return;
+    selected.push(video);
+    selectedIds.add(video.id);
+  });
+  return selected.slice(0, 3);
 }
 
 export function selectOutsideTopicTrends(
@@ -881,6 +903,15 @@ export function trendReferenceText(trendVideos = []) {
 export function isGroundedTrendLabel(value, trendVideos = []) {
   const labelWords = importantWords(value);
   if (labelWords.length < 2 || labelWords.length > 6) return false;
+  const labelWordSet = new Set(normalizedTitleWords(value));
+  const resemblesSourceTitle = trendVideos.some((video) => {
+    const titleWords = new Set(normalizedTitleWords(video.snippet?.title || ""));
+    if (!labelWordSet.size || !titleWords.size) return false;
+    const shared = [...labelWordSet].filter((word) => titleWords.has(word)).length;
+    return shared / Math.min(labelWordSet.size, titleWords.size) >= 0.85 &&
+      Math.abs(labelWordSet.size - titleWords.size) <= 2;
+  });
+  if (resemblesSourceTitle) return false;
   const referenceWords = new Set(importantWords(trendReferenceText(trendVideos)));
   const matchingWords = labelWords.filter((word) => referenceWords.has(word)).length;
   return matchingWords >= Math.min(2, labelWords.length);
@@ -889,7 +920,12 @@ export function isGroundedTrendLabel(value, trendVideos = []) {
 export function currentTrendSignals(trendVideos = []) {
   const externalSignals = trendVideos
     .slice(0, 3)
-    .map((video) => shortText(video.snippet?.title || "", 56))
+    .map((video) => {
+      const searchTopic = readableTrendQuery(video.trendQuery || "");
+      if (searchTopic) return searchTopic;
+      const centralPhrase = titleTopicPhrases(video.snippet?.title || "")[0] || "";
+      return shortText(centralPhrase, 56);
+    })
     .filter(Boolean);
   const uniqueSignals = [...new Set(externalSignals.map((signal) => signal.toLowerCase()))]
     .map((signal) => externalSignals.find((candidate) => candidate.toLowerCase() === signal))
@@ -984,18 +1020,20 @@ export function buildCrossoverTrendSuggestions(summary) {
     || summary.channelLane?.primaryCategory
     || summary.channelLane?.label
     || "your current audience";
-  const performance = uploadPerformanceContext(summary.recent || []);
-  const preferredFormat = performance.shortAverageViews > performance.videoAverageViews ? "Short" : "video";
   const contextLabel = creatorContextLabel(summary);
 
-  return (summary.outsideTrendVideos || []).slice(0, 3).map((video) => {
+  return (summary.trendVideos || []).slice(0, 3).map((video, index) => {
     const evidence = trendEvidence(video);
-    const outsideCategory = youtubeCategoryName(video.snippet?.categoryId) || "Outside topic";
     const dailyViews = compactNumber(evidence?.viewsPerDay || 0);
+    const approaches = [
+      "turn its viewer question into a fast test with the result shown first",
+      "adapt its core tension into a concise comparison with a clear winner",
+      "use its audience interest for a myth-check, reaction, or ranked takeaway"
+    ];
     return {
-      title: `${outsideCategory} crossover: ${shortText(evidence?.title || "popular trend", 72)}`,
-      body: `${evidence?.title || "This popular video"} is drawing about ${dailyViews} views per day. For ${contextLabel}, test the outside subject in a ${preferredFormat}, but preserve the pacing, humor, expertise, or payoff your ${category} audience expects. Treat it as one measurable pilot before changing the channel direction.`,
-      label: "Targeted crossover",
+      title: `${contextLabel} Short inspired by: ${shortText(evidence?.title || "current topic trend", 72)}`,
+      body: `${evidence?.title || "This same-topic video"} is drawing about ${dailyViews} views per day. Create an original Short for ${category}: ${approaches[index] || approaches[0]}. Use the reference as demand evidence, not as a concept to copy.`,
+      label: "Relevant opportunity",
       tone: "good"
     };
   });

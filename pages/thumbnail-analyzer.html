@@ -22,6 +22,7 @@
         <div class="thumbnail-tabs" role="tablist" aria-label="Thumbnail analyzer modes">
           <button class="thumbnail-tab active" id="analysisTab" type="button" role="tab" aria-selected="true" aria-controls="analysisPanel" data-thumbnail-tab="analysis">Single analysis</button>
           <button class="thumbnail-tab" id="comparisonTab" type="button" role="tab" aria-selected="false" aria-controls="comparisonPanel" data-thumbnail-tab="comparison">Comparison</button>
+          <button class="thumbnail-tab" id="videosTab" type="button" role="tab" aria-selected="false" aria-controls="videosPanel" data-thumbnail-tab="videos">Choose from videos</button>
         </div>
 
         <section class="thumbnail-layout" id="analysisPanel" role="tabpanel" aria-labelledby="analysisTab">
@@ -163,12 +164,25 @@
             <section class="thumbnail-recommendation"><h4>Best combined direction</h4><p id="comparisonRecommendation"></p></section>
           </article>
         </section>
+
+        <section id="videosPanel" role="tabpanel" aria-labelledby="videosTab" hidden>
+          <article class="panel thumbnail-video-picker">
+            <div class="panel-head">
+              <div>
+                <h3>Choose a channel video</h3>
+                <p>Select an upload to analyze its current thumbnail and title together.</p>
+              </div>
+            </div>
+            <p class="thumbnail-status" id="thumbnailVideosStatus" role="status" aria-live="polite">Loading your saved uploads…</p>
+            <div class="thumbnail-video-grid" id="thumbnailVideoGrid"></div>
+          </article>
+        </section>
       </main>
     </div>
     <script src="../components/sidebar.js?v=3"></script>
     <script src="../components/plan-modal.js?v=3"></script>
     <script src="../js/script.js?v=10"></script>
     <script type="module" src="../js/dashboard-data.js?v=12"></script>
-    <script type="module" src="../js/thumbnail-analyzer.js?v=9"></script>
+    <script type="module" src="../js/thumbnail-analyzer.js?v=10"></script>
   </body>
 </html>

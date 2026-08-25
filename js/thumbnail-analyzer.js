@@ -109,6 +109,11 @@ function selectFile(file) {
   setStatus(thumbnailTitle.value.trim() ? "Ready to analyze." : "Enter the video title to continue.");
 }
 
+export function selectThumbnailFile(file, videoTitle = "") {
+  if (videoTitle) thumbnailTitle.value = videoTitle;
+  selectFile(file);
+}
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -271,19 +276,25 @@ thumbnailChatForm.addEventListener("submit", async (event) => {
 });
 
 let comparisonModulePromise = null;
+let videoPickerModulePromise = null;
 
 document.querySelectorAll("[data-thumbnail-tab]").forEach((tab) => tab.addEventListener("click", () => {
-  const comparisonActive = tab.dataset.thumbnailTab === "comparison";
+  const activeMode = tab.dataset.thumbnailTab || "analysis";
+  const comparisonActive = activeMode === "comparison";
   if (comparisonActive && !comparisonModulePromise) {
-    comparisonModulePromise = import("./thumbnail-comparison.js?v=2");
+    comparisonModulePromise = import("./thumbnail-comparison.js?v=3");
+  }
+  if (activeMode === "videos" && !videoPickerModulePromise) {
+    videoPickerModulePromise = import("./thumbnail-video-picker.js?v=1");
   }
   document.querySelectorAll("[data-thumbnail-tab]").forEach((button) => {
     const active = button === tab;
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", String(active));
   });
-  document.querySelector("#analysisPanel").hidden = comparisonActive;
-  document.querySelector("#comparisonPanel").hidden = !comparisonActive;
+  document.querySelector("#analysisPanel").hidden = activeMode !== "analysis";
+  document.querySelector("#comparisonPanel").hidden = activeMode !== "comparison";
+  document.querySelector("#videosPanel").hidden = activeMode !== "videos";
 }));
 
 input.addEventListener("change", () => selectFile(input.files?.[0]));

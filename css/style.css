@@ -936,9 +936,17 @@ body.settings-dark .plan-indicator {
 }
 
 #analysisPanel[hidden],
-#comparisonPanel[hidden] {
+#comparisonPanel[hidden],
+#videosPanel[hidden] {
   display: none !important;
 }
+
+.thumbnail-video-picker { min-height: 320px; }
+.thumbnail-video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.thumbnail-video-card { overflow: hidden; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); text-align: left; cursor: pointer; }
+.thumbnail-video-card:hover { border-color: var(--teal); transform: translateY(-1px); }
+.thumbnail-video-card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--surface-2); }
+.thumbnail-video-card span { display: block; padding: 12px; color: var(--ink); font-weight: 700; line-height: 1.35; }
 
 .thumbnail-tabs {
   display: inline-grid;
