@@ -54,12 +54,12 @@
             <div class="panel-head">
               <div>
                 <h3>Views Trend</h3>
-                <p>Daily views compared with projected audience growth.</p>
+                <p>Actual daily views from YouTube Analytics.</p>
               </div>
               <div class="segmented" aria-label="Time range">
-                <button type="button">7D</button>
-                <button type="button" class="active">30D</button>
-                <button type="button">90D</button>
+                <button type="button" data-views-days="7">7D</button>
+                <button type="button" class="active" data-views-days="30">30D</button>
+                <button type="button" data-views-days="90">90D</button>
               </div>
             </div>
             <div class="chart-wrap">
@@ -135,9 +135,9 @@
             <div class="panel-head">
               <div>
                 <h3>First 24-Hour Performance</h3>
-                <p>Completed uploads ranked by the views captured during their first 24 hours.</p>
+                <p>Uploads ranked by tracked first-day views when available, with estimates for earlier videos.</p>
               </div>
-              <span class="launch-window-label">Tracked first day</span>
+              <span class="launch-window-label">First-day ranking</span>
             </div>
             <div class="table-wrap">
               <table class="launch-ranking-table">
@@ -209,6 +209,6 @@
     <script src="components/plan-modal.js?v=3"></script>
     <script src="js/script.js?v=10"></script>
     <script src="js/dashboard-controls.js?v=4"></script>
-    <script type="module" src="js/dashboard-data.js?v=14"></script>
+    <script type="module" src="js/dashboard-data.js?v=18"></script>
   </body>
 </html>

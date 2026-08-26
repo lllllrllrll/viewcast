@@ -19,6 +19,8 @@ const tokenStorageKey = "viewcastYouTubeAccessToken";
 const overviewStorageKeyPrefix = "viewcastOverviewData:";
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 const firstDayHistoryKeyPrefix = "viewcastFirstDayHistory:";
+let selectedViewsDays = 30;
+let viewsRangeRequestId = 0;
 const metadataHistoryKeyPrefix = "viewcastVideoMetadataHistory:";
 const metadataEventsKeyPrefix = "viewcastVideoMetadataEvents:";
 
@@ -499,14 +501,8 @@ function renderViewsTrend(overviewData) {
   if (!document.getElementById("viewsChart") || typeof window.drawLineChart !== "function") return;
   if (!rows.length) { window.drawLineChart("viewsChart", [], [], []); return; }
   const actual = rows.map((row) => numberValue(row[1]) || 0);
-  const first = actual[0] || 0;
-  const last = actual[actual.length - 1] || first;
-  const forecast = actual.map((_, index) => {
-    const ratio = actual.length <= 1 ? 0 : index / (actual.length - 1);
-    return Math.round(first + ((last - first) * ratio));
-  });
   const labels = rows.map((row) => formatDateLabel(row[0]));
-  window.drawLineChart("viewsChart", actual, forecast, labels, {ySuffix: ""});
+  window.drawLineChart("viewsChart", actual, [], labels, {ySuffix: ""});
 }
 
 function renderTrafficSources(overviewData) {
@@ -717,15 +713,12 @@ function renderFirstDayRanking(overviewData, connection, user) {
   const historyKey = `${firstDayHistoryKeyPrefix}${user?.uid || "guest"}:${channelId}`;
   const history = readLocalJson(historyKey, {});
   const videos = visibleDashboardVideos(overviewData);
-  const videosById = new Map(videos.map((video) => [String(video.id), video]));
 
   videos.forEach((video) => {
     const publishedAt = new Date(video.snippet?.publishedAt || "").getTime();
     const ageHours = (now - publishedAt) / 3600000;
     if (!Number.isFinite(ageHours) || ageHours < 0 || ageHours > 24) return;
     const previous = history[video.id];
-    // Keep the observation closest to hour 24. Once the window closes this
-    // snapshot is frozen, so later lifetime views cannot distort the ranking.
     if (!previous || ageHours >= (numberValue(previous.ageHours) || 0)) {
       history[video.id] = {
         views: numberValue(video.statistics?.viewCount) || 0,
@@ -741,50 +734,48 @@ function renderFirstDayRanking(overviewData, connection, user) {
     .slice(0, 50));
   if (channelId !== "none") localStorage.setItem(historyKey, JSON.stringify(trimmedHistory));
 
-  const completed = Object.entries(trimmedHistory)
-    .map(([id, snapshot]) => {
-      const ageHours = numberValue(snapshot?.ageHours);
-      const views = numberValue(snapshot?.views);
-      if (ageHours === null || views === null || ageHours < 23 || ageHours > 24) return null;
-      const video = videosById.get(String(id));
-      return {
-        id,
-        title: video?.snippet?.title || snapshot.title || "Untitled",
-        views,
-        capturedAgeHours: ageHours
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 10);
-  const typicalFirstDay = median(completed.map((item) => item.views));
+  const rankedVideos = videos.map((video) => {
+    const id = String(video.id || "");
+    const publishedAt = new Date(video.snippet?.publishedAt || "").getTime();
+    const ageHours = Math.max(1, (now - publishedAt) / 3600000);
+    const currentViews = numberValue(video.statistics?.viewCount) || 0;
+    const snapshot = trimmedHistory[id];
+    const snapshotAge = numberValue(snapshot?.ageHours);
+    const snapshotViews = numberValue(snapshot?.views);
+    const isTracked = snapshotAge !== null && snapshotViews !== null &&
+      snapshotAge >= 23 && snapshotAge <= 24;
+    return {
+      id,
+      title: video.snippet?.title || snapshot?.title || "Untitled",
+      firstDayViews: isTracked
+        ? snapshotViews
+        : Math.max(0, Math.round((currentViews / ageHours) * 24)),
+      timing: isTracked ? launchAgeLabel(snapshotAge) : "24h estimate",
+      status: isTracked ? "Tracked" : "Estimated",
+      isTracked
+    };
+  })
+    .filter((item) => item.id && Number.isFinite(item.firstDayViews))
+    .sort((a, b) => b.firstDayViews - a.firstDayViews)
+    .slice(0, 5);
+  const typicalFirstDay = median(rankedVideos.map((item) => item.firstDayViews));
 
-  if (!completed.length) {
-    const trackingNow = videos.some((video) => {
-      const publishedAt = new Date(video.snippet?.publishedAt || "").getTime();
-      const ageHours = (now - publishedAt) / 3600000;
-      return Number.isFinite(ageHours) && ageHours >= 0 && ageHours <= 24;
-    });
-    const message = trackingNow
-      ? "Tracking the current upload. It will enter the ranking after a near-24-hour snapshot is captured."
-      : overviewData?.videos?.length
-        ? "No completed first-24-hour results have been tracked yet. Open the dashboard during new upload launches to build this ranking."
-        : "Connect YouTube to track videos during their first 24 hours.";
-    tbody.innerHTML = `<tr><td class="table-empty-state" colspan="6">${message}</td></tr>`;
+  if (!rankedVideos.length) {
+    tbody.innerHTML = '<tr><td class="table-empty-state" colspan="6">No uploaded videos were found for this channel.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = completed.map((item, index) => {
-    const delta = typicalFirstDay ? ((item.views / typicalFirstDay) - 1) * 100 : null;
+  tbody.innerHTML = rankedVideos.map((item, index) => {
+    const delta = typicalFirstDay ? ((item.firstDayViews / typicalFirstDay) - 1) * 100 : null;
     const comparison = delta === null ? "Building baseline" : `${delta >= 0 ? "+" : ""}${decimal(delta, 0)}%`;
     return `
     <tr>
       <td><span class="launch-rank">${index + 1}</span></td>
       <td><a class="dashboard-video-link" href="pages/analyzer.html?video=${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></td>
-      <td><strong>${wholeNumber(item.views)}</strong></td>
-      <td>${launchAgeLabel(item.capturedAgeHours)}</td>
+      <td><strong>${wholeNumber(item.firstDayViews)}</strong></td>
+      <td>${item.timing}</td>
       <td><span class="trend ${delta === null || delta >= 0 ? "good" : "bad"}">${comparison}</span></td>
-      <td>Completed</td>
+      <td><span class="comparison-badge ${item.isTracked ? "good" : "warn"}">${item.status}</span></td>
     </tr>
   `;
   }).join("");
@@ -903,8 +894,33 @@ async function loadYouTubeData(user, db, days = 30) {
   try {
     const liveOverview = await fetchLiveOverview(accessToken, days);
     saveCachedOverview(user, currentActive.channel.id, liveOverview);
-    applyYouTubeData(currentActive, liveOverview, user);
+    if (days !== 30 || selectedViewsDays === 30) {
+      applyYouTubeData(currentActive, liveOverview, user);
+    }
   } catch (error) { console.warn(error); }
+}
+
+async function loadViewsTrendRange(user, days) {
+  const requestId = ++viewsRangeRequestId;
+  selectedViewsDays = days;
+  const connection = readActiveConnection();
+  if (!connection?.channel?.id) {
+    renderViewsTrend(null);
+    return;
+  }
+  const accessToken = readCachedAccessToken(user) || await getRenewedYouTubeAccessToken(
+    user.uid,
+    connection.channel.id
+  ).catch(() => "");
+  if (!accessToken || requestId !== viewsRangeRequestId) return;
+  const rows = await fetchAnalyticsRows(accessToken, {
+    metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained",
+    dimensions: "day",
+    sort: "day",
+    days
+  });
+  if (requestId !== viewsRangeRequestId) return;
+  renderViewsTrend({daily: rows});
 }
 
 if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-youtube-summary]")) {
@@ -917,14 +933,21 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
     if (!user) return;
     loadYouTubeData(user, db).catch(console.error);
 
-    document.querySelectorAll(".segmented button").forEach((button) => {
-      button.addEventListener("click", () => {
+    document.querySelectorAll("[data-views-days]").forEach((button) => {
+      button.addEventListener("click", async () => {
         if (button.classList.contains("active")) return;
-        const days = { "7D": 7, "30D": 30, "90D": 90 }[button.textContent.trim()];
+        const days = Number(button.dataset.viewsDays);
         if (!days) return;
         button.parentElement.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
         button.classList.add("active");
-        loadYouTubeData(user, db, days).catch(console.error);
+        button.setAttribute("aria-busy", "true");
+        try {
+          await loadViewsTrendRange(user, days);
+        } catch (error) {
+          console.error("Could not load the selected views range.", error);
+        } finally {
+          button.removeAttribute("aria-busy");
+        }
       });
     });
   });
