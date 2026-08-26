@@ -373,12 +373,10 @@ function setTrend(name, value, className = "good") {
   });
 }
 
-function setProgress(name, value, label) {
+function setHealthMetric(name, label) {
   document.querySelectorAll(`[data-overview-health="${name}"]`).forEach((item) => {
-    const valueEl = item.querySelector(".progress-meta span");
-    const barEl = item.querySelector(".bar i");
+    const valueEl = item.querySelector("strong");
     if (valueEl) valueEl.textContent = label || emptyValue;
-    if (barEl) barEl.dataset.value = String(Math.round(Math.max(0, Math.min(100, value || 0))));
   });
 }
 
@@ -529,16 +527,15 @@ function renderTrafficSources(overviewData) {
 }
 
 function renderHealth(connection, overviewData) {
-  if (!connection) { setProgress("watch-hours", 0, "Not connected"); setProgress("avg-duration", 0, "Not connected"); setProgress("subscribers", 0, "Not connected"); return; }
+  if (!connection) { setHealthMetric("watch-hours", "Not connected"); setHealthMetric("avg-duration", "Not connected"); setHealthMetric("subscribers", "Not connected"); return; }
   const analyticsSummary = connection?.analyticsSummary || {};
   const dailySummary = summarizeDaily(overviewData?.daily || []);
-  const views = dailySummary.views || numberValue(analyticsSummary.views) || 0;
   const watchMinutes = dailySummary.watchMinutes || numberValue(analyticsSummary.estimatedMinutesWatched) || 0;
   const avgDuration = dailySummary.durationCount ? dailySummary.durationTotal / dailySummary.durationCount : numberValue(analyticsSummary.averageViewDuration) || 0;
   const subscribers = dailySummary.subscribers || numberValue(analyticsSummary.subscribersGained) || 0;
-  setProgress("watch-hours", Math.min(100, (watchMinutes / 60) / 10 * 100), `${watchHours(watchMinutes)} hrs`);
-  setProgress("avg-duration", Math.min(100, avgDuration / 180 * 100), duration(avgDuration));
-  setProgress("subscribers", Math.min(100, Math.max(0, subscribers) / Math.max(1, views) * 10000), wholeNumber(subscribers));
+  setHealthMetric("watch-hours", `${watchHours(watchMinutes)} hrs`);
+  setHealthMetric("avg-duration", duration(avgDuration));
+  setHealthMetric("subscribers", wholeNumber(subscribers));
 }
 
 function videoFormat(video) {
@@ -719,68 +716,79 @@ function renderFirstDayRanking(overviewData, connection, user) {
   const channelId = connection?.channel?.id || "none";
   const historyKey = `${firstDayHistoryKeyPrefix}${user?.uid || "guest"}:${channelId}`;
   const history = readLocalJson(historyKey, {});
-  const videoRows = visibleDashboardVideos(overviewData)
-    .map((video) => {
-      const publishedAt = new Date(video.snippet?.publishedAt || "").getTime();
-      const ageHours = (now - publishedAt) / 3600000;
-      const views = numberValue(video.statistics?.viewCount) || 0;
-      return {
-        video,
-        ageHours,
-        views,
-        viewsPerHour: views / Math.max(ageHours, 1 / 60)
-      };
-    });
-  const rankedVideos = videoRows
-    .filter((item) => Number.isFinite(item.ageHours) && item.ageHours >= 0 && item.ageHours <= 24);
+  const videos = visibleDashboardVideos(overviewData);
+  const videosById = new Map(videos.map((video) => [String(video.id), video]));
 
-  rankedVideos.forEach((item) => {
-    history[item.video.id] = {
-      views: item.views,
-      ageHours: item.ageHours,
-      capturedAt: now
-    };
+  videos.forEach((video) => {
+    const publishedAt = new Date(video.snippet?.publishedAt || "").getTime();
+    const ageHours = (now - publishedAt) / 3600000;
+    if (!Number.isFinite(ageHours) || ageHours < 0 || ageHours > 24) return;
+    const previous = history[video.id];
+    // Keep the observation closest to hour 24. Once the window closes this
+    // snapshot is frozen, so later lifetime views cannot distort the ranking.
+    if (!previous || ageHours >= (numberValue(previous.ageHours) || 0)) {
+      history[video.id] = {
+        views: numberValue(video.statistics?.viewCount) || 0,
+        ageHours,
+        title: video.snippet?.title || "Untitled",
+        capturedAt: now
+      };
+    }
   });
+
   const trimmedHistory = Object.fromEntries(Object.entries(history)
     .sort((a, b) => Number(b[1]?.capturedAt || 0) - Number(a[1]?.capturedAt || 0))
     .slice(0, 50));
   if (channelId !== "none") localStorage.setItem(historyKey, JSON.stringify(trimmedHistory));
-  const activeIds = new Set(rankedVideos.map((item) => String(item.video.id)));
-  const historicalFirstDays = Object.entries(trimmedHistory)
-    .filter(([id, snapshot]) => !activeIds.has(id) && numberValue(snapshot?.ageHours) >= 18)
-    .map(([, snapshot]) => numberValue(snapshot.views))
-    .filter(Number.isFinite);
-  const typicalFirstDay = median(historicalFirstDays);
 
-  rankedVideos
-    .sort((a, b) => b.viewsPerHour - a.viewsPerHour || b.views - a.views)
-    .splice(5);
+  const completed = Object.entries(trimmedHistory)
+    .map(([id, snapshot]) => {
+      const ageHours = numberValue(snapshot?.ageHours);
+      const views = numberValue(snapshot?.views);
+      if (ageHours === null || views === null || ageHours < 23 || ageHours > 24) return null;
+      const video = videosById.get(String(id));
+      return {
+        id,
+        title: video?.snippet?.title || snapshot.title || "Untitled",
+        views,
+        capturedAgeHours: ageHours
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10);
+  const typicalFirstDay = median(completed.map((item) => item.views));
 
-  if (!rankedVideos.length) {
-    const message = overviewData?.videos?.length
-      ? "No uploads are currently within their first 24 hours. This ranking will appear after your next upload."
-      : "Connect YouTube to track videos during their first 24 hours.";
+  if (!completed.length) {
+    const trackingNow = videos.some((video) => {
+      const publishedAt = new Date(video.snippet?.publishedAt || "").getTime();
+      const ageHours = (now - publishedAt) / 3600000;
+      return Number.isFinite(ageHours) && ageHours >= 0 && ageHours <= 24;
+    });
+    const message = trackingNow
+      ? "Tracking the current upload. It will enter the ranking after a near-24-hour snapshot is captured."
+      : overviewData?.videos?.length
+        ? "No completed first-24-hour results have been tracked yet. Open the dashboard during new upload launches to build this ranking."
+        : "Connect YouTube to track videos during their first 24 hours.";
     tbody.innerHTML = `<tr><td class="table-empty-state" colspan="6">${message}</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = rankedVideos.map((item, index) => {
-    const projectedFirstDay = item.viewsPerHour * 24;
-    const delta = typicalFirstDay ? ((projectedFirstDay / typicalFirstDay) - 1) * 100 : null;
+  tbody.innerHTML = completed.map((item, index) => {
+    const delta = typicalFirstDay ? ((item.views / typicalFirstDay) - 1) * 100 : null;
     const comparison = delta === null ? "Building baseline" : `${delta >= 0 ? "+" : ""}${decimal(delta, 0)}%`;
     return `
     <tr>
       <td><span class="launch-rank">${index + 1}</span></td>
-      <td><a class="dashboard-video-link" href="pages/analyzer.html?video=${encodeURIComponent(item.video.id)}">${escapeHtml(item.video.snippet?.title || "Untitled")}</a></td>
-      <td>${launchAgeLabel(item.ageHours)} / 24h</td>
-      <td>${wholeNumber(item.views)}</td>
-      <td><strong>${compactNumber(item.viewsPerHour)}</strong></td>
+      <td><a class="dashboard-video-link" href="pages/analyzer.html?video=${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></td>
+      <td><strong>${wholeNumber(item.views)}</strong></td>
+      <td>${launchAgeLabel(item.capturedAgeHours)}</td>
       <td><span class="trend ${delta === null || delta >= 0 ? "good" : "bad"}">${comparison}</span></td>
+      <td>Completed</td>
     </tr>
   `;
   }).join("");
 }
-
 function trackVideoMetadata(overviewData, connection, user) {
   const channelId = connection?.channel?.id;
   if (!channelId || !user?.uid) {

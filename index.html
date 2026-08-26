@@ -86,18 +86,15 @@
                 <p>Verified summary from YouTube Analytics.</p>
               </div>
             </div>
-            <div class="progress-stack">
-              <div class="progress-item" data-overview-health="watch-hours">
-                <div class="progress-meta"><b>Watch hours</b><span>&nbsp;</span></div>
-                <div class="bar"><i data-value="0"></i></div>
+            <div class="health-stat-grid">
+              <div class="health-stat" data-overview-health="watch-hours">
+                <span>Watch hours</span><strong>&nbsp;</strong><small>Total watch time</small>
               </div>
-              <div class="progress-item" data-overview-health="avg-duration">
-                <div class="progress-meta"><b>Average view duration</b><span>&nbsp;</span></div>
-                <div class="bar"><i data-value="0"></i></div>
+              <div class="health-stat" data-overview-health="avg-duration">
+                <span>Average view duration</span><strong>&nbsp;</strong><small>Per view</small>
               </div>
-              <div class="progress-item" data-overview-health="subscribers">
-                <div class="progress-meta"><b>Subscribers gained</b><span>&nbsp;</span></div>
-                <div class="bar"><i data-value="0"></i></div>
+              <div class="health-stat" data-overview-health="subscribers">
+                <span>Subscribers gained</span><strong>&nbsp;</strong><small>Net new subscribers</small>
               </div>
             </div>
           </article>
@@ -138,9 +135,9 @@
             <div class="panel-head">
               <div>
                 <h3>First 24-Hour Performance</h3>
-                <p>Videos ranked by view velocity while they are still within their first 24 hours.</p>
+                <p>Completed uploads ranked by the views captured during their first 24 hours.</p>
               </div>
-              <span class="launch-window-label">Live launch window</span>
+              <span class="launch-window-label">Tracked first day</span>
             </div>
             <div class="table-wrap">
               <table class="launch-ranking-table">
@@ -148,10 +145,10 @@
                   <tr>
                     <th>Rank</th>
                     <th>Video</th>
-                    <th>Time live</th>
-                    <th>Views so far</th>
-                    <th>Views/hour</th>
+                    <th>First-day views</th>
+                    <th>Snapshot time</th>
                     <th>Vs. typical</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody data-first-day-ranking>
@@ -212,6 +209,6 @@
     <script src="components/plan-modal.js?v=3"></script>
     <script src="js/script.js?v=10"></script>
     <script src="js/dashboard-controls.js?v=4"></script>
-    <script type="module" src="js/dashboard-data.js?v=12"></script>
+    <script type="module" src="js/dashboard-data.js?v=14"></script>
   </body>
 </html>

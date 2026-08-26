@@ -2138,6 +2138,31 @@ canvas {
   font-size: 14px;
 }
 
+.health-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.health-stat {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.health-stat span,
+.health-stat small { color: var(--muted); }
+.health-stat span { font-size: 13px; font-weight: 700; }
+.health-stat strong { color: var(--ink); font-size: 26px; line-height: 1.1; }
+.health-stat small { font-size: 12px; }
+
+@media (max-width: 720px) {
+  .health-stat-grid { grid-template-columns: 1fr; }
+}
+
 .activity {
   display: grid;
   gap: 14px;
