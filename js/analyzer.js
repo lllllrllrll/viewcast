@@ -1060,7 +1060,14 @@ async function loadVideoAnalysisWithRetry(videoId) {
     console.warn("Some private video analytics were not available.", error);
   });
 
-  return [video, privateData.analytics, privateData.retentionPoints, privateData.searchTerms, accessToken];
+  return [
+    video,
+    privateData.analytics,
+    privateData.retentionPoints,
+    privateData.searchTerms,
+    accessToken,
+    privateData.errors
+  ];
 }
 
 async function analyzeVideoById(videoId) {
@@ -1084,8 +1091,26 @@ async function analyzeVideoById(videoId) {
     if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
     sessionStorage.removeItem(pendingAnalyzerVideoKey);
     updateLibrarySelection(videoId);
-    const [video, analytics, retentionPoints, searchTerms, accessToken] = await loadVideoAnalysisWithRetry(videoId);
+    const [video, analytics, retentionPoints, searchTerms, accessToken, analyticsErrors] = await loadVideoAnalysisWithRetry(videoId);
     if (requestId !== analysisRequestId) return;
+
+    const hasOwnerAnalytics = Boolean(
+      analytics || retentionPoints.length || searchTerms.length
+    );
+    if (!hasOwnerAnalytics) {
+      updateLibrarySelection(video.id);
+      updateMetrics(video, null);
+      updateSearchTerms([]);
+      renderTimeline([], secondsFromIso(video.contentDetails?.duration) || 0);
+      setAnalyzerLoading(false);
+      setAnalyzerResultsVisible(true);
+      const analyticsMessage = analyticsErrors.length
+        ? "Relink the YouTube channel to restore retention, average view duration, and search-term access."
+        : "YouTube did not return retention, average view duration, or search-term data for this upload.";
+      setStatus(`Public video stats loaded. ${analyticsMessage}`);
+      setLibraryStatus(`Loaded the available YouTube data for ${video.snippet?.title || "the selected video"}.`);
+      return;
+    }
 
     const cachedGeminiAnalysis = readCachedGeminiVideoAnalysis(video, analytics, retentionPoints, searchTerms);
     let geminiAnalysis = cachedGeminiAnalysis;
