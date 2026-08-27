@@ -32,6 +32,7 @@ const analyzerLoading = document.getElementById("analyzerLoading");
 const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
 const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
+const overviewStorageKeyPrefix = "viewcastOverviewData:";
 const videosCacheVersion = 2;
 const videoAnalysisStorageKeyPrefix = "viewcastGeminiVideoAnalysis:";
 const videoAnalysisCacheMaxAge = 24 * 60 * 60 * 1000;
@@ -207,17 +208,39 @@ function videosStorageKey() {
 function readCachedVideos() {
   const key = videosStorageKey();
   if (!key) return [];
+  const cachedCollections = [];
   try {
     const saved = JSON.parse(sessionStorage.getItem(key) || "null");
-    if (saved?.version !== videosCacheVersion) {
-      sessionStorage.removeItem(key);
-      return [];
+    // Insights and older builds stored the same shared cache without a version.
+    // Accept that shape instead of deleting an otherwise valid upload library.
+    if (saved?.version === undefined || saved.version === videosCacheVersion) {
+      if (Array.isArray(saved?.videos)) cachedCollections.push(saved.videos);
     }
-    return Array.isArray(saved?.videos) ? saved.videos.filter((video) => !isLivestream(video)) : [];
   } catch (error) {
-    sessionStorage.removeItem(key);
-    return [];
+    // Continue to the fallback caches below.
   }
+
+  // Channel selection can change the exact suffix used by another page. Scan
+  // only this signed-in user's caches and prefer the active channel when found.
+  const userPrefix = `${videosStorageKeyPrefix}${currentUser.uid}:`;
+  const overviewPrefix = `${overviewStorageKeyPrefix}${currentUser.uid}:`;
+  for (let index = 0; index < sessionStorage.length; index += 1) {
+    const storageKey = sessionStorage.key(index) || "";
+    if (storageKey !== key && !storageKey.startsWith(userPrefix) && !storageKey.startsWith(overviewPrefix)) continue;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(storageKey) || "null");
+      if (Array.isArray(saved?.videos)) cachedCollections.push(saved.videos);
+    } catch {
+      // Ignore one malformed cache without hiding the remaining valid uploads.
+    }
+  }
+
+  const seen = new Set();
+  return cachedCollections.flat().filter((video) => {
+    if (!video?.id || seen.has(video.id) || isLivestream(video)) return false;
+    seen.add(video.id);
+    return true;
+  });
 }
 
 function saveCachedVideos(videos) {
@@ -331,6 +354,12 @@ function renderVideoLibrary(videos = channelVideos) {
       + '</button>';
   }).join("");
 
+  if (!selectedVideoId || !channelVideos.some((video) => video.id === selectedVideoId)) {
+    selectedVideoId = channelVideos[0]?.id || "";
+  }
+  if (selectedVideoId && videoUrlInput && !parseVideoId(videoUrlInput.value)) {
+    videoUrlInput.value = `https://www.youtube.com/watch?v=${selectedVideoId}`;
+  }
   updateLibrarySelection(selectedVideoId);
 }
 
@@ -1224,11 +1253,14 @@ async function analyzeUploadedVideo(file) {
 
 async function analyzeVideo(event) {
   event.preventDefault();
-  const videoId = parseVideoId(videoUrlInput?.value || "");
+  const videoId = parseVideoId(videoUrlInput?.value || "") ||
+    selectedVideoId ||
+    channelVideos[0]?.id || "";
   if (!videoId) {
-    setStatus("Choose one of your videos or paste a valid YouTube video URL.");
+    setStatus("No video is selected. Refresh your uploads or paste a valid YouTube video URL.");
     return;
   }
+  setStatus("Starting video analysis...");
   await analyzeVideoById(videoId);
 }
 
@@ -1245,11 +1277,6 @@ async function loadVideoLibrary({allowPrompt = false} = {}) {
   if (cachedVideos.length) renderVideoLibrary(cachedVideos);
 
   const cachedToken = readCachedAccessToken();
-  if (!cachedToken && !allowPrompt) {
-    setLibraryStatus(cachedVideos.length ? "Showing saved uploads. Refresh videos to check for new uploads." : "Refresh videos to load uploads from your linked channel.");
-    return;
-  }
-
   try {
     setLibraryBusy(true);
     setLibraryStatus("Loading uploads from YouTube...");

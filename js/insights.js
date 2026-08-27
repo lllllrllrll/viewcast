@@ -176,6 +176,7 @@ function saveCachedVideos(videos) {
   const key = videosStorageKey();
   if (!key) return;
   sessionStorage.setItem(key, JSON.stringify({
+    version: 2,
     videos,
     savedAt: Date.now()
   }));
