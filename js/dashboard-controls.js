@@ -38,14 +38,7 @@
         <label>Range<select id="dashboardRange"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select></label>
         <label>Channel<select id="dashboardChannel"><option value="">No channel connected</option></select></label>
         <label>Format<select id="dashboardFormat"><option value="all">All formats</option><option>Short</option><option>Video</option><option>Long-form</option></select></label>
-        <span class="dashboard-quality-summary" id="dashboardQualitySummary">Waiting for channel data</span>
       </section>
-    `);
-    grid.insertAdjacentHTML("beforeend", `
-      <article class="panel full">
-        <div class="panel-head"><div><h3>Data Quality</h3><p>Connection, report coverage, and synchronization freshness.</p></div></div>
-        <div class="coverage-list" id="dataQualityDetails"></div>
-      </article>
     `);
     bindControls();
   }
@@ -94,17 +87,7 @@
     link.download = `viewcast-dashboard-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(link.href);
   }
 
-  function renderDataQuality() {
-    const data = state.overviewData; const checks = [
-      ["YouTube connection", state.connection ? "Connected" : "Missing"], ["Public video data", data?.videos?.length ? "Available" : "Missing"],
-      ["Owner analytics", data?.videoAnalytics?.length ? "Available" : "Missing or delayed"], ["Revenue report", data?.videoRevenue?.length ? "Available" : "Unavailable"],
-      ["Last sync", data?.latestVideoScannedAt ? new Date(data.latestVideoScannedAt).toLocaleString() : "Not synced"]
-    ];
-    document.getElementById("dataQualityDetails").innerHTML = checks.map(([label, value]) => `<div><span>${label}</span><b>${value}</b></div>`).join("");
-    document.getElementById("dashboardQualitySummary").textContent = checks.filter(([, value]) => /Missing|Unavailable|Not synced/.test(value)).length ? "Some reports need attention" : "All available reports loaded";
-  }
-
-  function renderAll() { populateChannels(); renderDataQuality(); }
+  function renderAll() { populateChannels(); }
 
   mountUi();
   window.addEventListener("viewcast:dashboard-data", (event) => { state = event.detail || state; renderAll(); });
