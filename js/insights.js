@@ -10,7 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 import {isGeminiAvailable} from "./gemini-client.js?v=8";
-import { addNotifications } from "./notifications.js";
+import { addNotifications } from "../components/notifications.js";
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
 import {
   average,
@@ -44,7 +44,7 @@ import {
   buildGeminiPageInsights,
   normalizeGeminiInsights
 } from "./insights-gemini-page.js?v=2";
-import {renderTrendSections} from "./insights-trend-renderer.js?v=1";
+import {renderTrendSections} from "../components/insights-trend-renderer.js?v=2";
 
 const {
   bestUploadSlot,

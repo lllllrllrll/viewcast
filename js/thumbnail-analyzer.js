@@ -1,5 +1,5 @@
 import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=8";
-import { addNotifications } from "./notifications.js";
+import { addNotifications } from "../components/notifications.js";
 
 export const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -285,7 +285,7 @@ document.querySelectorAll("[data-thumbnail-tab]").forEach((tab) => tab.addEventL
     comparisonModulePromise = import("./thumbnail-comparison.js?v=3");
   }
   if (activeMode === "videos" && !videoPickerModulePromise) {
-    videoPickerModulePromise = import("./thumbnail-video-picker.js?v=1");
+    videoPickerModulePromise = import("../components/thumbnail-video-picker.js?v=2");
   }
   document.querySelectorAll("[data-thumbnail-tab]").forEach((button) => {
     const active = button === tab;

@@ -1,5 +1,5 @@
 import {isGeminiAvailable, requestGeminiText} from "./gemini-client.js?v=8";
-import {addNotifications} from "./notifications.js";
+import {addNotifications} from "../components/notifications.js";
 import {
   MAX_FILE_SIZE,
   fileFingerprint,
