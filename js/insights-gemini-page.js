@@ -297,10 +297,10 @@ export async function buildGeminiPageInsights(summary, videos) {
     return normalizeGeminiInsights(parsedInsights, summary);
   } catch (error) {
     console.warn("Gemini page insights failed.", error);
-    if (error.message === "AI_INSIGHTS_RATE_LIMITED" || error.code === "functions/resource-exhausted") {
-      throw new Error("AI_INSIGHTS_RATE_LIMITED");
-    }
-    throw error;
+    const fallback = normalizeGeminiInsights({}, summary);
+    fallback.aiUnavailable = true;
+    fallback.aiErrorCode = String(error.code || error.message || "unavailable");
+    return fallback;
   }
 }
 
@@ -338,6 +338,6 @@ export async function buildGeminiChatReply(question, summary, chatHistory = []) 
     return text || "I couldn't generate a response. Please try again.";
   } catch (error) {
     console.error("Gemini advice failed.", error);
-    return "I'm having trouble connecting to my brain right now.";
+    return "AI chat is temporarily unavailable, but the recommendations above still use your channel uploads and YouTube performance data.";
   }
 }

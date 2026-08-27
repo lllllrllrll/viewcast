@@ -828,7 +828,9 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
       setAnalyzerLoading(false);
       setAnalyzerResultsVisible(true);
       setStatus("");
-      setLibraryStatus("Showing recently generated AI insights.");
+      setLibraryStatus(cachedSummary.geminiInsights?.aiUnavailable
+        ? "Showing channel-data insights. Gemini is temporarily unavailable."
+        : "Showing recently generated AI insights.");
       return;
     }
 
@@ -901,9 +903,11 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     setStatus("");
-    setLibraryStatus(forceRefresh
-      ? (focusVideoId ? "Selected-upload insights refreshed." : "Channel-level insights refreshed.")
-      : (focusVideoId ? "Insights weighted toward the selected upload." : "Channel-level insights are ready."));
+    setLibraryStatus(summary.geminiInsights.aiUnavailable
+      ? "Channel-data insights are ready. Gemini is temporarily unavailable."
+      : forceRefresh
+        ? (focusVideoId ? "Selected-upload insights refreshed." : "Channel-level insights refreshed.")
+        : (focusVideoId ? "Insights weighted toward the selected upload." : "Channel-level insights are ready."));
   } catch (error) {
     if (requestId !== analysisRequestId) return;
     setAnalyzerLoading(false);
