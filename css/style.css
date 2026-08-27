@@ -1760,6 +1760,21 @@ body.settings-dark .plan-indicator {
   font-size: 14px;
 }
 
+.analyzer-empty-action {
+  gap: 10px;
+  align-content: center;
+}
+
+.analyzer-empty-action strong,
+.retention-empty-state strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.analyzer-empty-action span {
+  max-width: 620px;
+}
+
 .panel.large {
   grid-column: span 8;
 }
@@ -2068,6 +2083,31 @@ body.settings-dark .settings-status {
   position: relative;
   width: 100%;
   height: 266px;
+}
+
+.retention-empty-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.retention-empty-state[hidden] {
+  display: none;
+}
+
+.retention-empty-state span {
+  font-size: 14px;
+}
+
+.retention-empty-state small {
+  max-width: 620px;
+  line-height: 1.45;
 }
 
 canvas {

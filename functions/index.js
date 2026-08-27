@@ -125,6 +125,117 @@ async function youtubeChannelId(accessToken) {
   return channelId;
 }
 
+/**
+ * Returns a valid server-side YouTube credential for a Firebase user.
+ * @param {string} uid Firebase user ID.
+ * @return {Promise<object>} Stored credential with a current access token.
+ */
+async function privateYouTubeCredential(uid) {
+  const credentialRef = getFirestore().doc(`_internalYouTubeAuth/${uid}`);
+  const snapshot = await credentialRef.get();
+  const credential = snapshot.data();
+  if (!credential || !credential.refreshToken || !credential.channelId) {
+    throw new HttpsError(
+        "failed-precondition",
+        "Link your YouTube channel before loading private analytics.",
+    );
+  }
+
+  const grantedScopes = String(credential.scope || "").split(/\s+/);
+  if (!grantedScopes.includes(
+      "https://www.googleapis.com/auth/yt-analytics.readonly")) {
+    throw new HttpsError(
+        "failed-precondition",
+        "Relink YouTube once to grant private Analytics access.",
+    );
+  }
+
+  if (credential.accessToken &&
+      Number(credential.expiresAt || 0) > Date.now() + 60 * 1000) {
+    return credential;
+  }
+
+  const tokens = await googleTokenRequest({
+    refresh_token: credential.refreshToken,
+    client_id: GOOGLE_OAUTH_CLIENT_ID,
+    client_secret: googleOAuthClientSecret.value(),
+    grant_type: "refresh_token",
+  });
+  const expiresAt = Date.now() + Number(tokens.expires_in || 3600) * 1000;
+  await credentialRef.set({
+    accessToken: tokens.access_token,
+    expiresAt,
+    updatedAt: new Date(),
+  }, {merge: true});
+  return {...credential, accessToken: tokens.access_token, expiresAt};
+}
+
+/**
+ * Fetches one YouTube Analytics report with the user's private token.
+ * @param {URL} url Analytics API URL.
+ * @param {string} accessToken Google OAuth access token.
+ * @return {Promise<object>} Parsed report.
+ */
+async function privateYouTubeReport(url, accessToken) {
+  const response = await fetch(url, {
+    headers: {Authorization: `Bearer ${accessToken}`},
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    logger.warn("YouTube private Analytics request failed", {
+      status: response.status,
+      reason: payload.error && payload.error.message,
+    });
+    throw new HttpsError(
+        response.status === 403 ? "permission-denied" : "unavailable",
+        payload.error && payload.error.message ||
+          "YouTube private Analytics could not be loaded.",
+    );
+  }
+  return payload;
+}
+
+/**
+ * Formats an Analytics API date.
+ * @param {Date} date Date to format.
+ * @return {string} YYYY-MM-DD date.
+ */
+function analyticsDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Returns an Analytics API date a number of days ago.
+ * @param {number} days Days before today.
+ * @return {string} YYYY-MM-DD date.
+ */
+function analyticsStartDate(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  return analyticsDate(date);
+}
+
+/**
+ * Loads the first private report range containing rows.
+ * @param {string} accessToken Google OAuth access token.
+ * @param {Function} buildUrl Builds a report URL for a date range.
+ * @return {Promise<object>} Report and selected range label.
+ */
+async function firstPrivateReport(accessToken, buildUrl) {
+  const ranges = [
+    {startDate: analyticsStartDate(28), label: "28D"},
+    {startDate: "2008-07-01", label: "Lifetime"},
+  ];
+  for (const range of ranges) {
+    const report = await privateYouTubeReport(
+        buildUrl(range.startDate, analyticsDate(new Date())),
+        accessToken,
+    );
+    if (report.rows && report.rows.length) return {report, label: range.label};
+  }
+  return {report: {rows: []}, label: "Lifetime"};
+}
+
 exports.exchangeYouTubeAuthorizationCode = onCall(
     {
       secrets: [googleOAuthClientSecret],
@@ -233,6 +344,116 @@ exports.getYouTubeAccessToken = onCall(
         accessToken: tokens.access_token,
         expiresAt,
         channelId: credential.channelId,
+      };
+    },
+);
+
+exports.getPrivateYouTubeVideoAnalytics = onCall(
+    {
+      secrets: [googleOAuthClientSecret],
+      enforceAppCheck,
+      region: "us-central1",
+      timeoutSeconds: 30,
+    },
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError(
+            "unauthenticated",
+            "Sign in before loading private YouTube analytics.",
+        );
+      }
+      const videoId = String(request.data && request.data.videoId || "");
+      if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+        throw new HttpsError("invalid-argument", "Invalid YouTube video ID.");
+      }
+
+      const credential = await privateYouTubeCredential(request.auth.uid);
+      const detailsUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+      detailsUrl.searchParams.set("part", "snippet");
+      detailsUrl.searchParams.set("id", videoId);
+      const detailsResponse = await fetch(detailsUrl, {
+        headers: {Authorization: `Bearer ${credential.accessToken}`},
+      });
+      const details = await detailsResponse.json().catch(() => ({}));
+      const selectedVideo = details.items && details.items[0];
+      if (!detailsResponse.ok || !selectedVideo ||
+          selectedVideo.snippet.channelId !== credential.channelId) {
+        throw new HttpsError(
+            "permission-denied",
+            "This video does not belong to the linked YouTube channel.",
+        );
+      }
+
+      const baseReportUrl = (startDate, endDate) => {
+        const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+        url.searchParams.set("ids", "channel==MINE");
+        url.searchParams.set("startDate", startDate);
+        url.searchParams.set("endDate", endDate);
+        url.searchParams.set("filters", `video==${videoId}`);
+        return url;
+      };
+      const [summaryRequest, retentionRequest, searchRequest] =
+        await Promise.allSettled([
+          firstPrivateReport(credential.accessToken, (startDate, endDate) => {
+            const url = baseReportUrl(startDate, endDate);
+            url.searchParams.set(
+                "metrics",
+                "views,estimatedMinutesWatched," +
+                "averageViewDuration,averageViewPercentage",
+            );
+            return url;
+          }),
+          firstPrivateReport(credential.accessToken, (startDate, endDate) => {
+            const url = baseReportUrl(startDate, endDate);
+            url.searchParams.set("metrics", "audienceWatchRatio");
+            url.searchParams.set("dimensions", "elapsedVideoTimeRatio");
+            return url;
+          }),
+          firstPrivateReport(credential.accessToken, (startDate, endDate) => {
+            const url = baseReportUrl(startDate, endDate);
+            url.searchParams.set("metrics", "views");
+            url.searchParams.set("dimensions", "insightTrafficSourceDetail");
+            url.searchParams.set(
+                "filters",
+                `video==${videoId};insightTrafficSourceType==YT_SEARCH`,
+            );
+            url.searchParams.set("sort", "-views");
+            url.searchParams.set("maxResults", "3");
+            return url;
+          }),
+        ]);
+
+      if (retentionRequest.status === "rejected") {
+        throw retentionRequest.reason;
+      }
+      const summaryResult = summaryRequest.status === "fulfilled" ?
+        summaryRequest.value :
+        {report: {rows: []}, label: "Lifetime"};
+      const retentionResult = retentionRequest.value;
+      const searchResult = searchRequest.status === "fulfilled" ?
+        searchRequest.value :
+        {report: {rows: []}, label: "Lifetime"};
+
+      const summaryRow = summaryResult.report.rows &&
+        summaryResult.report.rows[0];
+      return {
+        analytics: summaryRow ? {
+          periodLabel: summaryResult.label,
+          views: Number(summaryRow[0]) || 0,
+          estimatedMinutesWatched: Number(summaryRow[1]) || 0,
+          averageViewDuration: Number(summaryRow[2]) || 0,
+          averageViewPercentage: Number(summaryRow[3]) || 0,
+        } : null,
+        retentionPoints: (retentionResult.report.rows || []).map((row) => ({
+          position: Number(row[0]),
+          ratio: Number(row[1]),
+        })).filter((point) => Number.isFinite(point.position) &&
+          Number.isFinite(point.ratio)),
+        searchTerms: (searchResult.report.rows || []).map((row) => ({
+          term: String(row[0] || "Unknown search term"),
+          views: Number(row[1]) || 0,
+          periodLabel: searchResult.label,
+        })),
       };
     },
 );
@@ -407,7 +628,7 @@ function validateContents(contents) {
   }
 
   let textChars = 0;
-  let inlineDataCount = 0;
+  let mediaPartCount = 0;
   contents.forEach((message) => {
     if (!message || typeof message !== "object" ||
         !["user", "model"].includes(message.role) ||
@@ -431,6 +652,31 @@ function validateContents(contents) {
         textChars += part.text.length;
         return;
       }
+      const fileData = part.fileData;
+      if (fileData) {
+        let fileUrl;
+        try {
+          fileUrl = new URL(String(fileData.fileUri || ""));
+        } catch (error) {
+          logger.debug("Rejected malformed Gemini media URL", {
+            name: error.name,
+          });
+          throw new HttpsError("invalid-argument", "Invalid media URL.");
+        }
+        const youtubeHost = fileUrl.hostname === "youtube.com" ||
+          fileUrl.hostname.endsWith(".youtube.com") ||
+          fileUrl.hostname === "youtu.be";
+        if (typeof fileData.mimeType !== "string" ||
+            fileData.mimeType !== "video/*" ||
+            fileUrl.protocol !== "https:" || !youtubeHost) {
+          throw new HttpsError(
+              "invalid-argument",
+              "Invalid YouTube media URL.",
+          );
+        }
+        mediaPartCount += 1;
+        return;
+      }
       const inlineData = part.inlineData;
       if (!inlineData || typeof inlineData.data !== "string" ||
           !["image/jpeg", "image/png", "image/webp", "video/mp4",
@@ -439,11 +685,11 @@ function validateContents(contents) {
           inlineData.data.length > MAX_INLINE_DATA_CHARS) {
         throw new HttpsError("invalid-argument", "Invalid inline media data.");
       }
-      inlineDataCount += 1;
+      mediaPartCount += 1;
     });
   });
 
-  if (textChars > MAX_TEXT_CHARS || inlineDataCount > 2) {
+  if (textChars > MAX_TEXT_CHARS || mediaPartCount > 2) {
     throw new HttpsError("invalid-argument", "AI request is too large.");
   }
 }

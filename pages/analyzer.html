@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ViewCast - Video Analyzer</title>
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="../css/style.css?v=10">
+    <link rel="stylesheet" href="../css/style.css?v=11">
   </head>
   <body>
     <div class="app">
@@ -27,12 +27,6 @@
                 <input class="analyzer-url-input" id="videoUrl" type="text" inputmode="url" placeholder="Paste video URL" aria-label="Video URL" />
               </label>
               <button class="primary-button" type="submit">Analyze</button>
-              <span class="analyzer-source-divider">or</span>
-              <label class="secondary-button video-upload-button" for="videoFile" title="Upload the source file to inspect what happens at retention dips">
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
-                Upload video
-              </label>
-              <input id="videoFile" class="visually-hidden" type="file" accept="video/*" aria-label="Upload a video to analyze" />
               <span class="analysis-status" id="videoAnalysisStatus" role="status" aria-live="polite" hidden></span>
             </form>
           </div>
@@ -112,6 +106,11 @@
             </div>
             <div class="chart-wrap">
               <canvas id="retentionChart" data-empty-label="Retention data is not available for this video"></canvas>
+              <div class="retention-empty-state" id="retentionEmptyState" hidden>
+                <strong>No retention curve was returned</strong>
+                <span>YouTube did not provide audience-retention segments for this upload.</span>
+                <small>The selected upload is already loaded. Retention is measured private Analytics data, so it cannot be reconstructed from the public video.</small>
+              </div>
             </div>
           </article>
 
@@ -160,6 +159,6 @@
     <script src="../components/plan-modal.js?v=3"></script>
     <script src="../js/script.js?v=10"></script>
     <script type="module" src="../js/dashboard-data.js?v=12"></script>
-    <script type="module" src="../js/analyzer.js?v=25"></script>
+    <script type="module" src="../js/analyzer.js?v=28"></script>
   </body>
 </html>

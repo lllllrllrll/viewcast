@@ -7,11 +7,7 @@ import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./fireb
 import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=8";
 import { addNotifications } from "./notifications.js";
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
-import {
-  fetchRetentionCurve,
-  fetchSearchTerms,
-  fetchVideoAnalytics
-} from "./analyzer-youtube-analytics.js?v=2";
+import {getPrivateVideoAnalytics} from "./analyzer-private-analytics.js?v=1";
 
 /* global drawLineChart */
 
@@ -267,7 +263,7 @@ function videoAnalysisStorageKey(videoId = "") {
 
 function videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms) {
   return JSON.stringify({
-    analysisVersion: 3,
+    analysisVersion: 4,
     id: video.id || "",
     views: video.statistics?.viewCount || "",
     likes: video.statistics?.likeCount || "",
@@ -556,11 +552,24 @@ function setMetric(index, value, trend = "") {
   if (trendEl) trendEl.textContent = trend || " ";
 }
 
-function drawActualRetention(points, video) {
+function drawActualRetention(points, video, retentionError = null) {
+  const emptyState = document.getElementById("retentionEmptyState");
+  const chart = document.getElementById("retentionChart");
   if (!points.length || typeof drawLineChart !== "function") {
     if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+    const emptyMessage = emptyState?.querySelector("span");
+    if (emptyMessage) {
+      emptyMessage.textContent = retentionError
+        ? `YouTube Analytics could not load retention: ${retentionError.message}`
+        : "YouTube returned no audience-retention segments for this upload.";
+    }
+    if (emptyState) emptyState.hidden = false;
+    if (chart) chart.setAttribute("aria-hidden", "true");
     return;
   }
+
+  if (emptyState) emptyState.hidden = true;
+  if (chart) chart.removeAttribute("aria-hidden");
 
   const totalSeconds = secondsFromIso(video?.contentDetails?.duration) || 0;
   const sampled = points.filter((_, index) => index % Math.max(1, Math.floor(points.length / 12)) === 0).slice(0, 12);
@@ -772,7 +781,7 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
 
   const prompt = [
     "You are ViewCast's YouTube video analyst. Return compact JSON only.",
-    "Use only supplied selected-video data, private analytics, retention samples, search terms, and compact channel comparison.",
+    "Inspect the attached public YouTube video directly, then combine what you observe with the supplied private analytics, retention samples, search terms, and compact channel comparison.",
     "Metric labels must be short: Above avg, Needs lift, Strong, Watch drop, or Unavailable.",
     "Actively analyze retentionDips when present. Rank them by dropPoints, consider fromPercent, toPercent, windowSeconds, video phase, and nearby retention samples.",
     "For every major dip, state what the analytics prove, then label the cause as a likely hypothesis—not a certainty—because analytics alone cannot reveal the exact on-screen cause.",
@@ -792,7 +801,15 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
       contents: [
         {
           role: "user",
-          parts: [{ text: prompt }]
+          parts: [
+            {
+              fileData: {
+                fileUri: `https://www.youtube.com/watch?v=${video.id}`,
+                mimeType: "video/*"
+              }
+            },
+            { text: prompt }
+          ]
         }
       ],
       generationConfig: {
@@ -898,7 +915,11 @@ function renderTimeline(points, durationSeconds = 0, recommendedEdits = []) {
         ` : ""}
       </div>
     </article>
-  `).join("") : '<div class="video-library-empty">No timestamped improvement points were available for this analysis.</div>';
+  `).join("") : `
+    <div class="video-library-empty analyzer-empty-action">
+      <strong>No timestamped suggestions yet</strong>
+      <span>Gemini could not return timestamped suggestions for this YouTube upload. Press Analyze to retry.</span>
+    </div>`;
 
   const showPoint = (index, {pin = false} = {}) => {
     const point = normalized[index];
@@ -987,6 +1008,9 @@ function clearAnalyzerResults() {
     item.querySelector("time").textContent = " ";
   });
   if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+  const retentionEmptyState = document.getElementById("retentionEmptyState");
+  if (retentionEmptyState) retentionEmptyState.hidden = true;
+  document.getElementById("retentionChart")?.removeAttribute("aria-hidden");
   renderTimeline([], 0);
 }
 
@@ -1011,23 +1035,20 @@ async function loadVideoDetailsWithRetry(videoId, accessToken) {
   }
 }
 
-async function loadPrivateAnalytics(videoId, accessToken) {
-  const [analyticsResult, retentionResult, searchTermsResult] = await Promise.allSettled([
-    fetchVideoAnalytics(videoId, accessToken),
-    fetchRetentionCurve(videoId, accessToken),
-    fetchSearchTerms(videoId, accessToken)
-  ]);
-  const errors = [analyticsResult, retentionResult, searchTermsResult]
-    .filter((result) => result.status === "rejected")
-    .map((result) => result.reason);
-
-  return {
-    analytics: analyticsResult.status === "fulfilled" ? analyticsResult.value : null,
-    retentionPoints: retentionResult.status === "fulfilled" ? retentionResult.value : [],
-    searchTerms: searchTermsResult.status === "fulfilled" ? searchTermsResult.value : [],
-    needsRefresh: errors.some((error) => error?.status === 401 || error?.status === 403),
-    errors
-  };
+async function loadPrivateAnalytics(videoId) {
+  try {
+    const data = await getPrivateVideoAnalytics(videoId);
+    return {...data, retentionError: null, needsRefresh: false, errors: []};
+  } catch (error) {
+    return {
+      analytics: null,
+      retentionPoints: [],
+      searchTerms: [],
+      retentionError: error,
+      needsRefresh: false,
+      errors: [error]
+    };
+  }
 }
 
 async function loadVideoAnalysisWithRetry(videoId) {
@@ -1038,14 +1059,8 @@ async function loadVideoAnalysisWithRetry(videoId) {
   try {
     accessToken = await getAccessToken();
     video = await loadVideoDetailsWithRetry(videoId, accessToken);
-    privateData = await loadPrivateAnalytics(videoId, accessToken);
+    privateData = await loadPrivateAnalytics(videoId);
 
-    if (privateData.needsRefresh && !privateData.analytics && !privateData.retentionPoints.length) {
-      clearCachedAccessToken();
-      setStatus("YouTube Analytics access needs to be refreshed. Continuing with public video data if renewal fails...");
-      accessToken = await requestAccessToken();
-      privateData = await loadPrivateAnalytics(videoId, accessToken);
-    }
   } catch (error) {
     if (!video) throw error;
     // The upload library already contains enough public metadata for Gemini and
@@ -1067,7 +1082,8 @@ async function loadVideoAnalysisWithRetry(videoId) {
     privateData.retentionPoints,
     privateData.searchTerms,
     accessToken,
-    privateData.errors
+    privateData.errors,
+    privateData.retentionError
   ];
 }
 
@@ -1092,7 +1108,7 @@ async function analyzeVideoById(videoId) {
     if (videoUrlInput) videoUrlInput.value = "https://www.youtube.com/watch?v=" + videoId;
     sessionStorage.removeItem(pendingAnalyzerVideoKey);
     updateLibrarySelection(videoId);
-    const [video, analytics, retentionPoints, searchTerms, accessToken, analyticsErrors] = await loadVideoAnalysisWithRetry(videoId);
+    const [video, analytics, retentionPoints, searchTerms, accessToken, , retentionError] = await loadVideoAnalysisWithRetry(videoId);
     if (requestId !== analysisRequestId) return;
     latestLinkedVideoContext = {
       video,
@@ -1100,24 +1116,6 @@ async function analyzeVideoById(videoId) {
       retentionPoints,
       searchTerms
     };
-
-    const hasOwnerAnalytics = Boolean(
-      analytics || retentionPoints.length || searchTerms.length
-    );
-    if (!hasOwnerAnalytics) {
-      updateLibrarySelection(video.id);
-      updateMetrics(video, null);
-      updateSearchTerms([]);
-      renderTimeline([], secondsFromIso(video.contentDetails?.duration) || 0);
-      setAnalyzerLoading(false);
-      setAnalyzerResultsVisible(true);
-      const analyticsMessage = analyticsErrors.length
-        ? "Relink the YouTube channel to restore retention, average view duration, and search-term access."
-        : "YouTube did not return retention, average view duration, or search-term data for this upload.";
-      setStatus(`Public video stats loaded. ${analyticsMessage}`);
-      setLibraryStatus(`Loaded the available YouTube data for ${video.snippet?.title || "the selected video"}.`);
-      return;
-    }
 
     const cachedGeminiAnalysis = readCachedGeminiVideoAnalysis(video, analytics, retentionPoints, searchTerms);
     let geminiAnalysis = cachedGeminiAnalysis;
@@ -1160,11 +1158,13 @@ async function analyzeVideoById(videoId) {
     );
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
-    requestAnimationFrame(() => drawActualRetention(retentionPoints, video));
+    requestAnimationFrame(() => drawActualRetention(retentionPoints, video, retentionError));
     const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
     const retentionStatus = retentionPoints.length
       ? ` ${retentionPoints.length} YouTube retention segments loaded.`
-      : " YouTube returned no audience-retention segments for this upload.";
+      : retentionError
+        ? ` Retention request failed: ${retentionError.message}`
+        : " YouTube returned no audience-retention segments for this upload.";
     setStatus(geminiAnalysis
       ? "Gemini video analysis generated from YouTube data" + period + "." + retentionStatus
       : (analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now."));
@@ -1303,6 +1303,9 @@ async function analyzeUploadedVideo(file) {
       setLibraryStatus(`Analyzed the source file for ${linkedContext.video.snippet?.title || file.name}.`);
     } else {
       if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+      const retentionEmptyState = document.getElementById("retentionEmptyState");
+      if (retentionEmptyState) retentionEmptyState.hidden = false;
+      document.getElementById("retentionChart")?.setAttribute("aria-hidden", "true");
       setStatus(`Analysis complete for ${file.name}. Uploaded files do not include YouTube performance metrics.`);
       setLibraryStatus(`Analyzed uploaded file: ${file.name}.`);
     }
