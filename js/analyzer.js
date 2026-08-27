@@ -1030,15 +1030,30 @@ async function loadPrivateAnalytics(videoId, accessToken) {
 }
 
 async function loadVideoAnalysisWithRetry(videoId) {
-  let accessToken = await getAccessToken();
-  const video = await loadVideoDetailsWithRetry(videoId, accessToken);
-  let privateData = await loadPrivateAnalytics(videoId, accessToken);
+  let accessToken = "";
+  let video = channelVideos.find((item) => item.id === videoId) || null;
+  let privateData = {analytics: null, retentionPoints: [], searchTerms: [], errors: []};
 
-  if (privateData.needsRefresh && !privateData.analytics && !privateData.retentionPoints.length) {
-    clearCachedAccessToken();
-    setStatus("YouTube Analytics access needs to be refreshed. Please approve once to continue.");
-    accessToken = await requestAccessToken();
+  try {
+    accessToken = await getAccessToken();
+    video = await loadVideoDetailsWithRetry(videoId, accessToken);
     privateData = await loadPrivateAnalytics(videoId, accessToken);
+
+    if (privateData.needsRefresh && !privateData.analytics && !privateData.retentionPoints.length) {
+      clearCachedAccessToken();
+      setStatus("YouTube Analytics access needs to be refreshed. Continuing with public video data if renewal fails...");
+      accessToken = await requestAccessToken();
+      privateData = await loadPrivateAnalytics(videoId, accessToken);
+    }
+  } catch (error) {
+    if (!video) throw error;
+    // The upload library already contains enough public metadata for Gemini and
+    // the public metric cards. Private analytics should enhance analysis, not
+    // make the Analyze button fail or flash closed.
+    console.warn("Private YouTube data was unavailable; using cached public video data.", error);
+    accessToken = "";
+    privateData = {analytics: null, retentionPoints: [], searchTerms: [], errors: [error]};
+    setStatus("Private analytics are unavailable. Analyzing the loaded public video data...");
   }
 
   privateData.errors.forEach((error) => {
@@ -1141,9 +1156,12 @@ async function analyzeVideoById(videoId) {
   } catch (error) {
     if (requestId !== analysisRequestId) return;
     setAnalyzerLoading(false);
-    setAnalyzerResultsVisible(false);
+    setAnalyzerResultsVisible(true);
     console.error("Could not analyze video.", error);
-    setStatus(error.message || "Could not analyze this video.");
+    updateMetrics(channelVideos.find((video) => video.id === videoId) || {statistics: {}}, null);
+    updateSearchTerms([]);
+    renderTimeline([], 0);
+    setStatus(error.message || "Could not analyze this video. Try refreshing the linked uploads.");
   } finally {
     if (requestId === analysisRequestId) {
       setAnalyzerLoading(false);
