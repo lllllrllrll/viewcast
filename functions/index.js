@@ -23,7 +23,7 @@ const ALLOWED_MODELS = [
 ];
 const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite";
 const MAX_TEXT_CHARS = 30000;
-const MAX_INLINE_DATA_CHARS = 7 * 1024 * 1024;
+const MAX_INLINE_DATA_CHARS = 21 * 1024 * 1024;
 const MAX_SYSTEM_CHARS = 6000;
 const MAX_OUTPUT_TOKENS = 1200;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -394,7 +394,7 @@ exports.deleteAccount = onCall(
 );
 
 /**
- * Validates Gemini message and image payloads.
+ * Validates Gemini message and supported media payloads.
  * @param {Array<object>} contents Gemini request messages.
  * @return {void}
  */
@@ -433,10 +433,11 @@ function validateContents(contents) {
       }
       const inlineData = part.inlineData;
       if (!inlineData || typeof inlineData.data !== "string" ||
-          !["image/jpeg", "image/png", "image/webp"]
+          !["image/jpeg", "image/png", "image/webp", "video/mp4",
+            "video/webm", "video/quicktime", "video/x-m4v"]
               .includes(inlineData.mimeType) ||
           inlineData.data.length > MAX_INLINE_DATA_CHARS) {
-        throw new HttpsError("invalid-argument", "Invalid inline image data.");
+        throw new HttpsError("invalid-argument", "Invalid inline media data.");
       }
       inlineDataCount += 1;
     });

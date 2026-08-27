@@ -11,7 +11,7 @@ import {
   fetchRetentionCurve,
   fetchSearchTerms,
   fetchVideoAnalytics
-} from "./analyzer-youtube-analytics.js?v=1";
+} from "./analyzer-youtube-analytics.js?v=2";
 
 /* global drawLineChart */
 
@@ -42,6 +42,7 @@ let auth = null;
 let channelVideos = [];
 let selectedVideoId = "";
 let analysisRequestId = 0;
+let latestLinkedVideoContext = null;
 let initialVideoId = "";
 let timelineDismissHandler = null;
 let googleIdentityScriptPromise = null;
@@ -1093,6 +1094,12 @@ async function analyzeVideoById(videoId) {
     updateLibrarySelection(videoId);
     const [video, analytics, retentionPoints, searchTerms, accessToken, analyticsErrors] = await loadVideoAnalysisWithRetry(videoId);
     if (requestId !== analysisRequestId) return;
+    latestLinkedVideoContext = {
+      video,
+      analytics,
+      retentionPoints,
+      searchTerms
+    };
 
     const hasOwnerAnalytics = Boolean(
       analytics || retentionPoints.length || searchTerms.length
@@ -1155,8 +1162,11 @@ async function analyzeVideoById(videoId) {
     setAnalyzerResultsVisible(true);
     requestAnimationFrame(() => drawActualRetention(retentionPoints, video));
     const period = analytics?.periodLabel ? " (" + analytics.periodLabel + ")" : "";
+    const retentionStatus = retentionPoints.length
+      ? ` ${retentionPoints.length} YouTube retention segments loaded.`
+      : " YouTube returned no audience-retention segments for this upload.";
     setStatus(geminiAnalysis
-      ? "Gemini video analysis generated from YouTube data" + period + "."
+      ? "Gemini video analysis generated from YouTube data" + period + "." + retentionStatus
       : (analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now."));
     setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
     const notificationPoints = (geminiAnalysis?.timelineInterestPoints || [])
@@ -1237,20 +1247,31 @@ async function analyzeUploadedVideo(file) {
     return;
   }
   const requestId = ++analysisRequestId;
+  const linkedContext = latestLinkedVideoContext?.video?.id === selectedVideoId
+    ? latestLinkedVideoContext
+    : null;
   try {
     setBusy(true);
     setAnalyzerResultsVisible(false);
     setAnalyzerLoading(true);
     setStatus(`Uploading and analyzing ${file.name}...`);
-    updateLibrarySelection("");
+    if (!linkedContext) updateLibrarySelection("");
     const [data, durationSeconds] = await Promise.all([readFileAsBase64(file), readVideoDuration(file)]);
+    const measuredDips = linkedContext
+      ? retentionDipContext(linkedContext.retentionPoints, linkedContext.video, 6)
+      : [];
     const prompt = [
       "Analyze the attached video as an expert video editor and audience-retention strategist.",
       "Inspect its visuals, audible content, pacing, hook, clarity, transitions, dead space, and opportunities for stronger engagement.",
-      "Return JSON only. Give 3-6 timestamped improvement points tied to moments you can actually observe.",
+      measuredDips.length
+        ? "The supplied retention dips are measured YouTube Analytics evidence. Inspect the video at and immediately before every dip. Explain the visible or audible cause you observe, then recommend a concrete edit that addresses that exact moment."
+        : "No measured retention dips were available. Base every suggestion only on a moment you can directly observe in the attached video.",
+      "Return JSON only. Give 3-6 timestamped improvement points tied to moments you can actually observe. Do not guess what happens at a timestamp.",
       `Filename: ${file.name}. Duration: ${durationFromSeconds(durationSeconds)}.`,
+      linkedContext ? `Selected YouTube video: ${linkedContext.video.snippet?.title || "Untitled"}.` : "",
+      measuredDips.length ? `Measured retention dips: ${JSON.stringify(measuredDips)}` : "",
       `Shape: {"recommendedEdits":[{"segment":"","issue":"","recommendation":"","impact":""}],"timelineInterestPoints":[{"timestamp":"0:00","title":"","suggestion":"","severity":"high|medium|low"}]}`
-    ].join("\n");
+    ].filter(Boolean).join("\n");
     const payload = await requestGeminiContent({
       contents: [{role: "user", parts: [{text: prompt}, {inlineData: {mimeType: file.type, data}}]}],
       generationConfig: {responseMimeType: "application/json", maxOutputTokens: 520}
@@ -1260,9 +1281,13 @@ async function analyzeUploadedVideo(file) {
     const analysis = normalizeGeminiVideoAnalysis(safeJsonParse(responseText));
     if (!analysis) throw new Error("The video analysis returned an invalid response. Please try again.");
     const localVideo = {statistics: {}, contentDetails: {duration: ""}, snippet: {title: file.name}};
-    updateMetrics(localVideo, null, {metricLabels: {views: "Uploaded file", likes: "Unavailable", comments: "Unavailable", averageViewDuration: "File length"}});
-    setMetric(3, durationFromSeconds(durationSeconds), "File length");
-    updateSearchTerms([]);
+    updateMetrics(
+      linkedContext?.video || localVideo,
+      linkedContext?.analytics || null,
+      linkedContext ? analysis : {metricLabels: {views: "Uploaded file", likes: "Unavailable", comments: "Unavailable", averageViewDuration: "File length"}}
+    );
+    if (!linkedContext) setMetric(3, durationFromSeconds(durationSeconds), "File length");
+    updateSearchTerms(linkedContext?.searchTerms || []);
     renderTimeline(
       analysis.timelineInterestPoints,
       durationSeconds,
@@ -1270,9 +1295,17 @@ async function analyzeUploadedVideo(file) {
     );
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
-    if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
-    setStatus(`Analysis complete for ${file.name}. Uploaded files do not include YouTube performance metrics.`);
-    setLibraryStatus(`Analyzed uploaded file: ${file.name}.`);
+    if (linkedContext) {
+      requestAnimationFrame(() => drawActualRetention(linkedContext.retentionPoints, linkedContext.video));
+      setStatus(measuredDips.length
+        ? `Video inspection complete. Gemini analyzed the source video against ${measuredDips.length} measured retention dip${measuredDips.length === 1 ? "" : "s"}.`
+        : "Video inspection complete. YouTube did not provide measured retention dips, so suggestions use directly observed video moments only.");
+      setLibraryStatus(`Analyzed the source file for ${linkedContext.video.snippet?.title || file.name}.`);
+    } else {
+      if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
+      setStatus(`Analysis complete for ${file.name}. Uploaded files do not include YouTube performance metrics.`);
+      setLibraryStatus(`Analyzed uploaded file: ${file.name}.`);
+    }
     addNotifications((analysis.timelineInterestPoints || []).slice(0, 2).map((point, index) => ({
       id: `upload:${file.name}:${file.size}:${index}:${point.timestamp}`,
       title: `${point.timestamp} · ${point.title}`,
