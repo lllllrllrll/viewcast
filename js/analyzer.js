@@ -8,6 +8,19 @@ import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=8"
 import { addNotifications } from "./notifications.js";
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
 import {getPrivateVideoAnalytics} from "./analyzer-private-analytics.js?v=1";
+import {
+  bestThumbnail,
+  compactNumber,
+  dateLabel,
+  durationFromIso,
+  durationFromSeconds,
+  escapeHtml,
+  numberValue,
+  secondsFromIso,
+  shortText,
+  wholeNumber,
+  youtubeCategoryName
+} from "./insights-format.js?v=1";
 
 /* global drawLineChart */
 
@@ -61,133 +74,16 @@ function setBusy(isBusy, label = "Analyze") {
   submitButton.textContent = isBusy ? "Analyzing..." : label;
 }
 
-function numberValue(value) {
-  if (value === "" || value === null || value === undefined) return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-function compactNumber(value) {
-  const number = numberValue(value);
-  if (number === null) return "";
-  return new Intl.NumberFormat("en", {
-    notation: "compact",
-    maximumFractionDigits: number >= 1000 ? 1 : 0
-  }).format(number);
-}
-
-function wholeNumber(value) {
-  const number = numberValue(value);
-  if (number === null) return "";
-  return new Intl.NumberFormat("en").format(Math.round(number));
-}
-
 function percent(value) {
   const number = numberValue(value);
   if (number === null) return "";
   return `${Math.round(number * 10) / 10}%`;
 }
 
-function durationFromSeconds(value) {
-  const number = numberValue(value);
-  if (number === null) return "";
-  const totalSeconds = Math.max(0, Math.round(number));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
-}
-
-function secondsFromIso(value = "") {
-  const match = value.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-  if (!match) return null;
-  const hours = Number(match[1] || 0);
-  const minutes = Number(match[2] || 0);
-  const seconds = Number(match[3] || 0);
-  return hours * 3600 + minutes * 60 + seconds;
-}
-
-function durationFromIso(value = "") {
-  const seconds = secondsFromIso(value);
-  return seconds === null ? "" : durationFromSeconds(seconds);
-}
-
 function secondsFromTimestamp(value = "") {
   const parts = String(value).trim().split(":").map(Number);
   if (!parts.length || parts.some((part) => !Number.isFinite(part))) return 0;
   return parts.reduce((total, part) => total * 60 + part, 0);
-}
-
-function truncate(value = "", maxLength = 180) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return normalized.slice(0, maxLength - 1).trim() + "...";
-}
-
-function shortText(value = "", max = 320) {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, max);
-}
-
-const youtubeCategoryNames = {
-  "1": "Film & Animation",
-  "2": "Autos & Vehicles",
-  "10": "Music",
-  "15": "Pets & Animals",
-  "17": "Sports",
-  "19": "Travel & Events",
-  "20": "Gaming",
-  "22": "People & Blogs",
-  "23": "Comedy",
-  "24": "Entertainment",
-  "25": "News & Politics",
-  "26": "Howto & Style",
-  "27": "Education",
-  "28": "Science & Technology"
-};
-
-function youtubeCategoryName(categoryId) {
-  return youtubeCategoryNames[String(categoryId || "")] || "";
-}
-
-function dateLabel(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric"
-  }).format(date);
-}
-
-function apiDate(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function daysAgo(days) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return apiDate(date);
-}
-
-function bestThumbnail(thumbnails = {}) {
-  return thumbnails.maxres?.url
-    || thumbnails.standard?.url
-    || thumbnails.high?.url
-    || thumbnails.medium?.url
-    || thumbnails.default?.url
-    || "";
-}
-
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function activeChannelId() {

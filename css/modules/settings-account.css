@@ -1,0 +1,219 @@
+.settings-stack {
+  display: grid;
+  gap: 20px;
+  padding: 10px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.settings-label-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-label-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.settings-select {
+  min-height: 38px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.settings-status {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #a9ddc8;
+  border-radius: 8px;
+  color: #176448;
+  background: #edf9f3;
+  font-size: 13px;
+}
+
+.account-danger-zone {
+  border-color: rgba(208, 77, 103, 0.3);
+}
+
+.account-danger-zone .panel-head {
+  align-items: center;
+}
+
+.delete-account-modal-card {
+  width: min(520px, 100%);
+}
+
+.delete-account-form {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+
+.delete-account-form > p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.delete-account-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.delete-account-form input {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.delete-account-status {
+  min-height: 20px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.delete-account-status[data-type="success"] { color: var(--green); }
+.delete-account-status[data-type="error"] { color: var(--rose); }
+
+.delete-account-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+@media (max-width: 680px) {
+  .account-danger-zone .panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .delete-account-actions {
+    flex-direction: column-reverse;
+  }
+}
+
+.account-credential-list {
+  display: grid;
+  gap: 14px;
+}
+
+.account-credential-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.account-credential-copy span,
+.account-credential-copy strong {
+  display: block;
+}
+
+.account-credential-copy span {
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.account-credential-copy strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.account-credential-copy strong[data-verified="true"] {
+  color: var(--green);
+}
+
+.account-credential-copy strong[data-verified="false"] {
+  color: var(--muted);
+}
+
+.account-credential-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.account-credential-form[hidden],
+.current-password-field[hidden] {
+  display: none !important;
+}
+
+.account-credential-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.account-credential-form input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.account-credential-form input:focus {
+  border-color: var(--teal);
+  outline: 2px solid rgba(15, 139, 141, 0.12);
+}
+
+.account-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 9px;
+}
+
+.account-cancel-button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.account-credential-status {
+  min-height: 20px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.account-credential-status[data-type="success"] { color: var(--green); }
+.account-credential-status[data-type="error"] { color: var(--rose); }
+
+@media (max-width: 680px) {
+  .account-credential-row { align-items: flex-start; flex-direction: column; }
+  .account-credential-form { grid-template-columns: 1fr; }
