@@ -12,7 +12,10 @@ import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
 import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
 import {fetchStudioReport} from "./services/youtube-studio-analytics.js?v=2";
 import {fetchYouTubeJson} from "./insights-youtube.js?v=5";
-import {readCachedYouTubeAccessToken} from "./services/youtube-session.js?v=1";
+import {
+  clearCachedYouTubeAccessToken,
+  readCachedYouTubeAccessToken
+} from "./services/youtube-session.js?v=1";
 import {
   compactNumber, durationFromSeconds, escapeHtml, median, numberValue,
   secondsFromIso, wholeNumber
@@ -218,6 +221,12 @@ async function fetchLiveOverview(accessToken, days = 30) {
     fetchAnalyticsRows(accessToken, { metrics: "views", dimensions: "insightTrafficSourceDetail", filters: "insightTrafficSourceType==RELATED_VIDEO", sort: "-views", maxResults: 5, days: days }),
     fetchAnalyticsRows(accessToken, {metrics: "views", startDate: "2005-02-14"})
   ]);
+
+  // Upload metadata is required by the video tables and first-day ranking. Do
+  // not turn an authorization/API failure into a successfully cached empty
+  // channel. The caller can renew the backend token and retry once.
+  if (videosResult.status === "rejected") throw videosResult.reason;
+  if (dailyResult.status === "rejected") throw dailyResult.reason;
   return {
     daily: dailyResult.status === "fulfilled" ? dailyResult.value : [],
     traffic: trafficResult.status === "fulfilled" ? trafficResult.value : [],
@@ -236,6 +245,21 @@ async function fetchLiveOverview(accessToken, days = 30) {
       : null,
     latestVideoScannedAt: new Date().toISOString()
   };
+}
+
+async function renewedStudioToken(user, channelId) {
+  clearCachedYouTubeAccessToken();
+  return getRenewedYouTubeAccessToken(user.uid, channelId);
+}
+
+async function fetchOverviewWithRenewal(user, channelId, accessToken, days) {
+  try {
+    return await fetchLiveOverview(accessToken, days);
+  } catch (error) {
+    if (error?.status !== 401 && error?.status !== 403) throw error;
+    const renewedToken = await renewedStudioToken(user, channelId);
+    return fetchLiveOverview(renewedToken, days);
+  }
 }
 
 function insightItems(connection) {
@@ -507,7 +531,13 @@ function renderVideoTable(overviewData) {
     .filter((video) => metrics.has(String(video.id)))
     .sort((a, b) => metrics.get(String(b.id)).views - metrics.get(String(a.id)).views)
     .slice(0, 4);
-  if (!videos.length) { tbody.innerHTML = `<tr><td class="table-empty-state" colspan="7">Connect YouTube Analytics to compare video performance.</td></tr>`; return; }
+  if (!videos.length) {
+    const message = overviewData
+      ? "No uploaded videos were returned for this channel."
+      : "Waiting for private YouTube Studio analytics to sync.";
+    tbody.innerHTML = `<tr><td class="table-empty-state" colspan="7">${message}</td></tr>`;
+    return;
+  }
   tbody.innerHTML = videos.map((video) => {
     const item = metrics.get(String(video.id));
     const engagement = item.likes + item.comments + item.shares;
@@ -794,7 +824,8 @@ async function loadYouTubeData(user, db, days = 30) {
   const shouldLoadChannelHistory = Boolean(document.getElementById("subsChart"));
   if (shouldLoadChannelHistory) days = Math.max(days, 180);
   const activeConnection = readActiveConnection();
-  applyYouTubeData(activeConnection, readCachedOverview(user, activeConnection?.channel?.id), user);
+  const cachedOverview = readCachedOverview(user, activeConnection?.channel?.id);
+  applyYouTubeData(activeConnection, cachedOverview, user);
 
   const snapshot = await getDoc(doc(db, "users", user.uid));
   const data = snapshot.exists() ? snapshot.data() : {};
@@ -810,15 +841,31 @@ async function loadYouTubeData(user, db, days = 30) {
     user.uid,
     currentActive.channel.id
   ).catch(() => "");
-  if (!accessToken) return;
+  if (!accessToken) {
+    if (!cachedOverview) setIntelligence("freshness", "Studio authorization unavailable");
+    return;
+  }
 
   try {
-    const liveOverview = await fetchLiveOverview(accessToken, days);
+    const liveOverview = await fetchOverviewWithRenewal(
+      user,
+      currentActive.channel.id,
+      accessToken,
+      days
+    );
     saveCachedOverview(user, currentActive.channel.id, liveOverview);
     if (days !== 30 || selectedViewsDays === 30) {
       applyYouTubeData(currentActive, liveOverview, user);
     }
-  } catch (error) { console.warn(error); }
+  } catch (error) {
+    console.warn("Could not refresh the private YouTube Studio dashboard.", error);
+    if (!cachedOverview) {
+      setIntelligence("freshness", "Studio sync failed");
+      document.querySelectorAll("[data-youtube-summary]").forEach((element) => {
+        element.textContent = error?.message || "Private YouTube Studio analytics could not be loaded.";
+      });
+    }
+  }
 }
 
 async function loadViewsTrendRange(user, days) {
@@ -829,17 +876,25 @@ async function loadViewsTrendRange(user, days) {
     renderViewsTrend(null);
     return;
   }
-  const accessToken = readCachedYouTubeAccessToken(user.uid, connection.channel.id) || await getRenewedYouTubeAccessToken(
+  let accessToken = readCachedYouTubeAccessToken(user.uid, connection.channel.id) || await getRenewedYouTubeAccessToken(
     user.uid,
     connection.channel.id
   ).catch(() => "");
   if (!accessToken || requestId !== viewsRangeRequestId) return;
-  const rows = await fetchAnalyticsRows(accessToken, {
+  const reportOptions = {
     metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained",
     dimensions: "day",
     sort: "day",
     days
-  });
+  };
+  let rows;
+  try {
+    rows = await fetchAnalyticsRows(accessToken, reportOptions);
+  } catch (error) {
+    if (error?.status !== 401 && error?.status !== 403) throw error;
+    accessToken = await renewedStudioToken(user, connection.channel.id);
+    rows = await fetchAnalyticsRows(accessToken, reportOptions);
+  }
   if (requestId !== viewsRangeRequestId) return;
   renderViewsTrend({daily: rows});
 }

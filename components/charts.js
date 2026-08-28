@@ -21,7 +21,9 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
   if (width < 2 || height < 2) return;
   ctx.clearRect(0, 0, width, height);
 
-  if (!actual.length || !forecast.length || !labels.length) {
+  const hasActual = actual.some(Number.isFinite);
+  const hasForecast = forecast.some(Number.isFinite);
+  if ((!hasActual && !hasForecast) || !labels.length) {
     ctx.strokeStyle = colors.line;
     ctx.lineWidth = 1;
     for (let i = 0; i < 5; i += 1) {
@@ -93,9 +95,11 @@ function drawLineChart(canvasId, actual, forecast, labels, options = {}) {
 
     // Calculate point positions for tooltip
     const actualVal = actual[index];
-    const forecastVal = forecast[index];
+    const forecastVal = Number.isFinite(forecast[index]) ? forecast[index] : null;
     const yActual = pad.top + (1 - (actualVal - min) / (max - min)) * (height - pad.top - pad.bottom);
-    const yForecast = pad.top + (1 - (forecastVal - min) / (max - min)) * (height - pad.top - pad.bottom);
+    const yForecast = forecastVal === null
+      ? null
+      : pad.top + (1 - (forecastVal - min) / (max - min)) * (height - pad.top - pad.bottom);
 
     points.push({ x, yActual, yForecast, actualVal, forecastVal, label });
   });
@@ -273,4 +277,3 @@ function redrawThemedCharts() {
     drawLineChart(canvas.id, actual, forecast, labels, options);
   });
 }
-
