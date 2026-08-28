@@ -16,6 +16,8 @@ import {
   exchangeYouTubeCode,
   revokeStoredYouTubeAuthorization
 } from "./youtube-auth.js?v=3";
+import {fetchStudioReport} from "./services/youtube-studio-analytics.js?v=2";
+import {fetchYouTubeJson} from "./insights-youtube.js?v=5";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -333,53 +335,88 @@ async function requestYouTubeAccessToken() {
   });
 }
 
-async function fetchJson(url, accessToken) {
-  const response = await fetch(url, { headers: {Authorization: `Bearer ${accessToken}`} });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error?.message || "YouTube API request failed.");
-  return payload;
-}
-
 async function fetchChannel(accessToken) {
   const url = new URL("https://www.googleapis.com/youtube/v3/channels");
-  url.searchParams.set("part", "snippet,statistics");
+  url.searchParams.set(
+    "part",
+    "snippet,statistics,brandingSettings,status,contentDetails"
+  );
   url.searchParams.set("mine", "true");
-  const payload = await fetchJson(url, accessToken);
+  const payload = await fetchYouTubeJson(url, accessToken);
   const channel = payload.items?.[0];
   if (!channel) throw new Error("No YouTube channel found.");
   return {
-    id: channel.id,
-    title: channel.snippet?.title || "",
-    url: `https://www.youtube.com/channel/${channel.id}`,
-    thumbnail: channel.snippet?.thumbnails?.default?.url || "",
-    subscriberCount: channel.statistics?.subscriberCount || "",
-    viewCount: channel.statistics?.viewCount || "",
-    videoCount: channel.statistics?.videoCount || ""
+    channel: {
+      id: channel.id,
+      title: channel.snippet?.title || "",
+      url: `https://www.youtube.com/channel/${channel.id}`,
+      thumbnail: channel.snippet?.thumbnails?.default?.url || "",
+      subscriberCount: channel.statistics?.subscriberCount || "",
+      viewCount: channel.statistics?.viewCount || "",
+      videoCount: channel.statistics?.videoCount || ""
+    },
+    ownerData: {
+      customUrl: String(channel.snippet?.customUrl || "").slice(0, 200),
+      country: String(channel.snippet?.country || "").slice(0, 8),
+      description: String(channel.snippet?.description || "").slice(0, 2000),
+      keywords: String(channel.brandingSettings?.channel?.keywords || "").slice(0, 1000),
+      privacyStatus: String(channel.status?.privacyStatus || "").slice(0, 32),
+      longUploadsStatus: String(channel.status?.longUploadsStatus || "").slice(0, 32),
+      isLinked: Boolean(channel.status?.isLinked),
+      madeForKids: Boolean(channel.status?.madeForKids),
+      selfDeclaredMadeForKids: Boolean(channel.status?.selfDeclaredMadeForKids),
+      uploadsPlaylistId: String(
+        channel.contentDetails?.relatedPlaylists?.uploads || ""
+      ).slice(0, 128),
+      analyticsAccess: true,
+      monetaryAnalyticsAccess: false
+    }
   };
 }
 
 async function fetchAnalyticsSummary(accessToken) {
-  const endDate = new Date().toISOString().slice(0, 10);
-  const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
-  url.searchParams.set("ids", "channel==MINE");
-  url.searchParams.set("startDate", startDate);
-  url.searchParams.set("endDate", endDate);
-  url.searchParams.set("metrics", "views,estimatedMinutesWatched,averageViewDuration,subscribersGained");
+  const payload = await fetchStudioReport(accessToken, {
+    days: 28,
+    metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained"
+  }).catch((error) => {
+    throw new Error(
+      "Private YouTube Analytics access was not granted. Relink the channel and approve Analytics access. " +
+      error.message
+    );
+  });
+  const row = payload.rows?.[0] || [];
+  const optionalPayload = await fetchStudioReport(accessToken, {
+    days: 28,
+    metrics: "views,subscribersLost,likes,comments,shares,videosAddedToPlaylists,videosRemovedFromPlaylists"
+  }).catch((error) => {
+    console.warn("Optional channel engagement metrics are unavailable.", error);
+    return {rows: []};
+  });
+  const optional = optionalPayload.rows?.[0] || [];
+  const summary = {
+    views: Number(row[0]) || 0,
+    estimatedMinutesWatched: Number(row[1]) || 0,
+    averageViewDuration: Number(row[2]) || 0,
+    averageViewPercentage: Number(row[3]) || 0,
+    subscribersGained: Number(row[4]) || 0,
+    subscribersLost: Number(optional[1]) || 0,
+    likes: Number(optional[2]) || 0,
+    comments: Number(optional[3]) || 0,
+    shares: Number(optional[4]) || 0,
+    videosAddedToPlaylists: Number(optional[5]) || 0,
+    videosRemovedFromPlaylists: Number(optional[6]) || 0,
+    estimatedRevenue: null
+  };
   try {
-    const payload = await fetchJson(url, accessToken);
-    const [views, minutes, avd, subs] = payload.rows?.[0] || [];
-    const summary = { views: views || 0, estimatedMinutesWatched: minutes || 0, averageViewDuration: avd || 0, subscribersGained: subs || 0 };
-    const revenueUrl = new URL(url);
-    revenueUrl.searchParams.set("metrics", "estimatedRevenue");
-    try {
-      const revenuePayload = await fetchJson(revenueUrl, accessToken);
-      summary.estimatedRevenue = revenuePayload.rows?.[0]?.[0] ?? null;
-    } catch (error) {
-      console.warn("Revenue data is unavailable for this channel.", error);
-    }
-    return summary;
-  } catch (e) { return null; }
+    const revenuePayload = await fetchStudioReport(accessToken, {
+      days: 28,
+      metrics: "estimatedRevenue"
+    });
+    summary.estimatedRevenue = revenuePayload.rows?.[0]?.[0] ?? null;
+  } catch (error) {
+    console.warn("Revenue data is unavailable for this channel.", error);
+  }
+  return summary;
 }
 
 async function connectYouTube() {
@@ -392,7 +429,7 @@ async function connectYouTube() {
     setButton("Connecting...", true);
     const accessToken = await requestYouTubeAccessToken();
 
-    const channel = await fetchChannel(accessToken);
+    const {channel, ownerData} = await fetchChannel(accessToken);
     const connections = readAllConnections();
     const existingIdx = connections.findIndex(c => c.channel.id === channel.id);
     if (existingIdx === -1 && requiresChannelUpgrade(connections)) {
@@ -403,7 +440,13 @@ async function connectYouTube() {
 
     saveCachedAccessToken(accessToken, channel.id);
     const analytics = await fetchAnalyticsSummary(accessToken);
-    const newConn = { channel, analyticsSummary: analytics, connectedAt: Date.now() };
+    ownerData.monetaryAnalyticsAccess = analytics.estimatedRevenue !== null;
+    const newConn = {
+      channel,
+      ownerData,
+      analyticsSummary: analytics,
+      connectedAt: Date.now()
+    };
 
     if (existingIdx > -1) connections[existingIdx] = newConn;
     else {

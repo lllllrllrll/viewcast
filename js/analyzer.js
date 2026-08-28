@@ -3,15 +3,27 @@ import {
   getAuth,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./firebase-config.js";
+import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 import { isGeminiAvailable, requestGeminiContent } from "./gemini-client.js?v=8";
 import { addNotifications } from "../components/notifications.js";
+import {studioVideoCardsHtml, syncVideoLibrarySelection} from "../components/youtube-video-library.js?v=1";
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
-import {getPrivateVideoAnalytics} from "./analyzer-private-analytics.js?v=1";
+import {getPrivateVideoAnalytics} from "./analyzer-private-analytics.js?v=3";
+import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
+import {parseJsonObject} from "./services/json.js?v=1";
+import {readCachedYouTubeVideos, saveCachedYouTubeVideos} from "./services/youtube-video-cache.js?v=1";
 import {
-  bestThumbnail,
+  activeYouTubeChannelId,
+  clearCachedYouTubeAccessToken,
+  readCachedYouTubeAccessToken
+} from "./services/youtube-session.js?v=1";
+import {
+  fetchChannelProfile,
+  fetchChannelVideos,
+  fetchVideoById
+} from "./insights-youtube.js?v=5";
+import {
   compactNumber,
-  dateLabel,
   durationFromIso,
   durationFromSeconds,
   escapeHtml,
@@ -24,25 +36,14 @@ import {
 
 /* global drawLineChart */
 
-const scopes = [
-  "https://www.googleapis.com/auth/youtube.readonly",
-  "https://www.googleapis.com/auth/yt-analytics.readonly"
-];
-
 const form = document.getElementById("videoAnalysisForm");
 const videoUrlInput = document.getElementById("videoUrl");
 const submitButton = form?.querySelector('button[type="submit"]');
-const videoFileInput = document.getElementById("videoFile");
 const videoLibrary = document.getElementById("videoLibrary");
 const videoLibraryStatus = document.getElementById("videoLibraryStatus");
 const refreshVideosButton = document.getElementById("refreshVideos");
 const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
-const tokenStorageKey = "viewcastYouTubeAccessToken";
-const connectionStorageKey = "viewcastYouTubeConnection";
-const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
-const overviewStorageKeyPrefix = "viewcastOverviewData:";
-const videosCacheVersion = 2;
 const videoAnalysisStorageKeyPrefix = "viewcastGeminiVideoAnalysis:";
 const videoAnalysisCacheMaxAge = 24 * 60 * 60 * 1000;
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
@@ -54,8 +55,6 @@ let analysisRequestId = 0;
 let latestLinkedVideoContext = null;
 let initialVideoId = "";
 let timelineDismissHandler = null;
-let googleIdentityScriptPromise = null;
-const maxUploadBytes = 15 * 1024 * 1024;
 
 function setStatus(message) {
   let status = document.getElementById("videoAnalysisStatus");
@@ -86,64 +85,12 @@ function secondsFromTimestamp(value = "") {
   return parts.reduce((total, part) => total * 60 + part, 0);
 }
 
-function activeChannelId() {
-  try {
-    return JSON.parse(localStorage.getItem(connectionStorageKey) || "null")?.channel?.id || "";
-  } catch (error) {
-    return "";
-  }
-}
-
-function videosStorageKey() {
-  return currentUser ? `${videosStorageKeyPrefix}${currentUser.uid}:${activeChannelId() || "none"}` : "";
-}
-
 function readCachedVideos() {
-  const key = videosStorageKey();
-  if (!key) return [];
-  const cachedCollections = [];
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
-    // Insights and older builds stored the same shared cache without a version.
-    // Accept that shape instead of deleting an otherwise valid upload library.
-    if (saved?.version === undefined || saved.version === videosCacheVersion) {
-      if (Array.isArray(saved?.videos)) cachedCollections.push(saved.videos);
-    }
-  } catch (error) {
-    // Continue to the fallback caches below.
-  }
-
-  // Channel selection can change the exact suffix used by another page. Scan
-  // only this signed-in user's caches and prefer the active channel when found.
-  const userPrefix = `${videosStorageKeyPrefix}${currentUser.uid}:`;
-  const overviewPrefix = `${overviewStorageKeyPrefix}${currentUser.uid}:`;
-  for (let index = 0; index < sessionStorage.length; index += 1) {
-    const storageKey = sessionStorage.key(index) || "";
-    if (storageKey !== key && !storageKey.startsWith(userPrefix) && !storageKey.startsWith(overviewPrefix)) continue;
-    try {
-      const saved = JSON.parse(sessionStorage.getItem(storageKey) || "null");
-      if (Array.isArray(saved?.videos)) cachedCollections.push(saved.videos);
-    } catch {
-      // Ignore one malformed cache without hiding the remaining valid uploads.
-    }
-  }
-
-  const seen = new Set();
-  return cachedCollections.flat().filter((video) => {
-    if (!video?.id || seen.has(video.id) || isLivestream(video)) return false;
-    seen.add(video.id);
-    return true;
-  });
+  return readCachedYouTubeVideos(currentUser?.uid, activeYouTubeChannelId());
 }
 
 function saveCachedVideos(videos) {
-  const key = videosStorageKey();
-  if (!key) return;
-  sessionStorage.setItem(key, JSON.stringify({
-    version: videosCacheVersion,
-    videos: videos.filter((video) => !isLivestream(video)),
-    savedAt: Date.now()
-  }));
+  saveCachedYouTubeVideos(currentUser?.uid, activeYouTubeChannelId(), videos);
 }
 
 function isLivestream(video = {}) {
@@ -161,9 +108,9 @@ function videoAnalysisFingerprint(video, analytics, retentionPoints, searchTerms
   return JSON.stringify({
     analysisVersion: 4,
     id: video.id || "",
-    views: video.statistics?.viewCount || "",
-    likes: video.statistics?.likeCount || "",
-    comments: video.statistics?.commentCount || "",
+    views: analytics?.views ?? "",
+    likes: analytics?.likes ?? "",
+    comments: analytics?.comments ?? "",
     period: analytics?.periodLabel || "",
     averageViewDuration: analytics?.averageViewDuration || "",
     averageViewPercentage: analytics?.averageViewPercentage || "",
@@ -211,11 +158,7 @@ function setLibraryBusy(isBusy) {
 
 function updateLibrarySelection(videoId) {
   selectedVideoId = videoId || "";
-  videoLibrary?.querySelectorAll(".video-library-card").forEach((card) => {
-    const isActive = card.dataset.videoId === selectedVideoId;
-    card.classList.toggle("active", isActive);
-    card.setAttribute("aria-pressed", String(isActive));
-  });
+  syncVideoLibrarySelection(videoLibrary, selectedVideoId);
 }
 
 function renderVideoLibrary(videos = channelVideos) {
@@ -229,23 +172,7 @@ function renderVideoLibrary(videos = channelVideos) {
     return;
   }
 
-  videoLibrary.innerHTML = channelVideos.map((video) => {
-    const snippet = video.snippet || {};
-    const stats = video.statistics || {};
-    const title = snippet.title || "Untitled video";
-    const thumbnail = bestThumbnail(snippet.thumbnails);
-    const published = dateLabel(snippet.publishedAt);
-    const duration = durationFromIso(video.contentDetails?.duration);
-    const views = wholeNumber(stats.viewCount);
-    const meta = [published, views ? views + " views" : ""].filter(Boolean).join(" - ");
-    return '<button class="video-library-card" type="button" data-video-id="' + escapeHtml(video.id) + '" aria-pressed="false">'
-      + '<div class="video-library-thumb">'
-      + (thumbnail ? '<img src="' + escapeHtml(thumbnail) + '" alt="' + escapeHtml(title) + ' thumbnail">' : '')
-      + (duration ? '<span class="video-library-duration">' + escapeHtml(duration) + '</span>' : '')
-      + '</div>'
-      + '<div class="video-library-body"><b>' + escapeHtml(title) + '</b><span>' + escapeHtml(meta || "Upload") + '</span></div>'
-      + '</button>';
-  }).join("");
+  videoLibrary.innerHTML = studioVideoCardsHtml(channelVideos);
 
   if (!selectedVideoId || !channelVideos.some((video) => video.id === selectedVideoId)) {
     selectedVideoId = channelVideos[0]?.id || "";
@@ -278,165 +205,20 @@ function parseVideoId(value) {
 }
 
 function readCachedAccessToken() {
-  try {
-    const saved = JSON.parse(
-      sessionStorage.getItem(tokenStorageKey) || "null"
-    );
-    if (saved?.accessToken && saved.uid === currentUser?.uid && saved.channelId === activeChannelId() && saved.expiresAt > Date.now() + 60 * 1000) {
-      return saved.accessToken;
-    }
-  } catch (error) {
-    // Fall through and clear bad token cache below.
-  }
-  localStorage.removeItem(tokenStorageKey);
-  sessionStorage.removeItem(tokenStorageKey);
-  return "";
-}
-
-function saveCachedAccessToken(accessToken) {
-  if (!accessToken || !currentUser) return;
-  sessionStorage.setItem(tokenStorageKey, JSON.stringify({
-    accessToken,
-    uid: currentUser.uid,
-    channelId: activeChannelId(),
-    expiresAt: Date.now() + 50 * 60 * 1000
-  }));
-  localStorage.removeItem(tokenStorageKey);
+  return readCachedYouTubeAccessToken(currentUser?.uid, activeYouTubeChannelId());
 }
 
 function clearCachedAccessToken() {
-  localStorage.removeItem(tokenStorageKey);
-  sessionStorage.removeItem(tokenStorageKey);
-}
-
-function loadGoogleIdentityServices() {
-  if (window.google?.accounts?.oauth2) return Promise.resolve();
-  if (googleIdentityScriptPromise) return googleIdentityScriptPromise;
-  googleIdentityScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = resolve;
-    script.onerror = () => reject(new Error("Google Identity Services could not load."));
-    document.head.append(script);
-  });
-  return googleIdentityScriptPromise;
-}
-
-async function authorizedChannelId(accessToken) {
-  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
-  url.searchParams.set("part", "id");
-  url.searchParams.set("mine", "true");
-  const payload = await fetchJson(url, accessToken);
-  return payload.items?.[0]?.id || "";
+  clearCachedYouTubeAccessToken();
 }
 
 async function requestAccessToken() {
   if (!currentUser) throw new Error("Sign in before analyzing a video.");
-  return getRenewedYouTubeAccessToken(currentUser.uid, activeChannelId());
+  return getRenewedYouTubeAccessToken(currentUser.uid, activeYouTubeChannelId());
 }
 
 async function getAccessToken() {
   return readCachedAccessToken() || requestAccessToken();
-}
-
-async function fetchJson(url, accessToken) {
-  const response = await fetch(url, {
-    headers: {Authorization: `Bearer ${accessToken}`}
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(payload.error?.message || "YouTube API request failed.");
-    error.status = response.status;
-    throw error;
-  }
-  return payload;
-}
-
-async function fetchUploadsPlaylistId(accessToken) {
-  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
-  url.searchParams.set("part", "contentDetails");
-  url.searchParams.set("mine", "true");
-  const payload = await fetchJson(url, accessToken);
-  const playlistId = payload.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
-  if (!playlistId) throw new Error("No uploads playlist was found for your linked channel.");
-  return playlistId;
-}
-
-async function fetchChannelProfile(accessToken) {
-  const url = new URL("https://www.googleapis.com/youtube/v3/channels");
-  url.searchParams.set("part", "snippet,statistics,brandingSettings,topicDetails");
-  url.searchParams.set("mine", "true");
-  const payload = await fetchJson(url, accessToken);
-  const channel = payload.items?.[0];
-  if (!channel) return null;
-
-  return {
-    id: channel.id || "",
-    title: channel.snippet?.title || "",
-    description: shortText(channel.snippet?.description || "", 700),
-    customUrl: channel.snippet?.customUrl || "",
-    keywords: shortText(channel.brandingSettings?.channel?.keywords || "", 500),
-    subscriberCount: numberValue(channel.statistics?.subscriberCount) || 0,
-    videoCount: numberValue(channel.statistics?.videoCount) || 0,
-    viewCount: numberValue(channel.statistics?.viewCount) || 0,
-    topicCategories: channel.topicDetails?.topicCategories || []
-  };
-}
-
-async function fetchUploadVideoIds(accessToken) {
-  const playlistId = await fetchUploadsPlaylistId(accessToken);
-  const ids = [];
-  let pageToken = "";
-
-  do {
-    const url = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
-    url.searchParams.set("part", "contentDetails");
-    url.searchParams.set("playlistId", playlistId);
-    url.searchParams.set("maxResults", "50");
-    if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const payload = await fetchJson(url, accessToken);
-    payload.items?.forEach((item) => {
-      const id = item.contentDetails?.videoId;
-      if (id) ids.push(id);
-    });
-    pageToken = payload.nextPageToken || "";
-  } while (pageToken);
-
-  return ids;
-}
-
-async function fetchVideosByIds(videoIds, accessToken) {
-  const videos = [];
-  for (let index = 0; index < videoIds.length; index += 50) {
-    const chunk = videoIds.slice(index, index + 50);
-    const url = new URL("https://www.googleapis.com/youtube/v3/videos");
-    url.searchParams.set("part", "snippet,statistics,contentDetails,liveStreamingDetails");
-    url.searchParams.set("id", chunk.join(","));
-    const payload = await fetchJson(url, accessToken);
-    videos.push(...(payload.items || []));
-  }
-  return videos.filter((video) => !isLivestream(video));
-}
-
-async function fetchChannelVideos(accessToken) {
-  const videoIds = await fetchUploadVideoIds(accessToken);
-  if (!videoIds.length) return [];
-  return fetchVideosByIds(videoIds, accessToken);
-}
-
-async function fetchVideo(videoId, accessToken) {
-  const url = new URL("https://www.googleapis.com/youtube/v3/videos");
-  url.searchParams.set("part", "snippet,statistics,contentDetails,liveStreamingDetails");
-  url.searchParams.set("id", videoId);
-  const payload = await fetchJson(url, accessToken);
-  const video = payload.items?.[0];
-  if (!video) throw new Error("No video was found for that URL.");
-  if (isLivestream(video)) {
-    throw new Error("Livestreams are not supported by the Video Analyzer. Choose a regular video or Short.");
-  }
-  return video;
 }
 
 function setMetric(index, value, trend = "") {
@@ -535,48 +317,23 @@ function updateSearchTerms(searchTerms) {
   `).join("");
 }
 
-function safeJsonParse(value) {
-  const cleaned = String(value || "")
-    .replace(/^```(?:json)?/i, "")
-    .replace(/```$/i, "")
-    .trim();
-
-  // Try standard parse first
-  try {
-    return JSON.parse(cleaned);
-  } catch (e) {
-    // If that fails, try to extract just the first object found
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        // Remove trailing commas which are common in LLM output but invalid in JSON
-        const fixTrailingCommas = match[0].replace(/,[ \t\r\n]*([\]\}])/g, "$1");
-        return JSON.parse(fixTrailingCommas);
-      } catch (innerError) {
-        console.warn("JSON repair failed:", innerError);
-      }
-    }
-    return null;
-  }
-}
-
 function channelVideoContext(videos) {
   return videos.slice(0, 6).map((video) => ({
     id: video.id || "",
     title: video.snippet?.title || "Untitled video",
     publishedAt: video.snippet?.publishedAt || "",
-    views: numberValue(video.statistics?.viewCount) || 0,
-    likes: numberValue(video.statistics?.likeCount) || 0,
-    comments: numberValue(video.statistics?.commentCount) || 0,
+    views: numberValue(video.ownerAnalytics?.views) || 0,
+    likes: numberValue(video.ownerAnalytics?.likes) || 0,
+    comments: numberValue(video.ownerAnalytics?.comments) || 0,
+    analyticsPeriod: video.ownerAnalytics?.periodLabel || "90D",
     duration: durationFromIso(video.contentDetails?.duration),
     youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId)
   }));
 }
 
 function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, channelProfile, videos) {
-  const stats = video.statistics || {};
   const durationSeconds = secondsFromIso(video.contentDetails?.duration) || 0;
-  const views = videos.map((item) => numberValue(item.statistics?.viewCount)).filter((value) => value !== null);
+  const views = videos.map((item) => numberValue(item.ownerAnalytics?.views)).filter((value) => value !== null);
   const averageViews = views.length ? Math.round(views.reduce((sum, value) => sum + value, 0) / views.length) : 0;
   const retentionSamples = retentionPoints
     .filter((_, index) => index % Math.max(1, Math.floor(retentionPoints.length / 5)) === 0)
@@ -597,13 +354,14 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
       publishedAt: video.snippet?.publishedAt || "",
       duration: durationFromIso(video.contentDetails?.duration),
       youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId),
-      publicStats: {
-        views: numberValue(stats.viewCount) || 0,
-        likes: numberValue(stats.likeCount) || 0,
-        comments: numberValue(stats.commentCount) || 0
-      },
       privateAnalytics: analytics ? {
         period: analytics.periodLabel || "Analytics API",
+        views: Number(analytics.views) || 0,
+        likes: Number(analytics.likes) || 0,
+        comments: Number(analytics.comments) || 0,
+        shares: Number(analytics.shares) || 0,
+        subscribersGained: Number(analytics.subscribersGained) || 0,
+        subscribersLost: Number(analytics.subscribersLost) || 0,
         averageViewDuration: durationFromSeconds(analytics.averageViewDuration),
         averageViewPercentage: percent(analytics.averageViewPercentage),
         estimatedMinutesWatched: Math.round(analytics.estimatedMinutesWatched || 0)
@@ -717,7 +475,7 @@ async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, sear
       ?.map((part) => part.text || "")
       .join("")
       .trim();
-    return normalizeGeminiVideoAnalysis(safeJsonParse(text));
+    return normalizeGeminiVideoAnalysis(parseJsonObject(text));
   } catch (error) {
     console.warn("Gemini video analysis failed.", error);
     return null;
@@ -911,29 +669,29 @@ function clearAnalyzerResults() {
 }
 
 function updateMetrics(video, analytics, geminiAnalysis = null) {
-  const stats = video.statistics || {};
   const labels = geminiAnalysis?.metricLabels || {};
-  setMetric(0, compactNumber(stats.viewCount), labels.views || "Public");
-  setMetric(1, compactNumber(stats.likeCount), labels.likes || "Public");
-  setMetric(2, compactNumber(stats.commentCount), labels.comments || "Public");
-  setMetric(3, analytics ? durationFromSeconds(analytics.averageViewDuration) : "", labels.averageViewDuration || (analytics ? (analytics.periodLabel || "Analytics") : "Unavailable"));
+  const studioLabel = analytics?.periodLabel ? `Studio ${analytics.periodLabel}` : "Studio unavailable";
+  setMetric(0, analytics ? compactNumber(analytics.views) : "—", labels.views || studioLabel);
+  setMetric(1, analytics ? compactNumber(analytics.likes) : "—", labels.likes || studioLabel);
+  setMetric(2, analytics ? compactNumber(analytics.comments) : "—", labels.comments || studioLabel);
+  setMetric(3, analytics ? durationFromSeconds(analytics.averageViewDuration) : "—", labels.averageViewDuration || studioLabel);
 }
 
 async function loadVideoDetailsWithRetry(videoId, accessToken) {
   try {
-    return await fetchVideo(videoId, accessToken);
+    return await fetchVideoById(videoId, accessToken);
   } catch (error) {
     if (error.status !== 401 && error.status !== 403) throw error;
     clearCachedAccessToken();
     setStatus("YouTube access needs to be refreshed. Please approve once to continue.");
     const refreshedToken = await requestAccessToken();
-    return fetchVideo(videoId, refreshedToken);
+    return fetchVideoById(videoId, refreshedToken);
   }
 }
 
-async function loadPrivateAnalytics(videoId) {
+async function loadPrivateAnalytics(videoId, accessToken) {
   try {
-    const data = await getPrivateVideoAnalytics(videoId);
+    const data = await getPrivateVideoAnalytics(videoId, accessToken);
     return {...data, retentionError: null, needsRefresh: false, errors: []};
   } catch (error) {
     return {
@@ -955,17 +713,12 @@ async function loadVideoAnalysisWithRetry(videoId) {
   try {
     accessToken = await getAccessToken();
     video = await loadVideoDetailsWithRetry(videoId, accessToken);
-    privateData = await loadPrivateAnalytics(videoId);
+    privateData = await loadPrivateAnalytics(videoId, accessToken);
 
   } catch (error) {
     if (!video) throw error;
-    // The upload library already contains enough public metadata for Gemini and
-    // the public metric cards. Private analytics should enhance analysis, not
-    // make the Analyze button fail or flash closed.
-    console.warn("Private YouTube data was unavailable; using cached public video data.", error);
-    accessToken = "";
-    privateData = {analytics: null, retentionPoints: [], searchTerms: [], errors: [error]};
-    setStatus("Private analytics are unavailable. Analyzing the loaded public video data...");
+    console.warn("Private YouTube Studio data was unavailable.", error);
+    throw new Error("YouTube Studio analytics could not be loaded. Relink the channel and approve Analytics access.");
   }
 
   privateData.errors.forEach((error) => {
@@ -1062,8 +815,8 @@ async function analyzeVideoById(videoId) {
         ? ` Retention request failed: ${retentionError.message}`
         : " YouTube returned no audience-retention segments for this upload.";
     setStatus(geminiAnalysis
-      ? "Gemini video analysis generated from YouTube data" + period + "." + retentionStatus
-      : (analytics ? "Video analytics loaded from YouTube" + period + "." : "Public video details loaded. Private analytics are unavailable for this upload right now."));
+      ? "Gemini analysis generated from private YouTube Studio data" + period + "." + retentionStatus
+      : "Private YouTube Studio analytics loaded" + period + "." + retentionStatus);
     setLibraryStatus("Analyzing " + (video.snippet?.title || "selected video") + ".");
     const notificationPoints = (geminiAnalysis?.timelineInterestPoints || [])
       .slice(0, 2)
@@ -1089,7 +842,7 @@ async function analyzeVideoById(videoId) {
     setAnalyzerLoading(false);
     setAnalyzerResultsVisible(true);
     console.error("Could not analyze video.", error);
-    updateMetrics(channelVideos.find((video) => video.id === videoId) || {statistics: {}}, null);
+    updateMetrics(channelVideos.find((video) => video.id === videoId) || {}, null);
     updateSearchTerms([]);
     renderTimeline([], 0);
     setStatus(error.message || "Could not analyze this video. Try refreshing the linked uploads.");
@@ -1097,131 +850,6 @@ async function analyzeVideoById(videoId) {
     if (requestId === analysisRequestId) {
       setAnalyzerLoading(false);
       setBusy(false);
-    }
-  }
-}
-
-function readFileAsBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("The selected video could not be read."));
-    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
-    reader.readAsDataURL(file);
-  });
-}
-
-function readVideoDuration(file) {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    const objectUrl = URL.createObjectURL(file);
-    video.preload = "metadata";
-    video.onloadedmetadata = () => {
-      const seconds = Number.isFinite(video.duration) ? video.duration : 0;
-      URL.revokeObjectURL(objectUrl);
-      resolve(seconds);
-    };
-    video.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(0);
-    };
-    video.src = objectUrl;
-  });
-}
-
-async function analyzeUploadedVideo(file) {
-  if (!file) return;
-  if (!file.type.startsWith("video/")) {
-    setStatus("Choose a valid video file.");
-    return;
-  }
-  if (file.size > maxUploadBytes) {
-    setStatus("Choose a video smaller than 15 MB. A shorter export works best for direct analysis.");
-    return;
-  }
-  if (!isGeminiAvailable()) {
-    setStatus("AI analysis is unavailable until Gemini is configured.");
-    return;
-  }
-  const requestId = ++analysisRequestId;
-  const linkedContext = latestLinkedVideoContext?.video?.id === selectedVideoId
-    ? latestLinkedVideoContext
-    : null;
-  try {
-    setBusy(true);
-    setAnalyzerResultsVisible(false);
-    setAnalyzerLoading(true);
-    setStatus(`Uploading and analyzing ${file.name}...`);
-    if (!linkedContext) updateLibrarySelection("");
-    const [data, durationSeconds] = await Promise.all([readFileAsBase64(file), readVideoDuration(file)]);
-    const measuredDips = linkedContext
-      ? retentionDipContext(linkedContext.retentionPoints, linkedContext.video, 6)
-      : [];
-    const prompt = [
-      "Analyze the attached video as an expert video editor and audience-retention strategist.",
-      "Inspect its visuals, audible content, pacing, hook, clarity, transitions, dead space, and opportunities for stronger engagement.",
-      measuredDips.length
-        ? "The supplied retention dips are measured YouTube Analytics evidence. Inspect the video at and immediately before every dip. Explain the visible or audible cause you observe, then recommend a concrete edit that addresses that exact moment."
-        : "No measured retention dips were available. Base every suggestion only on a moment you can directly observe in the attached video.",
-      "Return JSON only. Give 3-6 timestamped improvement points tied to moments you can actually observe. Do not guess what happens at a timestamp.",
-      `Filename: ${file.name}. Duration: ${durationFromSeconds(durationSeconds)}.`,
-      linkedContext ? `Selected YouTube video: ${linkedContext.video.snippet?.title || "Untitled"}.` : "",
-      measuredDips.length ? `Measured retention dips: ${JSON.stringify(measuredDips)}` : "",
-      `Shape: {"recommendedEdits":[{"segment":"","issue":"","recommendation":"","impact":""}],"timelineInterestPoints":[{"timestamp":"0:00","title":"","suggestion":"","severity":"high|medium|low"}]}`
-    ].filter(Boolean).join("\n");
-    const payload = await requestGeminiContent({
-      contents: [{role: "user", parts: [{text: prompt}, {inlineData: {mimeType: file.type, data}}]}],
-      generationConfig: {responseMimeType: "application/json", maxOutputTokens: 520}
-    });
-    if (requestId !== analysisRequestId) return;
-    const responseText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
-    const analysis = normalizeGeminiVideoAnalysis(safeJsonParse(responseText));
-    if (!analysis) throw new Error("The video analysis returned an invalid response. Please try again.");
-    const localVideo = {statistics: {}, contentDetails: {duration: ""}, snippet: {title: file.name}};
-    updateMetrics(
-      linkedContext?.video || localVideo,
-      linkedContext?.analytics || null,
-      linkedContext ? analysis : {metricLabels: {views: "Uploaded file", likes: "Unavailable", comments: "Unavailable", averageViewDuration: "File length"}}
-    );
-    if (!linkedContext) setMetric(3, durationFromSeconds(durationSeconds), "File length");
-    updateSearchTerms(linkedContext?.searchTerms || []);
-    renderTimeline(
-      analysis.timelineInterestPoints,
-      durationSeconds,
-      analysis.recommendedEdits || []
-    );
-    setAnalyzerLoading(false);
-    setAnalyzerResultsVisible(true);
-    if (linkedContext) {
-      requestAnimationFrame(() => drawActualRetention(linkedContext.retentionPoints, linkedContext.video));
-      setStatus(measuredDips.length
-        ? `Video inspection complete. Gemini analyzed the source video against ${measuredDips.length} measured retention dip${measuredDips.length === 1 ? "" : "s"}.`
-        : "Video inspection complete. YouTube did not provide measured retention dips, so suggestions use directly observed video moments only.");
-      setLibraryStatus(`Analyzed the source file for ${linkedContext.video.snippet?.title || file.name}.`);
-    } else {
-      if (typeof drawLineChart === "function") drawLineChart("retentionChart", [], [], []);
-      const retentionEmptyState = document.getElementById("retentionEmptyState");
-      if (retentionEmptyState) retentionEmptyState.hidden = false;
-      document.getElementById("retentionChart")?.setAttribute("aria-hidden", "true");
-      setStatus(`Analysis complete for ${file.name}. Uploaded files do not include YouTube performance metrics.`);
-      setLibraryStatus(`Analyzed uploaded file: ${file.name}.`);
-    }
-    addNotifications((analysis.timelineInterestPoints || []).slice(0, 2).map((point, index) => ({
-      id: `upload:${file.name}:${file.size}:${index}:${point.timestamp}`,
-      title: `${point.timestamp} · ${point.title}`,
-      message: point.suggestion,
-      href: "pages/analyzer.html",
-      tone: point.severity === "high" ? "rose" : "amber"
-    })));
-  } catch (error) {
-    if (requestId !== analysisRequestId) return;
-    console.error("Could not analyze uploaded video.", error);
-    setAnalyzerResultsVisible(false);
-    setStatus(error.message || "Could not analyze the uploaded video.");
-  } finally {
-    if (requestId === analysisRequestId) {
-      setAnalyzerLoading(false);
-      setBusy(false);
-      if (videoFileInput) videoFileInput.value = "";
     }
   }
 }
@@ -1319,7 +947,25 @@ if (form && firebaseConfigured) {
     analyzeVideoById(card.dataset.videoId);
   });
   refreshVideosButton?.addEventListener("click", () => loadVideoLibrary({allowPrompt: true}));
-  videoFileInput?.addEventListener("change", () => analyzeUploadedVideo(videoFileInput.files?.[0]));
+  startStudioAutoRefresh(async () => {
+    if (!currentUser || !activeYouTubeChannelId()) return;
+    await loadVideoLibrary({allowPrompt: true});
+    if (!selectedVideoId) return;
+    const accessToken = readCachedAccessToken() || await requestAccessToken();
+    const privateData = await loadPrivateAnalytics(selectedVideoId, accessToken);
+    if (!privateData.analytics) return;
+    const video = channelVideos.find((item) => item.id === selectedVideoId);
+    if (!video) return;
+    latestLinkedVideoContext = {...privateData, video};
+    updateMetrics(video, privateData.analytics);
+    updateSearchTerms(privateData.searchTerms);
+    requestAnimationFrame(() => drawActualRetention(
+      privateData.retentionPoints,
+      video,
+      privateData.retentionError
+    ));
+    setLibraryStatus("Studio statistics updated automatically.");
+  });
 } else if (form) {
   setStatus("Firebase is not configured yet.");
 }

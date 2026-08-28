@@ -1,9 +1,10 @@
 import {isGeminiAvailable, requestGeminiContent, requestGeminiText} from "./gemini-client.js?v=8";
 import {durationFromIso, numberValue, shortText, youtubeCategoryName} from "./insights-format.js?v=1";
+import {parseJsonObject} from "./services/json.js?v=1";
 import {
   buildCrossoverTrendSuggestions, detectChannelLane, importantWords, isGroundedTrendLabel,
   isShort, normalizedTitleWords, trendEvidence, trendQueriesForLane, uploadPerformanceContext
-} from "./insights-model.js?v=5";
+} from "./insights-model.js?v=8";
 
 let savedChannelContext = {channelTopic: "", channelContext: ""};
 
@@ -29,9 +30,16 @@ function channelVideoContext(videos) {
     description: shortText(video.snippet?.description || "", 260),
     tags: (video.snippet?.tags || []).slice(0, 12),
     publishedAt: video.snippet?.publishedAt || "",
-    views: numberValue(video.statistics?.viewCount) || 0,
-    likes: numberValue(video.statistics?.likeCount) || 0,
-    comments: numberValue(video.statistics?.commentCount) || 0,
+    views: numberValue(video.ownerAnalytics?.views) || 0,
+    likes: numberValue(video.ownerAnalytics?.likes) || 0,
+    comments: numberValue(video.ownerAnalytics?.comments) || 0,
+    shares: numberValue(video.ownerAnalytics?.shares) || 0,
+    watchMinutes: numberValue(video.ownerAnalytics?.estimatedMinutesWatched) || 0,
+    averageViewPercentage: numberValue(video.ownerAnalytics?.averageViewPercentage) || 0,
+    subscribersGained: numberValue(video.ownerAnalytics?.subscribersGained) || 0,
+    subscribersLost: numberValue(video.ownerAnalytics?.subscribersLost) || 0,
+    analyticsSource: "youtube-studio",
+    analyticsPeriod: video.ownerAnalytics?.periodLabel || "90D",
     duration: durationFromIso(video.contentDetails?.duration),
     format: isShort(video) ? "Short" : "Video",
     youtubeCategoryId: video.snippet?.categoryId || "",
@@ -42,7 +50,7 @@ function channelVideoContext(videos) {
 export function channelScanContext(videos, profile = {}, {includeCatalog = true} = {}) {
   const uploads = Array.isArray(videos) ? videos : [];
   const sortedByViews = [...uploads].sort(
-    (a, b) => numberValue(b.statistics?.viewCount) - numberValue(a.statistics?.viewCount)
+    (a, b) => numberValue(b.ownerAnalytics?.views) - numberValue(a.ownerAnalytics?.views)
   );
   const tagCounts = new Map();
   const categoryCounts = new Map();
@@ -67,9 +75,11 @@ export function channelScanContext(videos, profile = {}, {includeCatalog = true}
     description: shortText(video.snippet?.description || "", 220),
     tags: (video.snippet?.tags || []).slice(0, 10),
     publishedAt: video.snippet?.publishedAt || "",
-    views: numberValue(video.statistics?.viewCount) || 0,
-    likes: numberValue(video.statistics?.likeCount) || 0,
-    comments: numberValue(video.statistics?.commentCount) || 0,
+    views: numberValue(video.ownerAnalytics?.views) || 0,
+    likes: numberValue(video.ownerAnalytics?.likes) || 0,
+    comments: numberValue(video.ownerAnalytics?.comments) || 0,
+    averageViewPercentage: numberValue(video.ownerAnalytics?.averageViewPercentage) || 0,
+    analyticsPeriod: video.ownerAnalytics?.periodLabel || "90D",
     duration: durationFromIso(video.contentDetails?.duration),
     format: isShort(video) ? "Short" : "Video"
   });
@@ -97,7 +107,8 @@ export function channelScanContext(videos, profile = {}, {includeCatalog = true}
       category: youtubeCategoryName(video.snippet?.categoryId),
       format: isShort(video) ? "Short" : "Video",
       publishedAt: video.snippet?.publishedAt || "",
-      views: numberValue(video.statistics?.viewCount) || 0
+      views: numberValue(video.ownerAnalytics?.views) || 0,
+      analyticsPeriod: video.ownerAnalytics?.periodLabel || "90D"
     })) : [],
     recentUploads: uploads.slice(0, 24).map(compactUpload),
     topPerformers: sortedByViews.slice(0, 10).map(compactUpload)
@@ -226,24 +237,6 @@ function normalizeGeminiTrendPlan(value, fallbackLane) {
   };
 }
 
-function safeJsonParse(value) {
-  const cleaned = String(value || "")
-    .replace(/^```(?:json)?/i, "")
-    .replace(/```$/i, "")
-    .trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    try {
-      return JSON.parse(match[0].replace(/,[ \t\r\n]*([\]\}])/g, "$1"));
-    } catch {
-      return null;
-    }
-  }
-}
-
 export async function buildGeminiTrendPlan(videos, channelProfile = null) {
   const fallbackLane = detectChannelLane(videos);
   const inferredNicheTerms = inferChannelNicheTerms(videos, channelProfile || {});
@@ -308,7 +301,7 @@ export async function buildGeminiTrendPlan(videos, channelProfile = null) {
       ?.map((part) => part.text || "")
       .join("")
       .trim();
-    const plan = normalizeGeminiTrendPlan(safeJsonParse(text), fallbackLane);
+    const plan = normalizeGeminiTrendPlan(parseJsonObject(text), fallbackLane);
     if (plan) {
       if (!plan.nicheTerms.length) plan.nicheTerms = inferredNicheTerms;
       return plan;

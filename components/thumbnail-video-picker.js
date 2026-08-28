@@ -1,41 +1,19 @@
-import {selectThumbnailFile} from "../js/thumbnail-analyzer.js?v=10";
+import {selectThumbnailFile} from "../js/thumbnail-analyzer.js?v=13";
+import {initializeApp, getApps} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+import {getAuth, onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
+import {firebaseConfig, firebaseConfigured} from "../js/firebase-config.js";
+import {getRenewedYouTubeAccessToken} from "../js/youtube-auth.js?v=3";
+import {fetchChannelVideos} from "../js/insights-youtube.js?v=5";
+import {readCachedYouTubeVideos, saveCachedYouTubeVideos} from "../js/services/youtube-video-cache.js?v=1";
+import {activeYouTubeChannelId} from "../js/services/youtube-session.js?v=1";
 
-const videosStoragePrefix = "viewcastYouTubeVideos:";
 const grid = document.querySelector("#thumbnailVideoGrid");
 const status = document.querySelector("#thumbnailVideosStatus");
-
-function activeChannelId() {
-  try {
-    return JSON.parse(localStorage.getItem("viewcastYouTubeConnection") || "null")?.channel?.id || "";
-  } catch {
-    return "";
-  }
-}
+let currentUser = null;
 
 function savedVideos() {
-  const channelId = activeChannelId();
-  const entries = [];
-  for (let index = 0; index < sessionStorage.length; index += 1) {
-    const key = sessionStorage.key(index) || "";
-    if (!key.startsWith(videosStoragePrefix)) continue;
-    try {
-      const saved = JSON.parse(sessionStorage.getItem(key) || "null");
-      if (!Array.isArray(saved?.videos)) continue;
-      entries.push({
-        videos: saved.videos,
-        preferred: Boolean(channelId && key.endsWith(`:${channelId}`))
-      });
-    } catch {
-      // Ignore an outdated or malformed cache entry.
-    }
-  }
-  entries.sort((a, b) => Number(b.preferred) - Number(a.preferred));
-  const seen = new Set();
-  return entries.flatMap((entry) => entry.videos).filter((video) => {
-    if (!video?.id || seen.has(video.id)) return false;
-    seen.add(video.id);
-    return true;
-  });
+  return readCachedYouTubeVideos(currentUser?.uid, activeYouTubeChannelId())
+    .filter((video) => video.ownerAnalytics?.source === "youtube-studio");
 }
 
 function thumbnailUrl(video) {
@@ -66,7 +44,7 @@ async function chooseVideo(video, button) {
       type: blob.type || "image/jpeg",
       lastModified: Date.now()
     });
-    selectThumbnailFile(file, video.snippet?.title || "");
+    selectThumbnailFile(file, video.snippet?.title || "", video.ownerAnalytics || null);
     document.querySelector("[data-thumbnail-tab='analysis']")?.click();
     document.querySelector("#analyzeThumbnail")?.focus();
   } catch (error) {
@@ -99,8 +77,53 @@ function renderVideos(videos) {
   const count = grid.childElementCount;
   status.textContent = count
     ? `Choose from ${count} saved channel upload${count === 1 ? "" : "s"}.`
-    : "No saved uploads were found. Load your channel uploads in Video Analyzer or AI Insights first.";
+    : "No Studio-enriched uploads were found for the linked channel.";
   status.dataset.type = count ? "success" : "";
 }
 
-renderVideos(savedVideos());
+async function refreshVideos() {
+  if (!currentUser) return;
+  const channelId = activeYouTubeChannelId();
+  if (!channelId) {
+    renderVideos([]);
+    status.textContent = "Link your YouTube channel to choose from its uploads.";
+    return;
+  }
+
+  const cached = savedVideos();
+  if (cached.length) renderVideos(cached);
+  status.textContent = cached.length ? "Refreshing uploads from YouTube Studio…" : "Loading uploads from YouTube Studio…";
+  status.dataset.type = "loading";
+  try {
+    const token = await getRenewedYouTubeAccessToken(currentUser.uid, channelId);
+    const videos = await fetchChannelVideos(token);
+    saveCachedYouTubeVideos(currentUser.uid, channelId, videos);
+    renderVideos(videos.filter((video) => video.ownerAnalytics?.source === "youtube-studio"));
+  } catch (error) {
+    console.error("Could not load YouTube Studio uploads for thumbnail analysis.", error);
+    if (cached.length) {
+      renderVideos(cached);
+      status.textContent = "Showing saved Studio uploads. Current analytics could not be refreshed.";
+      status.dataset.type = "error";
+    } else {
+      renderVideos([]);
+      status.textContent = error.message || "Could not load uploads from YouTube Studio.";
+      status.dataset.type = "error";
+    }
+  }
+}
+
+if (firebaseConfigured && grid && status) {
+  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  onAuthStateChanged(getAuth(app), (user) => {
+    currentUser = user || null;
+    if (!currentUser) {
+      renderVideos([]);
+      status.textContent = "Sign in to load your private YouTube Studio uploads.";
+      return;
+    }
+    refreshVideos();
+  });
+}
+
+window.addEventListener("viewcast:studio-refreshed", refreshVideos);

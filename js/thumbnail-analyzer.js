@@ -24,6 +24,7 @@ const emptyState = document.querySelector("#thumbnailEmptyState");
 const output = document.querySelector("#thumbnailAnalysisOutput");
 const thumbnailChat = document.querySelector("#thumbnailChat");
 let selectedFile = null;
+let selectedVideoAnalytics = null;
 let previewUrl = "";
 let latestAnalysis = null;
 let thumbnailChatHistory = [];
@@ -69,6 +70,7 @@ function resetThumbnailChat() {
 
 function resetFile() {
   selectedFile = null;
+  selectedVideoAnalytics = null;
   input.value = "";
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = "";
@@ -109,8 +111,9 @@ function selectFile(file) {
   setStatus(thumbnailTitle.value.trim() ? "Ready to analyze." : "Enter the video title to continue.");
 }
 
-export function selectThumbnailFile(file, videoTitle = "") {
+export function selectThumbnailFile(file, videoTitle = "", ownerAnalytics = null) {
   if (videoTitle) thumbnailTitle.value = videoTitle;
+  selectedVideoAnalytics = ownerAnalytics?.source === "youtube-studio" ? ownerAnalytics : null;
   selectFile(file);
 }
 
@@ -285,7 +288,7 @@ document.querySelectorAll("[data-thumbnail-tab]").forEach((tab) => tab.addEventL
     comparisonModulePromise = import("./thumbnail-comparison.js?v=3");
   }
   if (activeMode === "videos" && !videoPickerModulePromise) {
-    videoPickerModulePromise = import("../components/thumbnail-video-picker.js?v=2");
+    videoPickerModulePromise = import("../components/thumbnail-video-picker.js?v=5");
   }
   document.querySelectorAll("[data-thumbnail-tab]").forEach((button) => {
     const active = button === tab;
@@ -327,7 +330,10 @@ form.addEventListener("submit", async (event) => {
   setStatus("Gemini is reviewing your thumbnail…", "loading");
   try {
     const videoTitle = thumbnailTitle.value.trim();
-    const cacheKey = `${thumbnailCachePrefix}${fileFingerprint(selectedFile)}:${videoTitle}`;
+    const studioFingerprint = selectedVideoAnalytics
+      ? `:${selectedVideoAnalytics.periodLabel}:${selectedVideoAnalytics.views}:${selectedVideoAnalytics.averageViewPercentage}`
+      : ":no-studio-data";
+    const cacheKey = `${thumbnailCachePrefix}${fileFingerprint(selectedFile)}:${videoTitle}${studioFingerprint}`;
     const cachedAnalysis = readCachedResult(cacheKey);
     if (cachedAnalysis) {
       renderAnalysis(cachedAnalysis);
@@ -341,7 +347,7 @@ form.addEventListener("submit", async (event) => {
       contents: [{
         role: "user",
         parts: [
-          { text: `Analyze this thumbnail together with the video title "${videoTitle}". Do not judge the image in isolation. First determine the promise, topic, and curiosity created by the title, then compare that promise with what the thumbnail communicates. Identify whether they reinforce each other, add complementary information, redundantly repeat each other, create confusion, or make conflicting promises. Make title–thumbnail alignment 40% of the overall score; use likely click performance, visual hierarchy, contrast, subject clarity, mobile text legibility, emotional pull, curiosity, and clutter for the remaining 60%. The score must be from 0 to 10 and may use one decimal place.\nReturn this exact JSON shape: {"score": 0.0, "verdict": "short headline", "summary": "2-3 sentence combined title and thumbnail assessment", "titleAlignment": "specific explanation of what the title promises, what the thumbnail promises, and whether they work together", "strengths": ["specific point", "specific point", "specific point"], "improvements": ["specific actionable point", "specific actionable point", "specific actionable point"], "recommendation": "one concrete redesign direction that better supports this title"}` },
+          { text: `Analyze this thumbnail together with the video title "${videoTitle}". Do not judge the image in isolation. First determine the promise, topic, and curiosity created by the title, then compare that promise with what the thumbnail communicates. Identify whether they reinforce each other, add complementary information, redundantly repeat each other, create confusion, or make conflicting promises. Make title–thumbnail alignment 40% of the overall score; use likely click performance, visual hierarchy, contrast, subject clarity, mobile text legibility, emotional pull, curiosity, and clutter for the remaining 60%. The score must be from 0 to 10 and may use one decimal place. ${selectedVideoAnalytics ? `Use this owner-only YouTube Studio context as supporting evidence, without inventing CTR or impressions: ${JSON.stringify(selectedVideoAnalytics)}.` : "No YouTube Studio performance data is attached, so keep performance claims predictive rather than factual."}\nReturn this exact JSON shape: {"score": 0.0, "verdict": "short headline", "summary": "2-3 sentence combined title and thumbnail assessment", "titleAlignment": "specific explanation of what the title promises, what the thumbnail promises, and whether they work together", "strengths": ["specific point", "specific point", "specific point"], "improvements": ["specific actionable point", "specific actionable point", "specific actionable point"], "recommendation": "one concrete redesign direction that better supports this title"}` },
           { inlineData: optimized }
         ]
       }],

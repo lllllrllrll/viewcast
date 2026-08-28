@@ -9,7 +9,7 @@ import {
   readCachedResult,
   renderList,
   saveCachedResult
-} from "./thumbnail-analyzer.js?v=10";
+} from "./thumbnail-analyzer.js?v=12";
 
 const cachePrefix = "viewcastThumbnailComparison:";
 const files = {v1: null, v2: null};

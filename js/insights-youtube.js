@@ -1,4 +1,5 @@
 import {numberValue, shortText} from "./insights-format.js?v=1";
+import {enrichOwnedVideosWithStudio} from "./services/youtube-studio-analytics.js?v=2";
 
 export async function fetchYouTubeJson(url, accessToken) {
   const response = await fetch(url, {headers: {Authorization: `Bearer ${accessToken}`}});
@@ -61,11 +62,13 @@ async function fetchUploadVideoIds(accessToken) {
   return ids;
 }
 
-export async function fetchVideosByIds(videoIds, accessToken) {
+export async function fetchVideosByIds(videoIds, accessToken, {includeStatistics = true} = {}) {
   const videos = [];
   for (let index = 0; index < videoIds.length; index += 50) {
     const url = new URL("https://www.googleapis.com/youtube/v3/videos");
-    url.searchParams.set("part", "snippet,statistics,contentDetails");
+    url.searchParams.set("part", includeStatistics
+      ? "snippet,statistics,contentDetails,liveStreamingDetails"
+      : "snippet,contentDetails,liveStreamingDetails");
     url.searchParams.set("id", videoIds.slice(index, index + 50).join(","));
     const payload = await fetchYouTubeJson(url, accessToken);
     videos.push(...(payload.items || []));
@@ -73,7 +76,25 @@ export async function fetchVideosByIds(videoIds, accessToken) {
   return videos;
 }
 
+export function isLivestream(video = {}) {
+  const state = video.snippet?.liveBroadcastContent;
+  return Boolean(video.liveStreamingDetails) || state === "live" || state === "upcoming";
+}
+
+export async function fetchVideoById(videoId, accessToken) {
+  const videos = await fetchVideosByIds([videoId], accessToken, {includeStatistics: false});
+  const video = videos[0];
+  if (!video) throw new Error("No video was found for that URL.");
+  if (isLivestream(video)) {
+    throw new Error("Livestreams are not supported by the Video Analyzer. Choose a regular video or Short.");
+  }
+  return video;
+}
+
 export async function fetchChannelVideos(accessToken) {
   const videoIds = await fetchUploadVideoIds(accessToken);
-  return videoIds.length ? fetchVideosByIds(videoIds, accessToken) : [];
+  if (!videoIds.length) return [];
+  const videos = (await fetchVideosByIds(videoIds, accessToken, {includeStatistics: false}))
+    .filter((video) => !isLivestream(video));
+  return enrichOwnedVideosWithStudio(videos, accessToken, {days: 90});
 }

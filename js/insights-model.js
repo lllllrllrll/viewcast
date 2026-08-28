@@ -2,7 +2,7 @@ import {
   average, compactNumber, dateLabel, durationFromIso, durationFromSeconds,
   median, numberValue, secondsFromIso, shortText, youtubeCategoryName
 } from "./insights-format.js?v=1";
-import {fetchVideosByIds, fetchYouTubeJson as fetchJson} from "./insights-youtube.js?v=1";
+import {fetchVideosByIds, fetchYouTubeJson as fetchJson} from "./insights-youtube.js?v=5";
 
 let savedChannelContext = {channelTopic: "", channelContext: ""};
 
@@ -437,10 +437,13 @@ export async function fetchTrendReferenceVideos(accessToken, videos, trendPlan =
 }
 
 export function videoScore(video) {
-  const stats = video.statistics || {};
-  const views = numberValue(stats.viewCount) || 0;
-  const likes = numberValue(stats.likeCount) || 0;
-  const comments = numberValue(stats.commentCount) || 0;
+  const isOwnedUpload = video.analyticsSource === "youtube-studio";
+  const isExternalReference = Boolean(video.trendSource);
+  if (!isOwnedUpload && !isExternalReference) return 0;
+  const stats = isOwnedUpload ? video.ownerAnalytics : video.statistics;
+  const views = numberValue(isOwnedUpload ? stats?.views : stats?.viewCount) || 0;
+  const likes = numberValue(isOwnedUpload ? stats?.likes : stats?.likeCount) || 0;
+  const comments = numberValue(isOwnedUpload ? stats?.comments : stats?.commentCount) || 0;
   return views + likes * 20 + comments * 40;
 }
 
@@ -675,9 +678,15 @@ export function uploadPerformanceContext(videos) {
     publishedAt: video.snippet?.publishedAt || "",
     format: isShort(video) ? "Short" : "Video",
     duration: durationFromIso(video.contentDetails?.duration),
-    views: numberValue(video.statistics?.viewCount) || 0,
-    likes: numberValue(video.statistics?.likeCount) || 0,
-    comments: numberValue(video.statistics?.commentCount) || 0,
+    views: numberValue(video.ownerAnalytics?.views) || 0,
+    likes: numberValue(video.ownerAnalytics?.likes) || 0,
+    comments: numberValue(video.ownerAnalytics?.comments) || 0,
+    shares: numberValue(video.ownerAnalytics?.shares) || 0,
+    watchMinutes: numberValue(video.ownerAnalytics?.estimatedMinutesWatched) || 0,
+    averageViewPercentage: numberValue(video.ownerAnalytics?.averageViewPercentage) || 0,
+    subscribersGained: numberValue(video.ownerAnalytics?.subscribersGained) || 0,
+    subscribersLost: numberValue(video.ownerAnalytics?.subscribersLost) || 0,
+    analyticsPeriod: video.ownerAnalytics?.periodLabel || "90D",
     youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId)
   }));
   const views = mapped.map((video) => video.views).filter(Number.isFinite);
@@ -1117,10 +1126,10 @@ export function buildChannelSummary(videos, trendVideos, channelProfile = null) 
   const recent = videos.slice(0, 20);
   const longVideos = videos.filter((video) => !isShort(video));
   const shorts = videos.filter(isShort);
-  const views = videos.map((video) => numberValue(video.statistics?.viewCount)).filter((value) => value !== null);
+  const views = videos.map((video) => numberValue(video.ownerAnalytics?.views)).filter((value) => value !== null);
   const avgViews = average(views) || 0;
   const best = topVideos(videos, 1)[0];
-  const bestViews = numberValue(best?.statistics?.viewCount) || 0;
+  const bestViews = numberValue(best?.ownerAnalytics?.views) || 0;
   const topics = topicSignals(videos, trendVideos, {preferTrend: true});
   const channelLane = trendVideos.channelLane || detectChannelLane(videos);
   const currentTrends = currentTrendSignals(trendVideos);
@@ -1144,6 +1153,8 @@ export function buildChannelSummary(videos, trendVideos, channelProfile = null) 
     contentInterpretations: trendVideos.contentInterpretations || [],
     outsideTrendVideos: trendVideos.outsideTrendVideos || [],
     channelProfile,
+    analyticsSource: "youtube-studio",
+    analyticsPeriod: videos[0]?.ownerAnalytics?.periodLabel || "90D",
     creatorProvidedContext: savedChannelContext,
     nextVideoSuggestions: buildNextVideoSuggestions(videos, trendVideos),
     topicIdeas: buildTopicIdeas(videos, trendVideos),

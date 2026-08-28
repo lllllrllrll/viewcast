@@ -1,13 +1,14 @@
 import {isGeminiAvailable, requestGeminiContent, requestGeminiText} from "./gemini-client.js?v=8";
 import {numberValue, shortText, youtubeCategoryName} from "./insights-format.js?v=1";
+import {parseJsonObject} from "./services/json.js?v=1";
 import {
   buildCrossoverTrendSuggestions, isGroundedTrendLabel, isShort,
   normalizedTitleWords, trendEvidence, uploadPerformanceContext
-} from "./insights-model.js?v=5";
+} from "./insights-model.js?v=8";
 import {
   channelScanContext, compactAdviceSummary, compactChannelProfile,
   geminiCreatorContext
-} from "./insights-gemini.js?v=2";
+} from "./insights-gemini.js?v=4";
 
 function geminiContext(summary) {
   const trendReferences = summary.trendVideos
@@ -54,31 +55,6 @@ function geminiPageContext(summary, videos) {
       {includeCatalog: false}
     )
   };
-}
-
-function safeJsonParse(value) {
-  const cleaned = String(value || "")
-    .replace(/^```(?:json)?/i, "")
-    .replace(/```$/i, "")
-    .trim();
-
-  // Try standard parse first
-  try {
-    return JSON.parse(cleaned);
-  } catch (e) {
-    // If that fails, try to extract just the first object found
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        // Remove trailing commas which are common in LLM output but invalid in JSON
-        const fixTrailingCommas = match[0].replace(/,[ \t\r\n]*([\]\}])/g, "$1");
-        return JSON.parse(fixTrailingCommas);
-      } catch (innerError) {
-        console.warn("JSON repair failed:", innerError);
-      }
-    }
-    return null;
-  }
 }
 
 function normalizeRecommendation(item = {}, fallback = {}) {
@@ -286,7 +262,7 @@ export async function buildGeminiPageInsights(summary, videos) {
       ?.map((part) => part.text || "")
       .join("")
       .trim();
-    const parsedInsights = safeJsonParse(text);
+    const parsedInsights = parseJsonObject(text);
     if (!parsedInsights) {
       // Gemini can occasionally hit its output limit mid-object. The page still
       // has complete deterministic channel analysis, so render that instead of

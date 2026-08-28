@@ -4,6 +4,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {
   browserLocalPersistence,
+  browserSessionPersistence,
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
@@ -24,7 +25,7 @@ import {
   firebaseConfig,
   firebaseConfigured
 } from "./firebase-config.js";
-import { clearCreatorDataCaches, secureSignOut } from "./privacy.js";
+import { secureSignOut } from "./privacy.js";
 
 const loginUrl = new URL("../login.html", import.meta.url);
 const dashboardUrl = new URL("../index.html", import.meta.url);
@@ -340,6 +341,23 @@ function setupValidationFeedback() {
   });
 }
 
+async function configureAuthPersistence(auth) {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+    return;
+  } catch (localError) {
+    console.warn("Persistent sign-in storage is unavailable; using this browser session instead.", localError);
+  }
+
+  try {
+    await setPersistence(auth, browserSessionPersistence);
+  } catch (sessionError) {
+    // Persistence failure must not prevent the auth observer from restoring an
+    // already initialized user or stop the rest of the application booting.
+    console.warn("Session sign-in storage is also unavailable.", sessionError);
+  }
+}
+
 if (!firebaseConfigured) {
   if (isLoginPage) {
     showMessage(
@@ -359,7 +377,7 @@ if (!firebaseConfigured) {
     const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
     var auth = getAuth(app);
     var db = getFirestore(app);
-    await setPersistence(auth, browserLocalPersistence);
+    await configureAuthPersistence(auth);
 
     if (isLoginPage) {
       setupValidationFeedback();
@@ -377,7 +395,6 @@ if (!firebaseConfigured) {
       }
 
       if (!user) {
-        clearCreatorDataCaches();
         window.location.replace(loginUrlForCurrentPage());
         return;
       }

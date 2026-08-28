@@ -17,7 +17,7 @@ const colors = {
 // Start authentication before any optional dashboard setup. If another piece of
 // page initialization fails, the auth gate must still be able to reveal or
 // redirect the page instead of leaving the app permanently hidden.
-const authModuleUrl = new URL("../js/auth.js?v=20", document.currentScript.src);
+const authModuleUrl = new URL("../js/auth.js?v=21", document.currentScript.src);
 const authInitialization = import(authModuleUrl.href);
 
 window.setTimeout(() => {

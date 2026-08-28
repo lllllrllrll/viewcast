@@ -15,6 +15,7 @@ rules_version = '2';
 //   - createdAt: timestamp (optional, immutable after creation)
 //   - youtubeConnections: list (optional, at most 5 validated connections)
 //   - youtubeConnection: map (optional validated legacy connection)
+//     Connections may include bounded ownerData and private Analytics summaries.
 //   - channelTopic: string (optional, at most 120 characters)
 //   - channelContext: string (optional, at most 1000 characters)
 //
@@ -85,7 +86,14 @@ service cloud.firestore {
           'views',
           'estimatedMinutesWatched',
           'averageViewDuration',
+          'averageViewPercentage',
           'subscribersGained',
+          'subscribersLost',
+          'likes',
+          'comments',
+          'shares',
+          'videosAddedToPlaylists',
+          'videosRemovedFromPlaylists',
           'estimatedRevenue'
         ])
         && data.keys().hasAll([
@@ -103,9 +111,37 @@ service cloud.firestore {
         && data.averageViewDuration is number
         && data.averageViewDuration >= 0
         && data.averageViewDuration <= 604800
+        && (!('averageViewPercentage' in data)
+          || (data.averageViewPercentage is number
+            && data.averageViewPercentage >= 0
+            && data.averageViewPercentage <= 10000))
         && data.subscribersGained is number
         && data.subscribersGained >= -1000000000000
         && data.subscribersGained <= 1000000000000
+        && (!('subscribersLost' in data)
+          || (data.subscribersLost is number
+            && data.subscribersLost >= 0
+            && data.subscribersLost <= 1000000000000))
+        && (!('likes' in data)
+          || (data.likes is number
+            && data.likes >= 0
+            && data.likes <= 10000000000000000))
+        && (!('comments' in data)
+          || (data.comments is number
+            && data.comments >= 0
+            && data.comments <= 10000000000000000))
+        && (!('shares' in data)
+          || (data.shares is number
+            && data.shares >= 0
+            && data.shares <= 10000000000000000))
+        && (!('videosAddedToPlaylists' in data)
+          || (data.videosAddedToPlaylists is number
+            && data.videosAddedToPlaylists >= 0
+            && data.videosAddedToPlaylists <= 10000000000000000))
+        && (!('videosRemovedFromPlaylists' in data)
+          || (data.videosRemovedFromPlaylists is number
+            && data.videosRemovedFromPlaylists >= 0
+            && data.videosRemovedFromPlaylists <= 10000000000000000))
         && (!('estimatedRevenue' in data)
           || data.estimatedRevenue == null
           || (data.estimatedRevenue is number
@@ -113,10 +149,55 @@ service cloud.firestore {
             && data.estimatedRevenue <= 1000000000000));
     }
 
+    function isValidOwnerData(data) {
+      return data is map
+        && data.keys().hasOnly([
+          'customUrl',
+          'country',
+          'description',
+          'keywords',
+          'privacyStatus',
+          'longUploadsStatus',
+          'isLinked',
+          'madeForKids',
+          'selfDeclaredMadeForKids',
+          'uploadsPlaylistId',
+          'analyticsAccess',
+          'monetaryAnalyticsAccess'
+        ])
+        && data.keys().hasAll([
+          'customUrl',
+          'country',
+          'description',
+          'keywords',
+          'privacyStatus',
+          'longUploadsStatus',
+          'isLinked',
+          'madeForKids',
+          'selfDeclaredMadeForKids',
+          'uploadsPlaylistId',
+          'analyticsAccess',
+          'monetaryAnalyticsAccess'
+        ])
+        && isBoundedString(data.customUrl, 0, 200)
+        && isBoundedString(data.country, 0, 8)
+        && isBoundedString(data.description, 0, 2000)
+        && isBoundedString(data.keywords, 0, 1000)
+        && isBoundedString(data.privacyStatus, 0, 32)
+        && isBoundedString(data.longUploadsStatus, 0, 32)
+        && isBoundedString(data.uploadsPlaylistId, 0, 128)
+        && data.isLinked is bool
+        && data.madeForKids is bool
+        && data.selfDeclaredMadeForKids is bool
+        && data.analyticsAccess is bool
+        && data.monetaryAnalyticsAccess is bool;
+    }
+
     function isValidConnection(data) {
       return data is map
         && data.keys().hasOnly([
           'channel',
+          'ownerData',
           'analyticsSummary',
           'connectedAt'
         ])
@@ -126,6 +207,7 @@ service cloud.firestore {
           'connectedAt'
         ])
         && isValidChannel(data.channel)
+        && (!('ownerData' in data) || isValidOwnerData(data.ownerData))
         && (data.analyticsSummary == null
           || isValidAnalyticsSummary(data.analyticsSummary))
         && data.connectedAt is int

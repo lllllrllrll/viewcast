@@ -11,20 +11,24 @@ import {
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 import {isGeminiAvailable} from "./gemini-client.js?v=8";
 import { addNotifications } from "../components/notifications.js";
+import {studioVideoCardsHtml, syncVideoLibrarySelection} from "../components/youtube-video-library.js?v=1";
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
+import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
+import {readCachedYouTubeVideos, saveCachedYouTubeVideos} from "./services/youtube-video-cache.js?v=1";
+import {
+  activeYouTubeChannelId,
+  clearCachedYouTubeAccessToken,
+  readCachedYouTubeAccessToken
+} from "./services/youtube-session.js?v=1";
 import {
   average,
   bestThumbnail,
   compactNumber,
-  dateLabel,
-  durationFromIso,
   durationFromSeconds,
-  escapeHtml,
   median,
   numberValue,
   secondsFromIso,
   shortText,
-  wholeNumber,
   youtubeCategoryName
 } from "./insights-format.js?v=1";
 import {
@@ -32,18 +36,18 @@ import {
   fetchChannelVideos,
   fetchVideosByIds,
   fetchYouTubeJson as fetchJson
-} from "./insights-youtube.js?v=1";
-import * as insightsModel from "./insights-model.js?v=5";
+} from "./insights-youtube.js?v=5";
+import * as insightsModel from "./insights-model.js?v=8";
 import {
   buildGeminiTrendPlan,
   compactAdviceSummary,
   setGeminiCreatorContext
-} from "./insights-gemini.js?v=2";
+} from "./insights-gemini.js?v=4";
 import {
   buildGeminiChatReply,
   buildGeminiPageInsights,
   normalizeGeminiInsights
-} from "./insights-gemini-page.js?v=2";
+} from "./insights-gemini-page.js?v=3";
 import {renderTrendSections} from "../components/insights-trend-renderer.js?v=2";
 
 const {
@@ -101,15 +105,13 @@ const chatInput = document.getElementById("insightChatInput");
 const insightTabs = [...document.querySelectorAll("[data-insights-tab]")];
 const insightTabPanels = [...document.querySelectorAll("[data-insights-panel]")];
 
-const tokenStorageKey = "viewcastYouTubeAccessToken";
 const connectionStorageKey = "viewcastYouTubeConnection";
 const allConnectionsStorageKey = "viewcastYouTubeAllConnections";
 const channelStorageKey = "viewcastYouTubeChannel";
-const videosStorageKeyPrefix = "viewcastYouTubeVideos:";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 32;
+const insightsCacheVersion = 34;
 const insightsCacheMaxAge = 24 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -148,42 +150,16 @@ function setBusy(isBusy, label = latestChannelSummary ? "Refresh Insights" : "Ge
   }
 }
 
-function videosStorageKey() {
-  return currentUser ? `${videosStorageKeyPrefix}${currentUser.uid}:${activeChannelId() || "none"}` : "";
-}
-
-function activeChannelId() {
-  try {
-    return JSON.parse(localStorage.getItem(connectionStorageKey) || "null")?.channel?.id || "";
-  } catch (error) {
-    return "";
-  }
-}
-
 function readCachedVideos() {
-  const key = videosStorageKey();
-  if (!key) return [];
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(key) || "null");
-    return Array.isArray(saved?.videos) ? saved.videos : [];
-  } catch (error) {
-    sessionStorage.removeItem(key);
-    return [];
-  }
+  return readCachedYouTubeVideos(currentUser?.uid, activeYouTubeChannelId());
 }
 
 function saveCachedVideos(videos) {
-  const key = videosStorageKey();
-  if (!key) return;
-  sessionStorage.setItem(key, JSON.stringify({
-    version: 2,
-    videos,
-    savedAt: Date.now()
-  }));
+  saveCachedYouTubeVideos(currentUser?.uid, activeYouTubeChannelId(), videos);
 }
 
 function insightsStorageKey(focusVideoId = "") {
-  return currentUser ? `${insightsStorageKeyPrefix}${currentUser.uid}:${activeChannelId() || "none"}:${focusVideoId || "channel"}` : "";
+  return currentUser ? `${insightsStorageKeyPrefix}${currentUser.uid}:${activeYouTubeChannelId() || "none"}:${focusVideoId || "channel"}` : "";
 }
 
 function insightsFingerprint(videos, focusVideoId = "") {
@@ -196,9 +172,11 @@ function insightsFingerprint(videos, focusVideoId = "") {
       id: video.id,
       publishedAt: video.snippet?.publishedAt || "",
       title: video.snippet?.title || "",
-      views: video.statistics?.viewCount || "",
-      likes: video.statistics?.likeCount || "",
-      comments: video.statistics?.commentCount || ""
+      views: video.ownerAnalytics?.views ?? "",
+      likes: video.ownerAnalytics?.likes ?? "",
+      comments: video.ownerAnalytics?.comments ?? "",
+      watchMinutes: video.ownerAnalytics?.estimatedMinutesWatched ?? "",
+      averageViewPercentage: video.ownerAnalytics?.averageViewPercentage ?? ""
     }))
   });
 }
@@ -310,7 +288,7 @@ function saveCachedInsights(summary, videos, focusVideoId = "") {
   }).slice(0, 4);
 
   localStorage.setItem(
-    `${recentTrendsStorageKeyPrefix}${currentUser.uid}:${activeChannelId() || "none"}`,
+    `${recentTrendsStorageKeyPrefix}${currentUser.uid}:${activeYouTubeChannelId() || "none"}`,
     JSON.stringify({
       trends,
       category: summary.channelLane?.specificCategory ||
@@ -333,11 +311,7 @@ function setLibraryBusy(isBusy) {
 
 function updateLibrarySelection(videoId) {
   selectedVideoId = videoId || "";
-  videoLibrary?.querySelectorAll(".video-library-card").forEach((card) => {
-    const isActive = card.dataset.videoId === selectedVideoId;
-    card.classList.toggle("active", isActive);
-    card.setAttribute("aria-pressed", String(isActive));
-  });
+  syncVideoLibrarySelection(videoLibrary, selectedVideoId);
 }
 
 function renderVideoLibrary(videos = channelVideos) {
@@ -349,51 +323,22 @@ function renderVideoLibrary(videos = channelVideos) {
     return;
   }
 
-  videoLibrary.innerHTML = channelVideos.map((video) => {
-    const snippet = video.snippet || {};
-    const stats = video.statistics || {};
-    const title = snippet.title || "Untitled video";
-    const thumbnail = bestThumbnail(snippet.thumbnails);
-    const published = dateLabel(snippet.publishedAt);
-    const duration = durationFromIso(video.contentDetails?.duration);
-    const views = wholeNumber(stats.viewCount);
-    const meta = [published, views ? views + " views" : ""].filter(Boolean).join(" - ");
-    return '<button class="video-library-card" type="button" data-video-id="' + escapeHtml(video.id) + '" aria-pressed="false">'
-      + '<div class="video-library-thumb">'
-      + (thumbnail ? '<img src="' + escapeHtml(thumbnail) + '" alt="' + escapeHtml(title) + ' thumbnail">' : "")
-      + (duration ? '<span class="video-library-duration">' + escapeHtml(duration) + '</span>' : "")
-      + '</div>'
-      + '<div class="video-library-body"><b>' + escapeHtml(title) + '</b><span>' + escapeHtml(meta || "Upload") + '</span></div>'
-      + '</button>';
-  }).join("");
+  videoLibrary.innerHTML = studioVideoCardsHtml(channelVideos);
 
   updateLibrarySelection(selectedVideoId);
 }
 
 function readCachedAccessToken() {
-  try {
-    const saved = JSON.parse(
-      sessionStorage.getItem(tokenStorageKey) || "null"
-    );
-    if (saved?.accessToken && saved.uid === currentUser?.uid && saved.channelId === activeChannelId() && saved.expiresAt > Date.now() + 60 * 1000) {
-      return saved.accessToken;
-    }
-  } catch (error) {
-    // Fall through and clear bad token cache below.
-  }
-  localStorage.removeItem(tokenStorageKey);
-  sessionStorage.removeItem(tokenStorageKey);
-  return "";
+  return readCachedYouTubeAccessToken(currentUser?.uid, activeYouTubeChannelId());
 }
 
 function clearCachedAccessToken() {
-  localStorage.removeItem(tokenStorageKey);
-  sessionStorage.removeItem(tokenStorageKey);
+  clearCachedYouTubeAccessToken();
 }
 
 async function requestAccessToken() {
   if (!currentUser) throw new Error("Sign in before generating insights.");
-  return getRenewedYouTubeAccessToken(currentUser.uid, activeChannelId());
+  return getRenewedYouTubeAccessToken(currentUser.uid, activeYouTubeChannelId());
 }
 
 function setMetric(index, value, trend = "", trendClass = "") {
@@ -1062,6 +1007,11 @@ if (form && firebaseConfigured) {
   });
   refreshVideosButton?.addEventListener("click", () =>
     loadVideoLibrary({allowPrompt: true}));
+  startStudioAutoRefresh(async () => {
+    if (!currentUser || !hasLinkedChannel()) return;
+    const videos = await loadVideoLibrary({allowPrompt: true});
+    if (videos.length) setLibraryStatus("Studio statistics updated automatically.");
+  });
 } else if (form) {
   setStatus("Firebase is not configured yet.");
 }
