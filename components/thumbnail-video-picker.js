@@ -2,7 +2,7 @@ import {selectThumbnailFile} from "../js/thumbnail-analyzer.js?v=13";
 import {initializeApp, getApps} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {getAuth, onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {firebaseConfig, firebaseConfigured} from "../js/firebase-config.js";
-import {getRenewedYouTubeAccessToken} from "../js/youtube-auth.js?v=3";
+import {getRenewedYouTubeAccessToken} from "../js/youtube-auth.js?v=4";
 import {fetchChannelVideos} from "../js/insights-youtube.js?v=5";
 import {readCachedYouTubeVideos, saveCachedYouTubeVideos} from "../js/services/youtube-video-cache.js?v=1";
 import {activeYouTubeChannelId} from "../js/services/youtube-session.js?v=1";

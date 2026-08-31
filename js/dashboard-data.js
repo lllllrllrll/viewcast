@@ -8,7 +8,7 @@ import {
   getDoc,
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
-import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
+import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=4";
 import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
 import {fetchStudioReport} from "./services/youtube-studio-analytics.js?v=2";
 import {fetchYouTubeJson} from "./insights-youtube.js?v=5";
@@ -100,6 +100,16 @@ function timeAgo(timestamp) {
 
 function overviewStorageKey(user, channelId = "guest") {
   return `${overviewStorageKeyPrefix}${user?.uid || "guest"}:${channelId}`;
+}
+
+function hasUsableOverviewData(overview) {
+  return Boolean(
+    overview && (
+      overview.daily?.length ||
+      overview.videos?.length ||
+      overview.videoAnalytics?.length
+    )
+  );
 }
 
 function readCachedOverview(user, channelId) {
@@ -820,6 +830,33 @@ function applyYouTubeData(connection, overviewData = null, user = null) {
   window.dispatchEvent(new CustomEvent("viewcast:dashboard-data", {detail: window.viewcastDashboardState}));
 }
 
+function rejectAfter(milliseconds, message) {
+  return new Promise((_, reject) => {
+    window.setTimeout(() => reject(new Error(message)), milliseconds);
+  });
+}
+
+async function storedConnections(db, user, fallbackConnection) {
+  try {
+    const snapshot = await Promise.race([
+      getDoc(doc(db, "users", user.uid)),
+      rejectAfter(4000, "Firestore connection lookup timed out.")
+    ]);
+    const data = snapshot.exists() ? snapshot.data() : {};
+    const connections = Array.isArray(data.youtubeConnections)
+      ? [...data.youtubeConnections]
+      : [];
+    if (data.youtubeConnection &&
+        !connections.some((connection) => connection.channel?.id === data.youtubeConnection.channel?.id)) {
+      connections.push(data.youtubeConnection);
+    }
+    return connections;
+  } catch (error) {
+    console.warn("Using the locally saved channel while Firestore reconnects.", error);
+    return fallbackConnection ? [fallbackConnection] : [];
+  }
+}
+
 async function loadYouTubeData(user, db, days = 30) {
   const shouldLoadChannelHistory = Boolean(document.getElementById("subsChart"));
   if (shouldLoadChannelHistory) days = Math.max(days, 180);
@@ -827,22 +864,30 @@ async function loadYouTubeData(user, db, days = 30) {
   const cachedOverview = readCachedOverview(user, activeConnection?.channel?.id);
   applyYouTubeData(activeConnection, cachedOverview, user);
 
-  const snapshot = await getDoc(doc(db, "users", user.uid));
-  const data = snapshot.exists() ? snapshot.data() : {};
-  const connections = data.youtubeConnections || [];
-  if (data.youtubeConnection && !connections.some(c => c.channel.id === data.youtubeConnection.channel.id)) connections.push(data.youtubeConnection);
+  const connections = await storedConnections(db, user, activeConnection);
 
   localStorage.setItem(allConnectionsKey, JSON.stringify(connections));
   const currentActive = connections.find(c => c.channel.id === activeConnection?.channel?.id) || connections[0];
   if (currentActive) saveCachedConnection(currentActive);
 
   if (!currentActive?.channel?.id) return;
-  const accessToken = readCachedYouTubeAccessToken(user.uid, currentActive.channel.id) || await getRenewedYouTubeAccessToken(
-    user.uid,
-    currentActive.channel.id
-  ).catch(() => "");
+  let accessToken = readCachedYouTubeAccessToken(user.uid, currentActive.channel.id);
   if (!accessToken) {
-    if (!cachedOverview) setIntelligence("freshness", "Studio authorization unavailable");
+    try {
+      accessToken = await getRenewedYouTubeAccessToken(user.uid, currentActive.channel.id);
+    } catch (error) {
+      console.warn("Could not restore the linked YouTube Studio authorization.", error);
+      if (!hasUsableOverviewData(cachedOverview)) {
+        setIntelligence("freshness", "Studio authorization needs attention");
+        document.querySelectorAll("[data-youtube-summary]").forEach((element) => {
+          element.textContent = error?.message || "The linked YouTube Studio authorization could not be restored.";
+        });
+      }
+      return;
+    }
+  }
+  if (!accessToken) {
+    if (!hasUsableOverviewData(cachedOverview)) setIntelligence("freshness", "Studio authorization unavailable");
     return;
   }
 

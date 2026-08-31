@@ -2,7 +2,20 @@ import {numberValue, shortText} from "./insights-format.js?v=1";
 import {enrichOwnedVideosWithStudio} from "./services/youtube-studio-analytics.js?v=2";
 
 export async function fetchYouTubeJson(url, accessToken) {
-  const response = await fetch(url, {headers: {Authorization: `Bearer ${accessToken}`}});
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: {Authorization: `Bearer ${accessToken}`},
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error("YouTube did not respond in time.");
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(payload.error?.message || "YouTube API request failed.");

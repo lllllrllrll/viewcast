@@ -15,7 +15,7 @@ import { firebaseConfig, firebaseConfigured, googleOAuthClientId } from "./fireb
 import {
   exchangeYouTubeCode,
   revokeStoredYouTubeAuthorization
-} from "./youtube-auth.js?v=3";
+} from "./youtube-auth.js?v=4";
 import {fetchStudioReport} from "./services/youtube-studio-analytics.js?v=2";
 import {fetchYouTubeJson} from "./insights-youtube.js?v=5";
 

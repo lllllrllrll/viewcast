@@ -10,6 +10,21 @@ localStorage.removeItem(tokenStorageKey);
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const functions = getFunctions(app, "us-central1");
 
+function withTimeout(promise, milliseconds, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => window.setTimeout(() => reject(new Error(message)), milliseconds))
+  ]);
+}
+
+async function readyAppCheck() {
+  return withTimeout(
+    ensureAppCheckToken(app),
+    10000,
+    "Firebase App Check could not authorize this browser. Allow localhost in the App Check reCAPTCHA configuration, then reload."
+  );
+}
+
 function saveToken(result, uid) {
   const token = {
     accessToken: result.accessToken,
@@ -23,9 +38,13 @@ function saveToken(result, uid) {
 }
 
 export async function exchangeYouTubeCode(code, redirectUri, uid) {
-  await ensureAppCheckToken(app);
+  await readyAppCheck();
   const call = httpsCallable(functions, "exchangeYouTubeAuthorizationCode");
-  const response = await call({code, redirectUri});
+  const response = await withTimeout(
+    call({code, redirectUri}),
+    20000,
+    "YouTube linking timed out while contacting the secure backend."
+  );
   return {
     ...response.data,
     accessToken: saveToken(response.data || {}, uid)
@@ -43,9 +62,13 @@ export async function getRenewedYouTubeAccessToken(uid, channelId = "") {
   } catch {
     sessionStorage.removeItem(tokenStorageKey);
   }
-  await ensureAppCheckToken(app);
+  await readyAppCheck();
   const call = httpsCallable(functions, "getYouTubeAccessToken");
-  const response = await call();
+  const response = await withTimeout(
+    call(),
+    20000,
+    "The secure YouTube authorization service timed out. Reload and try again."
+  );
   if (channelId && response.data?.channelId !== channelId) {
     throw new Error("The linked Google account does not own the active YouTube channel.");
   }
@@ -53,7 +76,7 @@ export async function getRenewedYouTubeAccessToken(uid, channelId = "") {
 }
 
 export async function revokeStoredYouTubeAuthorization() {
-  await ensureAppCheckToken(app);
+  await readyAppCheck();
   const call = httpsCallable(functions, "revokeYouTubeAuthorization");
   try {
     await call();

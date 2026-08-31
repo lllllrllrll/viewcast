@@ -1,4 +1,4 @@
-import {revokeStoredYouTubeAuthorization} from "./youtube-auth.js?v=3";
+import {revokeStoredYouTubeAuthorization} from "./youtube-auth.js?v=4";
 
 const TOKEN_KEY = "viewcastYouTubeAccessToken";
 

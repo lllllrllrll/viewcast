@@ -12,7 +12,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 import {isGeminiAvailable} from "./gemini-client.js?v=8";
 import { addNotifications } from "../components/notifications.js";
 import {studioVideoCardsHtml, syncVideoLibrarySelection} from "../components/youtube-video-library.js?v=1";
-import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=3";
+import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=4";
 import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
 import {readCachedYouTubeVideos, saveCachedYouTubeVideos} from "./services/youtube-video-cache.js?v=1";
 import {
