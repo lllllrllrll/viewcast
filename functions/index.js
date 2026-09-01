@@ -13,8 +13,7 @@ if (!getApps().length) initializeApp();
 // Set using: firebase functions:secrets:set GEMINI_API_KEY
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const googleOAuthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
-const GOOGLE_OAUTH_CLIENT_ID =
-  "351557961377-ocbt4u5dm00n0mqfjvf808rpakc0b5bt.apps.googleusercontent.com";
+const GOOGLE_OAUTH_CLIENT_ID = "";
 const enforceAppCheck = true;
 
 // Allowed models to prevent abuse with expensive models

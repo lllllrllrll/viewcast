@@ -21,6 +21,7 @@ import {
   secondsFromIso, wholeNumber
 } from "./insights-format.js?v=1";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
+import {createStatusSetter, setAriaBusy} from "./services/ui-state.js?v=1";
 
 const emptyValue = "\u00a0";
 const connectionStorageKey = "viewcastYouTubeConnection";
@@ -28,6 +29,7 @@ const allConnectionsKey = "viewcastYouTubeAllConnections";
 const channelStorageKey = "viewcastYouTubeChannel";
 const overviewStorageKeyPrefix = "viewcastOverviewData:";
 const overviewCacheVersion = 2;
+const setYouTubeSummaryStatus = createStatusSetter(document.querySelectorAll("[data-youtube-summary]"));
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 const firstDayHistoryKeyPrefix = "viewcastFirstDayHistory:";
 let selectedViewsDays = 30;
@@ -879,9 +881,7 @@ async function loadYouTubeData(user, db, days = 30) {
       console.warn("Could not restore the linked YouTube Studio authorization.", error);
       if (!hasUsableOverviewData(cachedOverview)) {
         setIntelligence("freshness", "Studio authorization needs attention");
-        document.querySelectorAll("[data-youtube-summary]").forEach((element) => {
-          element.textContent = error?.message || "The linked YouTube Studio authorization could not be restored.";
-        });
+        setYouTubeSummaryStatus(error?.message || "The linked YouTube Studio authorization could not be restored.");
       }
       return;
     }
@@ -906,9 +906,7 @@ async function loadYouTubeData(user, db, days = 30) {
     console.warn("Could not refresh the private YouTube Studio dashboard.", error);
     if (!cachedOverview) {
       setIntelligence("freshness", "Studio sync failed");
-      document.querySelectorAll("[data-youtube-summary]").forEach((element) => {
-        element.textContent = error?.message || "Private YouTube Studio analytics could not be loaded.";
-      });
+      setYouTubeSummaryStatus(error?.message || "Private YouTube Studio analytics could not be loaded.");
     }
   }
 }
@@ -961,13 +959,13 @@ if (firebaseConfigured && document.querySelector("[data-youtube-field], [data-yo
         if (!days) return;
         button.parentElement.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
         button.classList.add("active");
-        button.setAttribute("aria-busy", "true");
+        setAriaBusy(button, true);
         try {
           await loadViewsTrendRange(user, days);
         } catch (error) {
           console.error("Could not load the selected views range.", error);
         } finally {
-          button.removeAttribute("aria-busy");
+          setAriaBusy(button, false);
         }
       });
     });

@@ -26,6 +26,7 @@ import {
   firebaseConfigured
 } from "./firebase-config.js";
 import { secureSignOut } from "./privacy.js";
+import {createBusySetter, createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
 
 const loginUrl = new URL("../login.html", import.meta.url);
 const dashboardUrl = new URL("../index.html", import.meta.url);
@@ -46,13 +47,11 @@ const errorMessages = {
   "auth/weak-password": "Use a password with at least six characters."
 };
 
-function showMessage(message, type = "error") {
-  const element = document.getElementById("authMessage");
-  if (!element) return;
-  element.textContent = message;
-  element.className = `auth-message ${type}`;
-  element.hidden = false;
-}
+const showMessage = createStatusSetter(document.getElementById("authMessage"), {
+  defaultType: "error",
+  className: (type) => `auth-message ${type}`,
+  showWhenSet: true
+});
 
 function showStep(message) {
   showMessage(message, "status");
@@ -101,20 +100,17 @@ function loginUrlForCurrentPage() {
   return url.href;
 }
 
-function setFormBusy(isBusy) {
-  const form = document.getElementById("authForm");
-  if (!form) return;
-  form.querySelectorAll("button, input").forEach((control) => {
-    control.disabled = isBusy;
-  });
-  const submit = document.getElementById("authSubmit");
-  if (submit) submit.textContent = isBusy ? "Please wait..." : submit.dataset.label;
-}
+const authForm = document.getElementById("authForm");
+const authSubmit = document.getElementById("authSubmit");
+const setFormBusy = createBusySetter(
+  [...(authForm?.querySelectorAll("button, input") || [])].map((control) => ({
+    element: control,
+    updateLabel: control === authSubmit
+  })),
+  {busyLabel: "Please wait...", idleLabel: () => authSubmit?.dataset.label || "Sign in"}
+);
 
-function setSubmitStatus(message) {
-  const submit = document.getElementById("authSubmit");
-  if (submit) submit.textContent = message;
-}
+const setSubmitStatus = createStatusSetter(authSubmit);
 
 function friendlyError(error) {
   if (error?.code === "permission-denied") {
@@ -364,9 +360,7 @@ if (!firebaseConfigured) {
       "Firebase is not configured yet. Add your web app values in js/firebase-config.js.",
       "setup"
     );
-    document.getElementById("authForm")?.querySelectorAll("button, input").forEach((control) => {
-      control.disabled = true;
-    });
+    setControlsDisabled(document.getElementById("authForm")?.querySelectorAll("button, input"), true);
   } else {
     const setupUrl = new URL(loginUrl.href);
     setupUrl.searchParams.set("setup", "required");
@@ -446,9 +440,7 @@ if (!firebaseConfigured) {
         "Firebase could not initialize. Check the project configuration and authorized domains.",
         "error"
       );
-      document.getElementById("authForm")?.querySelectorAll("button, input").forEach((control) => {
-        control.disabled = true;
-      });
+      setControlsDisabled(document.getElementById("authForm")?.querySelectorAll("button, input"), true);
     } else {
       document.body.classList.add("auth-ready");
     }

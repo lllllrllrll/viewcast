@@ -15,6 +15,7 @@ import {
   httpsCallable
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
+import {createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
 
 (function () {
   const featureAvailability = {
@@ -143,7 +144,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
       }
       const button = card.querySelector("[data-plan-choice]");
       if (button) {
-        button.disabled = isCurrent;
+        setControlsDisabled(button, isCurrent);
         button.textContent = isCurrent
           ? "Active Plan"
           : button.dataset.planChoice === "basic"
@@ -160,17 +161,8 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     updateUsageBar("aiAnalyses", aiAnalysesUsed, plan.aiAnalyses);
   }
 
-  function showStatus(message) {
-    if (!status) return;
-    status.textContent = message;
-    status.hidden = false;
-  }
-
-  function setDeleteStatus(message, type = "") {
-    if (!deleteStatus) return;
-    deleteStatus.textContent = message;
-    deleteStatus.dataset.type = type;
-  }
+  const showStatus = createStatusSetter(status, {hideWhenEmpty: true});
+  const setDeleteStatus = createStatusSetter(deleteStatus, {reflectType: true});
 
   function closeDeleteModal() {
     if (!deleteModal) return;
@@ -239,7 +231,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 
     if (setting === "emailNotifications" && !featureAvailability.emailNotifications) {
       group.querySelectorAll("button").forEach((button) => {
-        button.disabled = true;
+        setControlsDisabled(button, true);
         button.title = "Email notifications are coming soon";
       });
       group.setAttribute("aria-disabled", "true");
@@ -293,7 +285,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
       deletePassword.focus();
       return;
     }
-    confirmDeleteButton.disabled = true;
+    setControlsDisabled(confirmDeleteButton, true);
     setDeleteStatus("Confirming your identity…", "info");
     try {
       const user = accountUser;
@@ -309,7 +301,7 @@ import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
     } catch (error) {
       console.error("Account deletion failed.", error);
       setDeleteStatus(deleteErrorMessage(error), "error");
-      confirmDeleteButton.disabled = false;
+      setControlsDisabled(confirmDeleteButton, false);
     }
   });
 

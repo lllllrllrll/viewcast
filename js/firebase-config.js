@@ -2,25 +2,24 @@
 // This object is safe to use in client-side code; access is controlled by
 // Firebase Authentication and your Firebase security rules.
 export const firebaseConfig = {
-  apiKey: "AIzaSyDhMbjM7iL56rjsfm1LyE2FhiC1gje0DKE",
-  authDomain: "viewcast-a6f31.firebaseapp.com",
-  projectId: "viewcast-a6f31",
-  storageBucket: "viewcast-a6f31.firebasestorage.app",
-  messagingSenderId: "351557961377",
-  appId: "1:351557961377:web:fb29d0a5df97d1be3b52e0",
-  measurementId: "G-L7TDZVX5WC"
+  apiKey: "AIzaSyAXPp9GPY6PHZLdNL-qRroKjjg0xRx9Bz4",
+  authDomain: "viewcast2.firebaseapp.com",
+  projectId: "viewcast2",
+  storageBucket: "viewcast2.firebasestorage.app",
+  messagingSenderId: "109179683402",
+  appId: "1:109179683402:web:803bd04b057012cf1d1cb3"
 };
 
 // Google OAuth 2.0 Web Client ID used only for YouTube API authorization.
 // Keep channel links in Firestore instead of linking Google providers to Firebase Auth.
-export const googleOAuthClientId = "351557961377-ocbt4u5dm00n0mqfjvf808rpakc0b5bt.apps.googleusercontent.com";
+export const googleOAuthClientId = "";
 
 // Gemini is called only through Firebase Functions. Never place its API key in client code.
 export const geminiModel = "gemini-3.1-flash-lite";
 
 // Public, domain-restricted reCAPTCHA Enterprise key registered with Firebase
 // App Check. This is intentionally client-visible and is not a secret.
-export const firebaseAppCheckSiteKey = "6LcKsYQtAAAAAKJcohpCNs25IjJf2MstrkUBRY5k";
+export const firebaseAppCheckSiteKey = "";
 
 export const firebaseConfigured = Boolean(
   firebaseConfig.apiKey &&
@@ -32,6 +31,6 @@ export const firebaseConfigured = Boolean(
 export const firebaseAuthorizedDomains = [
   "localhost",
   "viewcast1.netlify.app",
-  "viewcast-a6f31.firebaseapp.com",
-  "viewcast-a6f31.web.app"
+  "viewcast2.firebaseapp.com",
+  "viewcast2.web.app"
 ];

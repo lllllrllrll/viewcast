@@ -15,6 +15,7 @@ import {studioVideoCardsHtml, syncVideoLibrarySelection} from "../components/you
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=4";
 import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
 import {readCachedYouTubeVideos, saveCachedYouTubeVideos} from "./services/youtube-video-cache.js?v=1";
+import {createBusySetter, createStatusSetter, ensureStatusElement} from "./services/ui-state.js?v=1";
 import {
   activeYouTubeChannelId,
   clearCachedYouTubeAccessToken,
@@ -98,6 +99,7 @@ const insightRefreshEmptyContent = document.getElementById("insightRefreshEmptyC
 const analyzerDashboard = document.getElementById("analyzerDashboard");
 const analyzerLoading = document.getElementById("analyzerLoading");
 const insightErrorPanel = document.getElementById("insightErrorPanel");
+const setInsightErrorDetail = createStatusSetter(insightErrorPanel?.querySelector("p"));
 const insightChannelEmpty = document.getElementById("insightChannelEmpty");
 const chatMessages = document.getElementById("chatMessages");
 const chatForm = document.getElementById("insightChatForm");
@@ -124,31 +126,22 @@ let latestChannelSummary = null;
 let chatHistory = [];
 let savedChannelContext = {channelTopic: "", channelContext: ""};
 
-function setStatus(message) {
-  let status = document.getElementById("videoAnalysisStatus");
-  if (!status && analyzerLoading) {
-    status = document.createElement("p");
-    status.id = "videoAnalysisStatus";
-    status.className = "analysis-status";
-    analyzerLoading.querySelector(".analyzer-loader")?.append(status);
+const setStatus = createStatusSetter(ensureStatusElement({
+  id: "videoAnalysisStatus",
+  parent: analyzerLoading?.querySelector(".analyzer-loader"),
+  tagName: "p",
+  className: "analysis-status"
+}), {hideWhenEmpty: true});
+const setBusy = createBusySetter([
+  submitButton,
+  {
+    element: refreshInsightsPageButton,
+    labelElement: () => refreshInsightsPageButton?.querySelector("span")
   }
-  if (status) {
-    status.textContent = message || "";
-    status.hidden = !message;
-  }
-}
-
-function setBusy(isBusy, label = latestChannelSummary ? "Refresh Insights" : "Generate Insights") {
-  if (submitButton) {
-    submitButton.disabled = isBusy;
-    submitButton.textContent = isBusy ? "Analyzing..." : label;
-  }
-  if (refreshInsightsPageButton) {
-    refreshInsightsPageButton.disabled = isBusy;
-    const labelElement = refreshInsightsPageButton.querySelector("span");
-    if (labelElement) labelElement.textContent = isBusy ? "Analyzing..." : label;
-  }
-}
+], {
+  busyLabel: "Analyzing...",
+  idleLabel: () => latestChannelSummary ? "Refresh Insights" : "Generate Insights"
+});
 
 function readCachedVideos() {
   return readCachedYouTubeVideos(currentUser?.uid, activeYouTubeChannelId());
@@ -299,15 +292,12 @@ function saveCachedInsights(summary, videos, focusVideoId = "") {
   );
 }
 
-function setLibraryStatus(message) {
-  if (videoLibraryStatus) videoLibraryStatus.textContent = message || "";
-}
-
-function setLibraryBusy(isBusy) {
-  if (!refreshVideosButton) return;
-  refreshVideosButton.disabled = isBusy;
-  refreshVideosButton.textContent = isBusy ? "Loading..." : "Refresh Videos";
-}
+const setLibraryStatus = createStatusSetter(videoLibraryStatus);
+const setLibraryBusy = createBusySetter(refreshVideosButton, {
+  busyLabel: "Loading...",
+  idleLabel: "Refresh Videos"
+});
+const setChatBusy = createBusySetter(chatInput, {updateLabel: false});
 
 function updateLibrarySelection(videoId) {
   selectedVideoId = videoId || "";
@@ -536,8 +526,7 @@ function showInsightGenerationError(message = "AI Insights could not be generate
   setAnalyzerResultsVisible(false);
   if (insightErrorPanel) {
     insightErrorPanel.hidden = false;
-    const detail = insightErrorPanel.querySelector("p");
-    if (detail) detail.textContent = message;
+    setInsightErrorDetail(message);
   }
   setRefreshButtonPlacement(true, insightErrorPanel?.querySelector(".insight-error-content"));
   setStatus(message);
@@ -897,7 +886,7 @@ async function sendChatQuestion(question) {
   appendChatMessage("user", question);
   if (chatInput) chatInput.value = "";
   const thinking = appendChatMessage("assistant", "Thinking...", false);
-  if (chatInput) chatInput.disabled = true;
+  setChatBusy(true);
 
   try {
     const reply = await buildGeminiChatReply(question, latestChannelSummary, chatHistory);
@@ -913,7 +902,7 @@ async function sendChatQuestion(question) {
     }
   } finally {
     if (chatInput) {
-      chatInput.disabled = false;
+      setChatBusy(false);
       chatInput.focus();
     }
   }

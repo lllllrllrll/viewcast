@@ -1,3 +1,5 @@
+import {createStatusSetter, setControlsDisabled} from "../js/services/ui-state.js?v=1";
+
 (function () {
   const paymentsAvailable = false;
   const paymentsUnavailableMessage = "Paid plans are coming soon. Your Basic plan remains active and no payment will be attempted.";
@@ -59,6 +61,7 @@
   const modal = document.getElementById("planModal");
   const closeBtn = document.getElementById("closeModal");
   const statusEl = document.getElementById("modalStatus");
+  const setPlanStatus = createStatusSetter(statusEl, {hideWhenEmpty: true});
   const planCards = document.querySelectorAll("[data-plan-card]");
   const dialog = modal.querySelector("[role='dialog']");
   let previouslyFocused = null;
@@ -87,7 +90,7 @@
       if (btn) {
         const isPaidPlan = planKey !== "basic";
         const isUnavailable = isPaidPlan && !paymentsAvailable;
-        btn.disabled = isCurrent || isUnavailable;
+        setControlsDisabled(btn, isCurrent || isUnavailable);
         btn.textContent = isCurrent ? "Active Plan" : isUnavailable ? "Coming Soon" : planKey === "pro" ? "Upgrade to Pro" : "Choose Premium";
         if (isUnavailable) {
           btn.title = "Secure checkout is not available yet";
@@ -104,12 +107,7 @@
 
   window.showPlanModal = function (message) {
     const statusMessage = message || (!paymentsAvailable ? paymentsUnavailableMessage : "");
-    if (statusMessage) {
-      statusEl.textContent = statusMessage;
-      statusEl.hidden = false;
-    } else {
-      statusEl.hidden = true;
-    }
+    setPlanStatus(statusMessage);
     previouslyFocused = document.activeElement;
     modal.hidden = false;
     updateDisplay();
@@ -157,8 +155,7 @@
   document.querySelectorAll("[data-plan-choice]").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (btn.dataset.planChoice === "basic") return;
-      statusEl.textContent = paymentsUnavailableMessage;
-      statusEl.hidden = false;
+      setPlanStatus(paymentsUnavailableMessage);
     });
   });
 

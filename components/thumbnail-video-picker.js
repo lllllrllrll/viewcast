@@ -6,9 +6,11 @@ import {getRenewedYouTubeAccessToken} from "../js/youtube-auth.js?v=4";
 import {fetchChannelVideos} from "../js/insights-youtube.js?v=5";
 import {readCachedYouTubeVideos, saveCachedYouTubeVideos} from "../js/services/youtube-video-cache.js?v=1";
 import {activeYouTubeChannelId} from "../js/services/youtube-session.js?v=1";
+import {createStatusSetter, setControlsDisabled} from "../js/services/ui-state.js?v=1";
 
 const grid = document.querySelector("#thumbnailVideoGrid");
 const status = document.querySelector("#thumbnailVideosStatus");
+const setVideoStatus = createStatusSetter(status, {reflectType: true});
 let currentUser = null;
 
 function savedVideos() {
@@ -33,9 +35,8 @@ function safeFileName(title) {
 async function chooseVideo(video, button) {
   const source = thumbnailUrl(video);
   if (!source) return;
-  button.disabled = true;
-  status.textContent = "Loading the selected thumbnail…";
-  status.dataset.type = "loading";
+  setControlsDisabled(button, true);
+  setVideoStatus("Loading the selected thumbnail…", "loading");
   try {
     const response = await fetch(source);
     if (!response.ok) throw new Error(`Thumbnail request failed (${response.status}).`);
@@ -49,9 +50,8 @@ async function chooseVideo(video, button) {
     document.querySelector("#analyzeThumbnail")?.focus();
   } catch (error) {
     console.error("Could not load the selected YouTube thumbnail.", error);
-    status.textContent = "Could not load that thumbnail. Try another video or upload the image manually.";
-    status.dataset.type = "error";
-    button.disabled = false;
+    setVideoStatus("Could not load that thumbnail. Try another video or upload the image manually.", "error");
+    setControlsDisabled(button, false);
   }
 }
 
@@ -75,10 +75,9 @@ function renderVideos(videos) {
     grid.append(button);
   });
   const count = grid.childElementCount;
-  status.textContent = count
+  setVideoStatus(count
     ? `Choose from ${count} saved channel upload${count === 1 ? "" : "s"}.`
-    : "No Studio-enriched uploads were found for the linked channel.";
-  status.dataset.type = count ? "success" : "";
+    : "No Studio-enriched uploads were found for the linked channel.", count ? "success" : "");
 }
 
 async function refreshVideos() {
@@ -86,14 +85,13 @@ async function refreshVideos() {
   const channelId = activeYouTubeChannelId();
   if (!channelId) {
     renderVideos([]);
-    status.textContent = "Link your YouTube channel to choose from its uploads.";
+    setVideoStatus("Link your YouTube channel to choose from its uploads.");
     return;
   }
 
   const cached = savedVideos();
   if (cached.length) renderVideos(cached);
-  status.textContent = cached.length ? "Refreshing uploads from YouTube Studio…" : "Loading uploads from YouTube Studio…";
-  status.dataset.type = "loading";
+  setVideoStatus(cached.length ? "Refreshing uploads from YouTube Studio…" : "Loading uploads from YouTube Studio…", "loading");
   try {
     const token = await getRenewedYouTubeAccessToken(currentUser.uid, channelId);
     const videos = await fetchChannelVideos(token);
@@ -103,12 +101,10 @@ async function refreshVideos() {
     console.error("Could not load YouTube Studio uploads for thumbnail analysis.", error);
     if (cached.length) {
       renderVideos(cached);
-      status.textContent = "Showing saved Studio uploads. Current analytics could not be refreshed.";
-      status.dataset.type = "error";
+      setVideoStatus("Showing saved Studio uploads. Current analytics could not be refreshed.", "error");
     } else {
       renderVideos([]);
-      status.textContent = error.message || "Could not load uploads from YouTube Studio.";
-      status.dataset.type = "error";
+      setVideoStatus(error.message || "Could not load uploads from YouTube Studio.", "error");
     }
   }
 }
@@ -119,7 +115,7 @@ if (firebaseConfigured && grid && status) {
     currentUser = user || null;
     if (!currentUser) {
       renderVideos([]);
-      status.textContent = "Sign in to load your private YouTube Studio uploads.";
+      setVideoStatus("Sign in to load your private YouTube Studio uploads.");
       return;
     }
     refreshVideos();

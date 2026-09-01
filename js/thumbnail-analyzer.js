@@ -1,5 +1,6 @@
 import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=8";
 import { addNotifications } from "../components/notifications.js";
+import {createBusySetter, createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
 
 export const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -39,13 +40,11 @@ export function imageMimeType(file) {
   return MIME_BY_EXTENSION[extension] || "";
 }
 
-function setStatus(message, type = "") {
-  status.textContent = message;
-  status.dataset.type = type;
-}
+const setStatus = createStatusSetter(status, {reflectType: true});
+const setAnalysisBusy = createBusySetter(analyzeButton, {busyClass: "is-loading", updateLabel: false});
 
 function updateAnalyzeButton() {
-  analyzeButton.disabled = !(selectedFile && thumbnailTitle.value.trim());
+  setControlsDisabled(analyzeButton, !(selectedFile && thumbnailTitle.value.trim()));
 }
 
 thumbnailTitle.addEventListener("input", () => {
@@ -65,7 +64,7 @@ function resetThumbnailChat() {
   intro.textContent = "I’ve reviewed this thumbnail. Ask me anything about the score or how I would improve it.";
   messages.append(intro);
   document.querySelector("#thumbnailChatInput").value = "";
-  document.querySelector("#thumbnailChatStatus").textContent = "";
+  setThumbnailChatStatus("");
 }
 
 function resetFile() {
@@ -233,6 +232,8 @@ const thumbnailChatForm = document.querySelector("#thumbnailChatForm");
 const thumbnailChatInput = document.querySelector("#thumbnailChatInput");
 const thumbnailChatSend = document.querySelector("#thumbnailChatSend");
 const thumbnailChatStatus = document.querySelector("#thumbnailChatStatus");
+const setThumbnailChatStatus = createStatusSetter(thumbnailChatStatus, {reflectType: true});
+const setThumbnailChatBusy = createBusySetter([thumbnailChatInput, thumbnailChatSend], {updateLabel: false});
 
 document.querySelectorAll("#thumbnailChatPrompts button").forEach((button) => button.addEventListener("click", () => {
   thumbnailChatInput.value = button.textContent;
@@ -246,10 +247,8 @@ thumbnailChatForm.addEventListener("submit", async (event) => {
   appendThumbnailChatMessage("user", question);
   thumbnailChatHistory.push({role: "user", text: question});
   thumbnailChatInput.value = "";
-  thumbnailChatInput.disabled = true;
-  thumbnailChatSend.disabled = true;
-  thumbnailChatStatus.textContent = "Gemini is thinking…";
-  thumbnailChatStatus.dataset.type = "loading";
+  setThumbnailChatBusy(true);
+  setThumbnailChatStatus("Gemini is thinking…", "loading");
   try {
     const recentConversation = thumbnailChatHistory.slice(-2)
       .map((message) => `${message.role === "user" ? "User" : "Gemini"}: ${message.text}`)
@@ -264,16 +263,13 @@ thumbnailChatForm.addEventListener("submit", async (event) => {
     const answer = reply || "I could not produce a useful answer for that question.";
     appendThumbnailChatMessage("assistant", answer);
     thumbnailChatHistory.push({role: "assistant", text: answer});
-    thumbnailChatStatus.textContent = "";
-    thumbnailChatStatus.dataset.type = "";
+    setThumbnailChatStatus("");
   } catch (error) {
     console.error("Thumbnail follow-up failed.", error);
     appendThumbnailChatMessage("assistant", "I couldn’t answer that right now. Please try again.");
-    thumbnailChatStatus.textContent = "Gemini could not answer this question.";
-    thumbnailChatStatus.dataset.type = "error";
+    setThumbnailChatStatus("Gemini could not answer this question.", "error");
   } finally {
-    thumbnailChatInput.disabled = false;
-    thumbnailChatSend.disabled = false;
+    setThumbnailChatBusy(false);
     thumbnailChatInput.focus();
   }
 });
@@ -325,8 +321,7 @@ form.addEventListener("submit", async (event) => {
     setStatus("Gemini is not configured for this workspace.", "error");
     return;
   }
-  analyzeButton.disabled = true;
-  analyzeButton.classList.add("is-loading");
+  setAnalysisBusy(true);
   setStatus("Gemini is reviewing your thumbnail…", "loading");
   try {
     const videoTitle = thumbnailTitle.value.trim();
@@ -378,8 +373,8 @@ form.addEventListener("submit", async (event) => {
     console.error("Thumbnail analysis failed.", error);
     setStatus("Gemini could not analyze this image. Please try again.", "error");
   } finally {
+    setAnalysisBusy(false);
     updateAnalyzeButton();
-    analyzeButton.classList.remove("is-loading");
   }
 });
 

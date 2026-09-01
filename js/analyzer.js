@@ -11,6 +11,7 @@ import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=4";
 import {getPrivateVideoAnalytics} from "./analyzer-private-analytics.js?v=3";
 import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
 import {parseJsonObject} from "./services/json.js?v=1";
+import {createBusySetter, createStatusSetter, ensureStatusElement} from "./services/ui-state.js?v=1";
 import {readCachedYouTubeVideos, saveCachedYouTubeVideos} from "./services/youtube-video-cache.js?v=1";
 import {
   activeYouTubeChannelId,
@@ -56,22 +57,15 @@ let latestLinkedVideoContext = null;
 let initialVideoId = "";
 let timelineDismissHandler = null;
 
-function setStatus(message) {
-  let status = document.getElementById("videoAnalysisStatus");
-  if (!status && form) {
-    status = document.createElement("span");
-    status.id = "videoAnalysisStatus";
-    status.className = "analysis-status";
-    form.append(status);
-  }
-  if (status) status.textContent = message || "";
-}
-
-function setBusy(isBusy, label = "Analyze") {
-  if (!submitButton) return;
-  submitButton.disabled = isBusy;
-  submitButton.textContent = isBusy ? "Analyzing..." : label;
-}
+const setStatus = createStatusSetter(ensureStatusElement({
+  id: "videoAnalysisStatus",
+  parent: form,
+  className: "analysis-status"
+}));
+const setBusy = createBusySetter(submitButton, {
+  busyLabel: "Analyzing...",
+  idleLabel: "Analyze"
+});
 
 function percent(value) {
   const number = numberValue(value);
@@ -146,15 +140,11 @@ function saveCachedGeminiVideoAnalysis(video, analytics, retentionPoints, search
   }));
 }
 
-function setLibraryStatus(message) {
-  if (videoLibraryStatus) videoLibraryStatus.textContent = message || "";
-}
-
-function setLibraryBusy(isBusy) {
-  if (!refreshVideosButton) return;
-  refreshVideosButton.disabled = isBusy;
-  refreshVideosButton.textContent = isBusy ? "Loading..." : "Refresh Videos";
-}
+const setLibraryStatus = createStatusSetter(videoLibraryStatus);
+const setLibraryBusy = createBusySetter(refreshVideosButton, {
+  busyLabel: "Loading...",
+  idleLabel: "Refresh Videos"
+});
 
 function updateLibrarySelection(videoId) {
   selectedVideoId = videoId || "";

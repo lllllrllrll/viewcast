@@ -1,5 +1,6 @@
 import {isGeminiAvailable, requestGeminiText} from "./gemini-client.js?v=8";
 import {addNotifications} from "../components/notifications.js";
+import {createBusySetter, createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
 import {
   MAX_FILE_SIZE,
   fileFingerprint,
@@ -19,13 +20,11 @@ const button = document.querySelector("#compareThumbnails");
 const status = document.querySelector("#comparisonStatus");
 const title = document.querySelector("#comparisonTitle");
 
-function setStatus(message, type = "") {
-  status.textContent = message;
-  status.dataset.type = type;
-}
+const setStatus = createStatusSetter(status, {reflectType: true});
+const setComparisonBusy = createBusySetter(button, {busyClass: "is-loading", updateLabel: false});
 
 function updateButton() {
-  button.disabled = !(files.v1 && files.v2 && title.value.trim());
+  setControlsDisabled(button, !(files.v1 && files.v2 && title.value.trim()));
 }
 
 function slotElements(slot) {
@@ -130,8 +129,7 @@ form.addEventListener("submit", async (event) => {
     setStatus("Gemini is not configured for this workspace.", "error");
     return;
   }
-  button.disabled = true;
-  button.classList.add("is-loading");
+  setComparisonBusy(true);
   setStatus("Gemini is comparing both versions…", "loading");
   try {
     const videoTitle = title.value.trim();
@@ -166,8 +164,8 @@ form.addEventListener("submit", async (event) => {
     console.error("Thumbnail comparison failed.", error);
     setStatus("Gemini could not compare these images. Please try again.", "error");
   } finally {
+    setComparisonBusy(false);
     updateButton();
-    button.classList.remove("is-loading");
   }
 });
 

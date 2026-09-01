@@ -28,7 +28,7 @@ Then open the Hosting URL printed by the emulator, usually `http://localhost:500
 2. Add a Web app from **Project settings > Your apps**.
 3. In **Authentication > Sign-in method**, enable **Email/Password**.
 4. Copy the Firebase web configuration into `js/firebase-config.js`.
-5. Keep the production hostnames in `firebase.json` under `auth.authorizedDomains`. The checked-in list allows `localhost`, `viewcast1.netlify.app`, `viewcast-a6f31.firebaseapp.com`, and `viewcast-a6f31.web.app`; add any other custom hostname before deploying it.
+5. Keep the production hostnames in `firebase.json` under `auth.authorizedDomains`. The checked-in list allows `localhost`, `viewcast1.netlify.app`, `viewcast2.firebaseapp.com`, and `viewcast2.web.app`; add any other custom hostname before deploying it.
 6. Open **Firestore Database**, create the default database, and choose a production location.
 7. In **Firestore Database > Rules**, publish the contents of `firestore.rules`.
 
@@ -71,7 +71,7 @@ YouTube is linked with Google's authorization-code flow. The renewable credentia
 
 ## App Check and AI quotas
 
-The callable Gemini backend has both a short-window instance limit and durable per-user/project daily limits. Firebase App Check is enforced with a score-based reCAPTCHA Enterprise key restricted to `localhost`, `viewcast1.netlify.app`, `viewcast-a6f31.web.app`, and `viewcast-a6f31.firebaseapp.com`.
+The callable Gemini backend has both a short-window instance limit and durable per-user/project daily limits. Firebase App Check can be enforced with a score-based reCAPTCHA Enterprise key restricted to `localhost`, `viewcast1.netlify.app`, `viewcast2.web.app`, and `viewcast2.firebaseapp.com`.
 
 When adding a custom production domain:
 

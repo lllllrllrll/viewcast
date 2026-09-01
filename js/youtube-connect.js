@@ -18,6 +18,7 @@ import {
 } from "./youtube-auth.js?v=4";
 import {fetchStudioReport} from "./services/youtube-studio-analytics.js?v=2";
 import {fetchYouTubeJson} from "./insights-youtube.js?v=5";
+import {createBusySetter, createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
@@ -34,6 +35,7 @@ const channelTopicInput = document.getElementById("channelTopic");
 const channelContextInput = document.getElementById("channelContext");
 const channelContextStatus = document.getElementById("channelContextStatus");
 const saveChannelContextButton = document.getElementById("saveChannelContext");
+const connectionPrompt = document.getElementById("connectionPrompt");
 
 const allConnectionsKey = "viewcastYouTubeAllConnections";
 const activeConnectionKey = "viewcastYouTubeConnection";
@@ -47,6 +49,9 @@ let currentUser = null;
 let auth = null;
 let db = null;
 let googleIdentityScriptPromise = null;
+const setChannelContextStatus = createStatusSetter(channelContextStatus);
+const setChannelContextBusy = createBusySetter(saveChannelContextButton, {updateLabel: false});
+const setConnectionPrompt = createStatusSetter(connectionPrompt, {className: "connection-prompt-error"});
 
 function currentPlan() {
   return "basic";
@@ -63,10 +68,8 @@ function promptForChannelUpgrade() {
     return;
   }
 
-  const prompt = document.getElementById("connectionPrompt");
-  if (prompt) {
-    prompt.textContent = message;
-    prompt.classList.add("connection-prompt-error");
+  if (connectionPrompt) {
+    setConnectionPrompt(message);
   }
 }
 
@@ -75,7 +78,7 @@ function setButton(label, disabled = false) {
   const normalizedLabel = String(label || "").trim();
   connectButton.hidden = !normalizedLabel;
   if (!normalizedLabel) {
-    connectButton.disabled = true;
+    setControlsDisabled(connectButton, true);
     return;
   }
 
@@ -83,7 +86,7 @@ function setButton(label, disabled = false) {
   connectButton.textContent = "";
   if (icon) connectButton.append(icon);
   connectButton.append(document.createTextNode(normalizedLabel));
-  connectButton.disabled = disabled;
+  setControlsDisabled(connectButton, disabled);
 }
 
 function updateUI() {
@@ -118,7 +121,7 @@ function updateUI() {
 function setUnlinkButton({visible = false, disabled = false} = {}) {
   if (!unlinkButton) return;
   unlinkButton.hidden = !visible;
-  unlinkButton.disabled = disabled;
+  setControlsDisabled(unlinkButton, disabled);
 }
 
 function readAllConnections() {
@@ -232,19 +235,19 @@ async function saveChannelContext(event) {
   cacheChannelContext(currentUser, value);
   clearCachedInsightsForUser(currentUser);
   renderChannelContext(value);
-  saveChannelContextButton.disabled = true;
-  channelContextStatus.textContent = "Saving...";
+  setChannelContextBusy(true);
+  setChannelContextStatus("Saving...");
   try {
     await setDoc(doc(db, "users", currentUser.uid), {
       ...value,
       updatedAt: serverTimestamp()
     }, {merge: true});
-    channelContextStatus.textContent = "Saved. New AI insights will use this context.";
+    setChannelContextStatus("Saved. New AI insights will use this context.");
   } catch (error) {
     console.error("Could not save channel context.", error);
-    channelContextStatus.textContent = "Saved on this device. Cloud sync is unavailable.";
+    setChannelContextStatus("Saved on this device. Cloud sync is unavailable.");
   } finally {
-    saveChannelContextButton.disabled = false;
+    setChannelContextBusy(false);
   }
 }
 
@@ -469,10 +472,8 @@ async function connectYouTube() {
 
     if (error.message === "Connection canceled.") return;
 
-    const prompt = document.getElementById("connectionPrompt");
-    if (prompt) {
-      prompt.textContent = "Failed to link channel: " + (error.message || "Unknown error");
-      prompt.classList.add("connection-prompt-error");
+    if (connectionPrompt) {
+      setConnectionPrompt("Failed to link channel: " + (error.message || "Unknown error"));
     }
   }
 }
@@ -512,10 +513,8 @@ if (connectButton && firebaseConfigured) {
     }
     const params = new URLSearchParams(window.location.search);
     if (params.get("link") === "required") {
-      const prompt = document.getElementById("connectionPrompt");
-      if (prompt) {
-        prompt.textContent = "Please link a YouTube channel before analyzing videos.";
-        prompt.classList.add("connection-prompt-error");
+      if (connectionPrompt) {
+        setConnectionPrompt("Please link a YouTube channel before analyzing videos.");
       }
     }
 

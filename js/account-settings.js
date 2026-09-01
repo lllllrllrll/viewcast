@@ -13,18 +13,17 @@ import {
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { secureSignOut } from "./privacy.js";
+import {createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 let currentUser = null;
 let usesPasswordProvider = false;
 
-function setCredentialStatus(message, type = "") {
-  const status = document.getElementById("credentialStatus");
-  if (!status) return;
-  status.textContent = message;
-  status.dataset.type = type;
-}
+const setCredentialStatus = createStatusSetter(
+  document.getElementById("credentialStatus"),
+  {reflectType: true}
+);
 
 function authErrorMessage(error) {
   const messages = {
@@ -84,7 +83,7 @@ onAuthStateChanged(auth, (user) => {
     ? "Email and password"
     : usesGoogleProvider ? "Google" : "Connected provider";
   document.querySelector(".current-password-field").hidden = !usesPasswordProvider;
-  document.getElementById("togglePasswordForm").disabled = !usesPasswordProvider;
+  setControlsDisabled(document.getElementById("togglePasswordForm"), !usesPasswordProvider);
   document.getElementById("resetPasswordEmail").hidden = !usesPasswordProvider;
   document.getElementById("passwordDisplay").textContent = usesPasswordProvider
     ? "••••••••••••"
@@ -119,7 +118,7 @@ document.getElementById("togglePasswordForm")?.addEventListener("click", () => {
 document.getElementById("resetPasswordEmail")?.addEventListener("click", async (event) => {
   if (!currentUser?.email || !usesPasswordProvider) return;
   const button = event.currentTarget;
-  button.disabled = true;
+  setControlsDisabled(button, true);
   setCredentialStatus("Sending a password reset email…", "info");
   try {
     await sendPasswordResetEmail(auth, currentUser.email);
@@ -130,7 +129,7 @@ document.getElementById("resetPasswordEmail")?.addEventListener("click", async (
   } catch (error) {
     setCredentialStatus(authErrorMessage(error), "error");
   } finally {
-    button.disabled = false;
+    setControlsDisabled(button, false);
   }
 });
 
@@ -149,7 +148,7 @@ document.getElementById("changeEmailForm")?.addEventListener("submit", async (ev
   const submit = document.getElementById("saveEmail");
   const newEmail = document.getElementById("newEmail").value.trim();
   const password = document.getElementById("emailCurrentPassword").value;
-  submit.disabled = true;
+  setControlsDisabled(submit, true);
   setCredentialStatus("Confirming your identity…", "info");
   try {
     await reauthenticateUser(password);
@@ -160,7 +159,7 @@ document.getElementById("changeEmailForm")?.addEventListener("submit", async (ev
   } catch (error) {
     setCredentialStatus(authErrorMessage(error), "error");
   } finally {
-    submit.disabled = false;
+    setControlsDisabled(submit, false);
   }
 });
 
@@ -175,7 +174,7 @@ document.getElementById("changePasswordForm")?.addEventListener("submit", async 
     setCredentialStatus("The new passwords do not match.", "error");
     return;
   }
-  submit.disabled = true;
+  setControlsDisabled(submit, true);
   setCredentialStatus("Updating your password…", "info");
   try {
     await reauthenticateUser(currentPassword);
@@ -186,6 +185,6 @@ document.getElementById("changePasswordForm")?.addEventListener("submit", async 
   } catch (error) {
     setCredentialStatus(authErrorMessage(error), "error");
   } finally {
-    submit.disabled = false;
+    setControlsDisabled(submit, false);
   }
 });
