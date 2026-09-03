@@ -28,7 +28,7 @@ const connectionStorageKey = "viewcastYouTubeConnection";
 const allConnectionsKey = "viewcastYouTubeAllConnections";
 const channelStorageKey = "viewcastYouTubeChannel";
 const overviewStorageKeyPrefix = "viewcastOverviewData:";
-const overviewCacheVersion = 2;
+const overviewCacheVersion = 3;
 const setYouTubeSummaryStatus = createStatusSetter(document.querySelectorAll("[data-youtube-summary]"));
 const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 const firstDayHistoryKeyPrefix = "viewcastFirstDayHistory:";
@@ -172,9 +172,9 @@ function fieldValues(connection) {
   const analyticsSummary = connection.analyticsSummary || {};
   return {
     "channel-title": channel.title || "",
-    // Lifetime performance is populated only by the owner-authorized Studio
-    // report after it loads; never seed this card with the public counter.
-    "total-views": "",
+    // Show the public lifetime counter immediately. The owner-authorized
+    // Studio report replaces it after the private analytics sync completes.
+    "total-views": compactNumber(channel.viewCount),
     "subscriber-count": compactNumber(channel.subscriberCount),
     "video-count": wholeNumber(channel.videoCount),
     "period-views": compactNumber(analyticsSummary.views),
@@ -219,12 +219,13 @@ async function fetchRecentVideos(accessToken) {
 }
 
 async function fetchLiveOverview(accessToken, days = 30) {
-  const [dailyResult, trafficResult, videosResult, revenueResult, videoAnalyticsResult, videoRevenueResult, countriesResult, devicesResult, subscriptionResult, searchResult, suggestedResult, lifetimeResult] = await Promise.allSettled([
+  const [dailyResult, trafficResult, videosResult, revenueResult, videoPerformanceResult, videoEngagementResult, videoRevenueResult, countriesResult, devicesResult, subscriptionResult, searchResult, suggestedResult, lifetimeResult] = await Promise.allSettled([
     fetchAnalyticsRows(accessToken, { metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained", dimensions: "day", sort: "day", days: days }),
     fetchAnalyticsRows(accessToken, { metrics: "views", dimensions: "insightTrafficSourceType", sort: "-views", maxResults: 5, days: days }),
     fetchRecentVideos(accessToken),
     fetchAnalyticsRows(accessToken, { metrics: "estimatedRevenue", days: 28 }),
-    fetchAnalyticsRows(accessToken, { metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,likes,comments,shares", dimensions: "video", sort: "-views", maxResults: 50, days: days }),
+    fetchAnalyticsRows(accessToken, { metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage", dimensions: "video", sort: "-views", maxResults: 50, days: days }),
+    fetchAnalyticsRows(accessToken, { metrics: "views,subscribersGained,likes,comments,shares", dimensions: "video", sort: "-views", maxResults: 50, days: days }),
     fetchAnalyticsRows(accessToken, { metrics: "estimatedRevenue", dimensions: "video", sort: "-estimatedRevenue", maxResults: 50, days: 28 }),
     fetchAnalyticsRows(accessToken, { metrics: "views", dimensions: "country", sort: "-views", maxResults: 5, days: days }),
     fetchAnalyticsRows(accessToken, { metrics: "views", dimensions: "deviceType", sort: "-views", maxResults: 5, days: days }),
@@ -239,13 +240,39 @@ async function fetchLiveOverview(accessToken, days = 30) {
   // channel. The caller can renew the backend token and retry once.
   if (videosResult.status === "rejected") throw videosResult.reason;
   if (dailyResult.status === "rejected") throw dailyResult.reason;
+  const reportFailures = {};
+  const recordFailure = (key, result) => {
+    if (result.status !== "rejected") return;
+    reportFailures[key] = {
+      status: Number(result.reason?.status) || null,
+      message: String(result.reason?.message || "YouTube did not return this report.").slice(0, 300)
+    };
+  };
+  [
+    ["traffic", trafficResult], ["revenue", revenueResult],
+    ["videoAnalytics", videoPerformanceResult], ["videoEngagement", videoEngagementResult],
+    ["videoRevenue", videoRevenueResult],
+    ["countries", countriesResult], ["devices", devicesResult],
+    ["subscriptionStatus", subscriptionResult], ["searchTerms", searchResult],
+    ["suggestedVideos", suggestedResult], ["lifetimeViews", lifetimeResult]
+  ].forEach(([key, result]) => recordFailure(key, result));
+  const engagementByVideo = new Map(
+    (videoEngagementResult.status === "fulfilled" ? videoEngagementResult.value : [])
+      .map((row) => [String(row[0]), row])
+  );
+  const videoAnalytics = (videoPerformanceResult.status === "fulfilled" ? videoPerformanceResult.value : [])
+    .map((row) => {
+      const engagement = engagementByVideo.get(String(row[0])) || [];
+      return [row[0], row[1], row[2], row[3], row[4], engagement[2] ?? null,
+        engagement[3] ?? null, engagement[4] ?? null, engagement[5] ?? null];
+    });
   return {
     daily: dailyResult.status === "fulfilled" ? dailyResult.value : [],
     traffic: trafficResult.status === "fulfilled" ? trafficResult.value : [],
     videos: videosResult.status === "fulfilled" ? videosResult.value : [],
     estimatedRevenue: revenueResult.status === "fulfilled" ? revenueResult.value?.[0]?.[0] ?? null : null,
     revenueStatus: revenueResult.status === "fulfilled" ? "available" : "permission-required",
-    videoAnalytics: videoAnalyticsResult.status === "fulfilled" ? videoAnalyticsResult.value : [],
+    videoAnalytics,
     videoRevenue: videoRevenueResult.status === "fulfilled" ? videoRevenueResult.value : [],
     countries: countriesResult.status === "fulfilled" ? countriesResult.value : [],
     devices: devicesResult.status === "fulfilled" ? devicesResult.value : [],
@@ -255,6 +282,7 @@ async function fetchLiveOverview(accessToken, days = 30) {
     lifetimeViews: lifetimeResult.status === "fulfilled"
       ? numberValue(lifetimeResult.value?.[0]?.[0])
       : null,
+    reportFailures,
     latestVideoScannedAt: new Date().toISOString()
   };
 }
@@ -474,7 +502,10 @@ function renderTrafficSources(overviewData) {
   const rows = overviewData?.traffic || [];
   const total = rows.reduce((sum, row) => sum + (numberValue(row[1]) || 0), 0);
   if (!rows.length || !total) {
-    container.innerHTML = '<p class="signal-empty">Traffic-source data is not available for this period.</p>';
+    const failed = overviewData?.reportFailures?.traffic;
+    container.innerHTML = `<p class="signal-empty">${escapeHtml(failed
+      ? "Traffic sources could not be loaded. Reconnect YouTube if this continues."
+      : "YouTube returned no reportable traffic-source data for this period.")}</p>`;
     return;
   }
   container.innerHTML = rows.map((row) => {
@@ -527,10 +558,10 @@ function analyticsByVideo(overviewData) {
     watchMinutes: numberValue(row[2]) || 0,
     averageViewDuration: numberValue(row[3]),
     averageViewPercentage: numberValue(row[4]),
-    subscribersGained: numberValue(row[5]) || 0,
-    likes: numberValue(row[6]) || 0,
-    comments: numberValue(row[7]) || 0,
-    shares: numberValue(row[8]) || 0,
+    subscribersGained: numberValue(row[5]),
+    likes: numberValue(row[6]),
+    comments: numberValue(row[7]),
+    shares: numberValue(row[8]),
     revenue: revenue.get(String(row[0])) ?? null
   }]));
 }
@@ -544,18 +575,21 @@ function renderVideoTable(overviewData) {
     .sort((a, b) => metrics.get(String(b.id)).views - metrics.get(String(a.id)).views)
     .slice(0, 4);
   if (!videos.length) {
-    const message = overviewData
-      ? "No uploaded videos were returned for this channel."
+    const message = overviewData?.reportFailures?.videoAnalytics
+      ? "Video analytics could not be loaded. Reconnect YouTube and try again."
+      : overviewData
+      ? "No videos with reportable activity were returned for this period."
       : "Waiting for private YouTube Studio analytics to sync.";
     tbody.innerHTML = `<tr><td class="table-empty-state" colspan="7">${message}</td></tr>`;
     return;
   }
   tbody.innerHTML = videos.map((video) => {
     const item = metrics.get(String(video.id));
-    const engagement = item.likes + item.comments + item.shares;
+    const hasEngagement = [item.likes, item.comments, item.shares].some((value) => value !== null);
+    const engagement = (item.likes || 0) + (item.comments || 0) + (item.shares || 0);
     const perThousand = item.views ? 1000 / item.views : 0;
     const rpm = item.revenue !== null && item.views ? item.revenue * perThousand : null;
-    return `<tr><td><a class="dashboard-video-link" href="pages/analyzer.html?video=${encodeURIComponent(video.id)}">${escapeHtml(video.snippet?.title || "Untitled")}</a><small class="table-secondary">${videoFormat(video)}</small></td><td>${wholeNumber(item.views)}</td><td>${item.averageViewPercentage !== null ? `${decimal(item.averageViewPercentage)}%` : "—"}</td><td>${decimal(item.watchMinutes / 60)}</td><td>${decimal(item.subscribersGained * perThousand, 2)}</td><td>${decimal(engagement * perThousand)}</td><td>${rpm !== null ? currency(rpm) : "—"}</td></tr>`;
+    return `<tr><td><a class="dashboard-video-link" href="pages/analyzer.html?video=${encodeURIComponent(video.id)}">${escapeHtml(video.snippet?.title || "Untitled")}</a><small class="table-secondary">${videoFormat(video)}</small></td><td>${wholeNumber(item.views)}</td><td>${item.averageViewPercentage !== null ? `${decimal(item.averageViewPercentage)}%` : "—"}</td><td>${decimal(item.watchMinutes / 60)}</td><td>${item.subscribersGained !== null ? decimal(item.subscribersGained * perThousand, 2) : "—"}</td><td>${hasEngagement ? decimal(engagement * perThousand) : "—"}</td><td>${rpm !== null ? currency(rpm) : "—"}</td></tr>`;
   }).join("");
 }
 
@@ -563,13 +597,15 @@ function setIntelligence(key, value) {
   document.querySelectorAll(`[data-intelligence="${key}"]`).forEach((element) => { element.textContent = value || "—"; });
 }
 
-function renderSignalList(key, rows, labeler = (value) => value) {
+function renderSignalList(key, rows, labeler = (value) => value, failure = null) {
   const container = document.querySelector(`[data-discovery="${key}"]`);
   if (!container) return;
   const cleanRows = (rows || []).filter((row) => row?.length >= 2 && numberValue(row[1]) !== null).slice(0, 5);
   const total = cleanRows.reduce((sum, row) => sum + (numberValue(row[1]) || 0), 0);
   if (!cleanRows.length) {
-    container.innerHTML = '<p class="signal-empty">Not available for this channel or period.</p>';
+    container.innerHTML = `<p class="signal-empty">${escapeHtml(failure
+      ? "This YouTube report could not be loaded. Reconnect the channel if this continues."
+      : "YouTube returned no reportable data for this channel or period.")}</p>`;
     return;
   }
   container.innerHTML = cleanRows.map((row) => `<div><span>${escapeHtml(labeler(row[0]))}</span><b>${wholeNumber(row[1])}${total ? ` <small>${percent(row[1], total)}</small>` : ""}</b></div>`).join("");
@@ -596,18 +632,20 @@ function renderGrowthIntelligence(connection, overviewData) {
   const totals = metrics.reduce((sum, item) => ({
     views: sum.views + item.views,
     watchMinutes: sum.watchMinutes + item.watchMinutes,
-    subscribers: sum.subscribers + item.subscribersGained,
-    engagements: sum.engagements + item.likes + item.comments + item.shares,
+    subscribers: sum.subscribers + (item.subscribersGained || 0),
+    engagements: sum.engagements + (item.likes || 0) + (item.comments || 0) + (item.shares || 0),
+    hasSubscriberData: sum.hasSubscriberData || item.subscribersGained !== null,
+    hasEngagementData: sum.hasEngagementData || [item.likes, item.comments, item.shares].some((value) => value !== null),
     weightedRetention: sum.weightedRetention + ((item.averageViewPercentage || 0) * item.views),
     revenue: sum.revenue + (item.revenue || 0),
     hasRevenue: sum.hasRevenue || item.revenue !== null
-  }), {views: 0, watchMinutes: 0, subscribers: 0, engagements: 0, weightedRetention: 0, revenue: 0, hasRevenue: false});
+  }), {views: 0, watchMinutes: 0, subscribers: 0, engagements: 0, hasSubscriberData: false, hasEngagementData: false, weightedRetention: 0, revenue: 0, hasRevenue: false});
 
   const perThousand = totals.views ? 1000 / totals.views : 0;
   setIntelligence("typical-video", metrics.length ? `${wholeNumber(median(metrics.map((item) => item.views)))} views` : "—");
   setIntelligence("retention", totals.views ? `${decimal(totals.weightedRetention / totals.views)}%` : "—");
-  setIntelligence("subscriber-conversion", totals.views ? decimal(totals.subscribers * perThousand, 2) : "—");
-  setIntelligence("engagement-rate", totals.views ? decimal(totals.engagements * perThousand) : "—");
+  setIntelligence("subscriber-conversion", totals.views && totals.hasSubscriberData ? decimal(totals.subscribers * perThousand, 2) : "—");
+  setIntelligence("engagement-rate", totals.views && totals.hasEngagementData ? decimal(totals.engagements * perThousand) : "—");
   setIntelligence("watch-velocity", metrics.length ? `${decimal(totals.watchMinutes / 60 / 28)} hrs/day` : "—");
   setIntelligence("rpm", totals.hasRevenue && totals.views ? currency(totals.revenue * perThousand) : "Not available");
   setIntelligence("revenue-coverage", totals.hasRevenue ? "Available" : "Not available");
@@ -626,7 +664,7 @@ function renderGrowthIntelligence(connection, overviewData) {
   const bestDay = [...weekdayTotals].sort((a, b) => (b[1].views / b[1].count) - (a[1].views / a[1].count))[0];
   setIntelligence("best-day", bestDay?.[0] || "—");
 
-  const lifetimeViews = numberValue(overviewData?.lifetimeViews);
+  const lifetimeViews = numberValue(overviewData?.lifetimeViews) ?? numberValue(connection?.channel?.viewCount);
   const dailyViews = (overviewData?.daily || []).map((row) => numberValue(row[1]) || 0);
   const recentDailyAverage = dailyViews.length ? dailyViews.reduce((sum, value) => sum + value, 0) / dailyViews.length : 0;
   if (lifetimeViews !== null && recentDailyAverage > 0) {
@@ -641,12 +679,13 @@ function renderGrowthIntelligence(connection, overviewData) {
   }
 
   const countryNames = typeof Intl.DisplayNames === "function" ? new Intl.DisplayNames(["en"], {type: "region"}) : null;
-  renderSignalList("countries", overviewData?.countries, (code) => countryNames?.of(String(code)) || String(code));
-  renderSignalList("devices", overviewData?.devices, (value) => String(value).replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()));
-  renderSignalList("subscriptions", overviewData?.subscriptionStatus, (value) => value === "SUBSCRIBED" ? "Subscribed viewers" : "Not subscribed");
-  renderSignalList("search", overviewData?.searchTerms);
+  const failures = overviewData?.reportFailures || {};
+  renderSignalList("countries", overviewData?.countries, (code) => countryNames?.of(String(code)) || String(code), failures.countries);
+  renderSignalList("devices", overviewData?.devices, (value) => String(value).replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()), failures.devices);
+  renderSignalList("subscriptions", overviewData?.subscriptionStatus, (value) => value === "SUBSCRIBED" ? "Subscribed viewers" : "Not subscribed", failures.subscriptionStatus);
+  renderSignalList("search", overviewData?.searchTerms, (value) => value, failures.searchTerms);
   const titleById = new Map((overviewData?.videos || []).map((video) => [String(video.id), video.snippet?.title || video.id]));
-  renderSignalList("suggested", overviewData?.suggestedVideos, (id) => titleById.get(String(id)) || `Video ${id}`);
+  renderSignalList("suggested", overviewData?.suggestedVideos, (id) => titleById.get(String(id)) || `Video ${id}`, failures.suggestedVideos);
   renderFormatBenchmarks(overviewData);
 }
 
@@ -782,7 +821,9 @@ function renderOverviewData(connection, overviewData = null, user = null) {
   const analyticsSummary = connection?.analyticsSummary || {};
   const channel = connection?.channel || {};
   const dailySummary = summarizeDaily(overviewData?.daily || []);
-  const totalViews = numberValue(overviewData?.lifetimeViews);
+  const studioTotalViews = numberValue(overviewData?.lifetimeViews);
+  const publicTotalViews = numberValue(channel.viewCount);
+  const totalViews = studioTotalViews ?? publicTotalViews;
   const subscribers = numberValue(channel.subscriberCount);
   const videos = numberValue(channel.videoCount);
   const avgDuration = dailySummary.durationCount ? dailySummary.durationTotal / dailySummary.durationCount : numberValue(analyticsSummary.averageViewDuration);
@@ -798,7 +839,7 @@ function renderOverviewData(connection, overviewData = null, user = null) {
         : "Available only for eligible monetized channels with monetary analytics access."
   );
   setElementText("[data-youtube-field=\"total-views\"]", totalViews !== null ? compactNumber(totalViews) : "—");
-  setTrend("total-views", totalViews !== null ? "Studio lifetime" : "Studio unavailable");
+  setTrend("total-views", studioTotalViews !== null ? "Studio lifetime" : publicTotalViews !== null ? "Public total" : "Unavailable");
   setTrend("subscriber-count", subscribers !== null ? "Total" : "");
   setTrend("video-count", videos !== null ? "Uploads" : "", "warn");
   setTrend("average-view-duration", avgDuration !== null ? "28D" : "", "good");
