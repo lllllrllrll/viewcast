@@ -1,20 +1,18 @@
 import {isGeminiAvailable, requestGeminiText} from "./gemini-client.js?v=8";
 import {addNotifications} from "../components/notifications.js";
 import {createBusySetter, createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
+import {createImageUpload} from "./modules/image-upload.js?v=1";
 import {
-  MAX_FILE_SIZE,
   fileFingerprint,
-  imageMimeType,
   optimizedImage,
   parseJson,
   readCachedResult,
   renderList,
   saveCachedResult
-} from "./thumbnail-analyzer.js?v=12";
+} from "./modules/thumbnail-images.js?v=1";
 
 const cachePrefix = "viewcastThumbnailComparison:";
 const files = {v1: null, v2: null};
-const urls = {v1: "", v2: ""};
 const form = document.querySelector("#comparisonForm");
 const button = document.querySelector("#compareThumbnails");
 const status = document.querySelector("#comparisonStatus");
@@ -38,44 +36,6 @@ function slotElements(slot) {
     size: card.querySelector(".thumbnail-file-meta span"),
     remove: card.querySelector(".comparison-remove")
   };
-}
-
-function clearFile(slot) {
-  const elements = slotElements(slot);
-  files[slot] = null;
-  elements.input.value = "";
-  if (urls[slot]) URL.revokeObjectURL(urls[slot]);
-  urls[slot] = "";
-  elements.image.removeAttribute("src");
-  elements.preview.hidden = true;
-  elements.dropzone.hidden = false;
-  updateButton();
-  setStatus("");
-}
-
-function selectFile(slot, file) {
-  if (!file) return;
-  if (!imageMimeType(file)) {
-    setStatus("Choose JPG, PNG, or WebP files for both versions.", "error");
-    return;
-  }
-  if (file.size > MAX_FILE_SIZE) {
-    setStatus("Each image must be 5 MB or smaller.", "error");
-    return;
-  }
-  const elements = slotElements(slot);
-  if (urls[slot]) URL.revokeObjectURL(urls[slot]);
-  files[slot] = file;
-  urls[slot] = URL.createObjectURL(file);
-  elements.image.src = urls[slot];
-  elements.name.textContent = file.name;
-  elements.size.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
-  elements.preview.hidden = false;
-  elements.dropzone.hidden = true;
-  updateButton();
-  setStatus(files.v1 && files.v2
-    ? title.value.trim() ? "Ready to compare." : "Enter the video title to continue."
-    : "Add the other version to continue.");
 }
 
 function render(analysis) {
@@ -103,23 +63,23 @@ title.addEventListener("input", () => {
 
 ["v1", "v2"].forEach((slot) => {
   const elements = slotElements(slot);
-  elements.input.addEventListener("change", () => selectFile(slot, elements.input.files?.[0]));
-  elements.remove.addEventListener("click", () => clearFile(slot));
-  elements.dropzone.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      elements.input.click();
+  createImageUpload({
+    ...elements,
+    invalidTypeMessage: "Choose JPG, PNG, or WebP files for both versions.",
+    oversizedMessage: "Each image must be 5 MB or smaller.",
+    setStatus,
+    onChange(file) {
+      files[slot] = file;
+      updateButton();
+      if (!file) {
+        setStatus("");
+        return;
+      }
+      setStatus(files.v1 && files.v2
+        ? title.value.trim() ? "Ready to compare." : "Enter the video title to continue."
+        : "Add the other version to continue.");
     }
   });
-  ["dragenter", "dragover"].forEach((name) => elements.dropzone.addEventListener(name, (event) => {
-    event.preventDefault();
-    elements.dropzone.classList.add("dragging");
-  }));
-  ["dragleave", "drop"].forEach((name) => elements.dropzone.addEventListener(name, (event) => {
-    event.preventDefault();
-    elements.dropzone.classList.remove("dragging");
-  }));
-  elements.dropzone.addEventListener("drop", (event) => selectFile(slot, event.dataTransfer?.files?.[0]));
 });
 
 form.addEventListener("submit", async (event) => {

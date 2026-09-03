@@ -1,15 +1,17 @@
 import { isGeminiAvailable, requestGeminiText } from "./gemini-client.js?v=8";
 import { addNotifications } from "../components/notifications.js";
 import {createBusySetter, createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
-
-export const MAX_FILE_SIZE = 5 * 1024 * 1024;
-const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MIME_BY_EXTENSION = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp"
-};
+import {createImageUpload} from "./modules/image-upload.js?v=1";
+import {createThumbnailChat} from "./modules/thumbnail-chat.js?v=1";
+import {
+  cleanText,
+  fileFingerprint,
+  optimizedImage,
+  parseJson,
+  readCachedResult,
+  renderList,
+  saveCachedResult
+} from "./modules/thumbnail-images.js?v=1";
 const form = document.querySelector("#thumbnailForm");
 const input = document.querySelector("#thumbnailInput");
 const dropzone = document.querySelector("#thumbnailDropzone");
@@ -26,19 +28,7 @@ const output = document.querySelector("#thumbnailAnalysisOutput");
 const thumbnailChat = document.querySelector("#thumbnailChat");
 let selectedFile = null;
 let selectedVideoAnalytics = null;
-let previewUrl = "";
-let latestAnalysis = null;
-let thumbnailChatHistory = [];
 const thumbnailCachePrefix = "viewcastThumbnailAnalysis:";
-const RESULT_CACHE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
-const MAX_IMAGE_DIMENSION = 960;
-const IMAGE_QUALITY = 0.76;
-
-export function imageMimeType(file) {
-  if (ALLOWED_TYPES.has(file?.type)) return file.type;
-  const extension = String(file?.name || "").split(".").pop().toLowerCase();
-  return MIME_BY_EXTENSION[extension] || "";
-}
 
 const setStatus = createStatusSetter(status, {reflectType: true});
 const setAnalysisBusy = createBusySetter(analyzeButton, {busyClass: "is-loading", updateLabel: false});
@@ -54,149 +44,53 @@ thumbnailTitle.addEventListener("input", () => {
   }
 });
 
-function resetThumbnailChat() {
-  latestAnalysis = null;
-  thumbnailChatHistory = [];
-  const messages = document.querySelector("#thumbnailChatMessages");
-  messages.replaceChildren();
-  const intro = document.createElement("div");
-  intro.className = "chat-message assistant";
-  intro.textContent = "I’ve reviewed this thumbnail. Ask me anything about the score or how I would improve it.";
-  messages.append(intro);
-  document.querySelector("#thumbnailChatInput").value = "";
-  setThumbnailChatStatus("");
-}
+const thumbnailChatController = createThumbnailChat({
+  getFile: () => selectedFile,
+  getTitle: () => thumbnailTitle.value.trim()
+});
 
-function resetFile() {
-  selectedFile = null;
+function resetAnalyzerState() {
   selectedVideoAnalytics = null;
-  input.value = "";
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
-  previewUrl = "";
-  image.removeAttribute("src");
-  preview.hidden = true;
-  dropzone.hidden = false;
   output.hidden = true;
   emptyState.hidden = false;
   thumbnailChat.hidden = true;
-  resetThumbnailChat();
+  thumbnailChatController.reset();
   updateAnalyzeButton();
   setStatus("");
 }
 
-function selectFile(file) {
-  if (!file) return;
-  if (!imageMimeType(file)) {
-    setStatus("Choose a JPG, PNG, or WebP image.", "error");
-    return;
+const analyzerUpload = createImageUpload({
+  input,
+  dropzone,
+  preview,
+  image,
+  name: fileName,
+  size: fileSize,
+  remove: removeButton,
+  setStatus,
+  onChange(file) {
+    selectedFile = file;
+    if (!file) {
+      resetAnalyzerState();
+      return;
+    }
+    emptyState.hidden = true;
+    output.hidden = true;
+    thumbnailChat.hidden = true;
+    thumbnailChatController.reset();
+    updateAnalyzeButton();
+    setStatus(thumbnailTitle.value.trim() ? "Ready to analyze." : "Enter the video title to continue.");
   }
-  if (file.size > MAX_FILE_SIZE) {
-    setStatus("That image is larger than 5 MB. Choose a smaller file.", "error");
-    return;
-  }
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
-  selectedFile = file;
-  previewUrl = URL.createObjectURL(file);
-  image.src = previewUrl;
-  fileName.textContent = file.name;
-  fileSize.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
-  preview.hidden = false;
-  dropzone.hidden = true;
-  emptyState.hidden = true;
-  output.hidden = true;
-  thumbnailChat.hidden = true;
-  resetThumbnailChat();
-  updateAnalyzeButton();
-  setStatus(thumbnailTitle.value.trim() ? "Ready to analyze." : "Enter the video title to continue.");
-}
+});
 
 export function selectThumbnailFile(file, videoTitle = "", ownerAnalytics = null) {
   if (videoTitle) thumbnailTitle.value = videoTitle;
   selectedVideoAnalytics = ownerAnalytics?.source === "youtube-studio" ? ownerAnalytics : null;
-  selectFile(file);
-}
-
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Could not read the selected image."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function loadImage(source) {
-  return new Promise((resolve, reject) => {
-    const element = new Image();
-    element.onload = () => resolve(element);
-    element.onerror = () => reject(new Error("Could not optimize the selected image."));
-    element.src = source;
-  });
-}
-
-export async function optimizedImage(file) {
-  const source = await fileToDataUrl(file);
-  const bitmap = typeof createImageBitmap === "function"
-    ? await createImageBitmap(file)
-    : await loadImage(source);
-  const width = bitmap.width || bitmap.naturalWidth;
-  const height = bitmap.height || bitmap.naturalHeight;
-  const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(width, height));
-  if (scale === 1 && file.type === "image/webp") {
-    bitmap.close?.();
-    return {data: source.split(",")[1], mimeType: "image/webp"};
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(width * scale));
-  canvas.height = Math.max(1, Math.round(height * scale));
-  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close?.();
-  const optimized = canvas.toDataURL("image/webp", IMAGE_QUALITY);
-  return {data: optimized.split(",")[1], mimeType: "image/webp"};
-}
-
-export function fileFingerprint(file) {
-  return [file?.name || "", file?.size || 0, file?.lastModified || 0].join(":");
-}
-
-export function readCachedResult(key) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(key) || "null");
-    if (!saved?.value || Date.now() - saved.savedAt > RESULT_CACHE_MAX_AGE) {
-      localStorage.removeItem(key);
-      return null;
-    }
-    return saved.value;
-  } catch {
-    localStorage.removeItem(key);
-    return null;
-  }
-}
-
-export function saveCachedResult(key, value) {
-  if (value) localStorage.setItem(key, JSON.stringify({value, savedAt: Date.now()}));
-}
-
-export function parseJson(text) {
-  const cleaned = String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  return JSON.parse(cleaned);
-}
-
-function cleanText(value, maxLength) {
-  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
-}
-
-export function renderList(element, items) {
-  element.replaceChildren(...items.slice(0, 5).map((item) => {
-    const li = document.createElement("li");
-    li.textContent = cleanText(item, 220);
-    return li;
-  }));
+  analyzerUpload.select(file);
 }
 
 function renderAnalysis(analysis) {
-  latestAnalysis = analysis;
+  thumbnailChatController.setAnalysis(analysis);
   if (analysis._videoTitle) thumbnailTitle.value = analysis._videoTitle;
   const score = Math.max(0, Math.min(10, Number(analysis.score) || 0));
   document.querySelector("#thumbnailScore strong").textContent = Number(score.toFixed(1));
@@ -219,61 +113,6 @@ function renderAnalysis(analysis) {
   thumbnailChat.hidden = false;
 }
 
-function appendThumbnailChatMessage(role, text) {
-  const messages = document.querySelector("#thumbnailChatMessages");
-  const message = document.createElement("div");
-  message.className = `chat-message ${role}`;
-  message.textContent = text;
-  messages.append(message);
-  messages.scrollTop = messages.scrollHeight;
-}
-
-const thumbnailChatForm = document.querySelector("#thumbnailChatForm");
-const thumbnailChatInput = document.querySelector("#thumbnailChatInput");
-const thumbnailChatSend = document.querySelector("#thumbnailChatSend");
-const thumbnailChatStatus = document.querySelector("#thumbnailChatStatus");
-const setThumbnailChatStatus = createStatusSetter(thumbnailChatStatus, {reflectType: true});
-const setThumbnailChatBusy = createBusySetter([thumbnailChatInput, thumbnailChatSend], {updateLabel: false});
-
-document.querySelectorAll("#thumbnailChatPrompts button").forEach((button) => button.addEventListener("click", () => {
-  thumbnailChatInput.value = button.textContent;
-  thumbnailChatInput.focus();
-}));
-
-thumbnailChatForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const question = thumbnailChatInput.value.trim();
-  if (!question || !selectedFile || !latestAnalysis) return;
-  appendThumbnailChatMessage("user", question);
-  thumbnailChatHistory.push({role: "user", text: question});
-  thumbnailChatInput.value = "";
-  setThumbnailChatBusy(true);
-  setThumbnailChatStatus("Gemini is thinking…", "loading");
-  try {
-    const recentConversation = thumbnailChatHistory.slice(-2)
-      .map((message) => `${message.role === "user" ? "User" : "Gemini"}: ${message.text}`)
-      .join("\n");
-    const reply = await requestGeminiText({
-      systemInstruction: "Answer thumbnail follow-ups concisely using only the supplied analysis. Be specific and honest about uncertainty.",
-      contents: [{role: "user", parts: [
-        {text: `Analysis:${JSON.stringify({score: latestAnalysis.score, verdict: latestAnalysis.verdict, titleAlignment: latestAnalysis.titleAlignment, improvements: latestAnalysis.improvements, recommendation: latestAnalysis.recommendation})}\nTitle:${thumbnailTitle.value.trim()}\nRecent chat:${recentConversation}\nAnswer the latest question directly.`}
-      ]}],
-      generationConfig: {temperature: 0.3, maxOutputTokens: 120}
-    });
-    const answer = reply || "I could not produce a useful answer for that question.";
-    appendThumbnailChatMessage("assistant", answer);
-    thumbnailChatHistory.push({role: "assistant", text: answer});
-    setThumbnailChatStatus("");
-  } catch (error) {
-    console.error("Thumbnail follow-up failed.", error);
-    appendThumbnailChatMessage("assistant", "I couldn’t answer that right now. Please try again.");
-    setThumbnailChatStatus("Gemini could not answer this question.", "error");
-  } finally {
-    setThumbnailChatBusy(false);
-    thumbnailChatInput.focus();
-  }
-});
-
 let comparisonModulePromise = null;
 let videoPickerModulePromise = null;
 
@@ -281,7 +120,7 @@ document.querySelectorAll("[data-thumbnail-tab]").forEach((tab) => tab.addEventL
   const activeMode = tab.dataset.thumbnailTab || "analysis";
   const comparisonActive = activeMode === "comparison";
   if (comparisonActive && !comparisonModulePromise) {
-    comparisonModulePromise = import("./thumbnail-comparison.js?v=3");
+    comparisonModulePromise = import("./thumbnail-comparison.js?v=4");
   }
   if (activeMode === "videos" && !videoPickerModulePromise) {
     videoPickerModulePromise = import("../components/thumbnail-video-picker.js?v=5");
@@ -295,24 +134,6 @@ document.querySelectorAll("[data-thumbnail-tab]").forEach((tab) => tab.addEventL
   document.querySelector("#comparisonPanel").hidden = activeMode !== "comparison";
   document.querySelector("#videosPanel").hidden = activeMode !== "videos";
 }));
-
-input.addEventListener("change", () => selectFile(input.files?.[0]));
-removeButton.addEventListener("click", resetFile);
-dropzone.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    input.click();
-  }
-});
-["dragenter", "dragover"].forEach((name) => dropzone.addEventListener(name, (event) => {
-  event.preventDefault();
-  dropzone.classList.add("dragging");
-}));
-["dragleave", "drop"].forEach((name) => dropzone.addEventListener(name, (event) => {
-  event.preventDefault();
-  dropzone.classList.remove("dragging");
-}));
-dropzone.addEventListener("drop", (event) => selectFile(event.dataTransfer?.files?.[0]));
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();

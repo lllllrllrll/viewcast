@@ -14,13 +14,9 @@ import { addNotifications } from "../components/notifications.js";
 import {studioVideoCardsHtml, syncVideoLibrarySelection} from "../components/youtube-video-library.js?v=1";
 import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=4";
 import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
-import {readCachedYouTubeVideos, saveCachedYouTubeVideos} from "./services/youtube-video-cache.js?v=1";
 import {createBusySetter, createStatusSetter, ensureStatusElement} from "./services/ui-state.js?v=1";
-import {
-  activeYouTubeChannelId,
-  clearCachedYouTubeAccessToken,
-  readCachedYouTubeAccessToken
-} from "./services/youtube-session.js?v=1";
+import {createYouTubePageSession} from "./services/youtube-page-session.js?v=1";
+import {activeYouTubeChannelId} from "./services/youtube-session.js?v=1";
 import {
   average,
   bestThumbnail,
@@ -43,13 +39,13 @@ import {
   buildGeminiTrendPlan,
   compactAdviceSummary,
   setGeminiCreatorContext
-} from "./insights-gemini.js?v=4";
+} from "./insights-gemini.js?v=5";
 import {
   buildGeminiChatReply,
   buildGeminiPageInsights,
   normalizeGeminiInsights
-} from "./insights-gemini-page.js?v=3";
-import {renderTrendSections} from "../components/insights-trend-renderer.js?v=2";
+} from "./insights-gemini-page.js?v=4";
+import {renderTrendSections} from "../components/insights-trend-renderer.js?v=3";
 
 const {
   bestUploadSlot,
@@ -125,6 +121,12 @@ let analysisRequestId = 0;
 let latestChannelSummary = null;
 let chatHistory = [];
 let savedChannelContext = {channelTopic: "", channelContext: ""};
+const {
+  clearCachedAccessToken,
+  readCachedAccessToken,
+  readCachedVideos,
+  saveCachedVideos
+} = createYouTubePageSession(() => currentUser);
 
 const setStatus = createStatusSetter(ensureStatusElement({
   id: "videoAnalysisStatus",
@@ -142,14 +144,6 @@ const setBusy = createBusySetter([
   busyLabel: "Analyzing...",
   idleLabel: () => latestChannelSummary ? "Refresh Insights" : "Generate Insights"
 });
-
-function readCachedVideos() {
-  return readCachedYouTubeVideos(currentUser?.uid, activeYouTubeChannelId());
-}
-
-function saveCachedVideos(videos) {
-  saveCachedYouTubeVideos(currentUser?.uid, activeYouTubeChannelId(), videos);
-}
 
 function insightsStorageKey(focusVideoId = "") {
   return currentUser ? `${insightsStorageKeyPrefix}${currentUser.uid}:${activeYouTubeChannelId() || "none"}:${focusVideoId || "channel"}` : "";
@@ -316,14 +310,6 @@ function renderVideoLibrary(videos = channelVideos) {
   videoLibrary.innerHTML = studioVideoCardsHtml(channelVideos);
 
   updateLibrarySelection(selectedVideoId);
-}
-
-function readCachedAccessToken() {
-  return readCachedYouTubeAccessToken(currentUser?.uid, activeYouTubeChannelId());
-}
-
-function clearCachedAccessToken() {
-  clearCachedYouTubeAccessToken();
 }
 
 async function requestAccessToken() {

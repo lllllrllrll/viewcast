@@ -70,7 +70,6 @@
       "skills-lock.json",
       "README.md",
       "scripts/**",
-      "mermaid-diagram.svg",
       "netlify.toml",
       "netlify-build.mjs",
       "dist/**"

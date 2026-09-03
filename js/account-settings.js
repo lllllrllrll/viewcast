@@ -12,7 +12,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { secureSignOut } from "./privacy.js";
+import {secureSignOut} from "./services/privacy.js?v=1";
 import {createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
