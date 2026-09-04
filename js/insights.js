@@ -39,7 +39,7 @@ import {
   buildGeminiTrendPlan,
   compactAdviceSummary,
   setGeminiCreatorContext
-} from "./insights-gemini.js?v=5";
+} from "./insights-gemini.js?v=6";
 import {
   buildGeminiChatReply,
   buildGeminiPageInsights,
@@ -109,7 +109,7 @@ const channelStorageKey = "viewcastYouTubeChannel";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 35;
+const insightsCacheVersion = 36;
 const insightsCacheMaxAge = 24 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -430,10 +430,10 @@ function updateReadMoreVisibility(item) {
 
 function updateTrendingKeywords(summary, geminiInsights = null) {
   const candidates = [
-    ...(summary.trendPlan?.nicheTerms || []),
-    ...(summary.trendPlan?.queries || []),
+    ...(summary.trendPlan?.queries || []).map(readableTrendQuery),
     ...(summary.currentTrends || []),
     ...currentTrendSignals(summary.trendVideos || []),
+    ...(summary.trendPlan?.nicheTerms || []).filter((term) => importantWords(term).length >= 2),
     geminiInsights?.cards?.topTopicSignal?.value || ""
   ];
   const keywords = candidates.filter((keyword, index, values) => {
@@ -446,8 +446,8 @@ function updateTrendingKeywords(summary, geminiInsights = null) {
     const evidence = summary.trendVideos?.[index]?.snippet?.title || "current same-topic YouTube activity";
     return {
       title: keyword,
-      body: `Trending in your niche now. Supported by ${evidence}.`,
-      label: "Trending",
+      body: `A specific search phrase trending in your niche now. Supported by ${evidence}.`,
+      label: "Trending search",
       tone: "good"
     };
   });
