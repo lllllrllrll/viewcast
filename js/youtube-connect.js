@@ -113,17 +113,38 @@ async function connectYouTube() {
       return updateUI();
     }
     connectionStore.saveAccessToken(accessToken, channel.id);
-    const analyticsSummary = await fetchAnalyticsSummary(accessToken);
-    ownerData.monetaryAnalyticsAccess = analyticsSummary.estimatedRevenue !== null;
+    let analyticsSummary = {};
+    let analyticsWarning = "";
+    try {
+      analyticsSummary = await fetchAnalyticsSummary(accessToken);
+    } catch (error) {
+      analyticsWarning = error?.message || "YouTube Analytics did not return a summary yet.";
+      console.warn("YouTube linked, but its Analytics summary was unavailable.", error);
+    }
+    ownerData.monetaryAnalyticsAccess = analyticsSummary.estimatedRevenue != null;
     const connection = {channel, ownerData, analyticsSummary, connectedAt: Date.now()};
     if (existingIndex >= 0) connections[existingIndex] = connection;
     else connections.push(connection);
-    await setDoc(doc(db, "users", currentUser.uid), {
-      youtubeConnections: connections,
-      updatedAt: serverTimestamp()
-    }, {merge: true});
+    // The YouTube connection and token are sufficient to populate this browser.
+    // Cloud sync is best-effort so a new/misconfigured Firestore database cannot
+    // discard an otherwise successful YouTube authorization.
     connectionStore.save(connections, channel.id);
     window.dispatchEvent(new CustomEvent("viewcast:youtube-connected", {detail: connection}));
+    try {
+      await setDoc(doc(db, "users", currentUser.uid), {
+        youtubeConnections: connections,
+        updatedAt: serverTimestamp()
+      }, {merge: true});
+    } catch (error) {
+      console.warn("Channel linked locally, but Firestore sync failed.", error);
+      setConnectionPrompt("Channel linked on this device. Cloud sync is unavailable.");
+      return;
+    }
+    if (analyticsWarning) {
+      setConnectionPrompt(`Channel linked, but analytics could not load: ${analyticsWarning}`);
+    } else {
+      setConnectionPrompt("Channel linked. YouTube Analytics is loading.");
+    }
   } catch (error) {
     console.error("YouTube connection failed.", error);
     updateUI();

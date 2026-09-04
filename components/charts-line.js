@@ -124,6 +124,36 @@ export function drawLineChart(canvasId, actual, forecast, labels, options = {}) 
   plot(forecast, colors.amber, true);
   plot(actual, colors.teal, false);
 
+  // Small upload diamonds sit on the date axis. Multiple uploads on the same
+  // sampled date share one marker and are summarized in the hover tooltip.
+  (options.markers || []).forEach((marker) => {
+    const point = points[marker.index];
+    if (!point) return;
+    point.uploads = marker.uploads || [];
+    point.uploads.forEach((upload) => {
+      if (!upload.thumbnail) return;
+      canvas._markerImages ||= new Map();
+      if (canvas._markerImages.has(upload.thumbnail)) return;
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+      image.onload = () => {
+        if (canvas._hoverPoint === point) {
+          const {actual: nextActual, forecast: nextForecast, labels: nextLabels, options: nextOptions} = canvas._chartData;
+          drawLineChart(canvasId, nextActual, nextForecast, nextLabels, {...nextOptions, isInternal: false});
+        }
+      };
+      image.src = upload.thumbnail;
+      canvas._markerImages.set(upload.thumbnail, image);
+    });
+    const markerY = height - pad.bottom + 7;
+    ctx.save();
+    ctx.translate(point.x, markerY);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = colors.amber;
+    ctx.fillRect(-4, -4, 8, 8);
+    ctx.restore();
+  });
+
   // Hover state handling
   if (canvas._hoverPoint && !options.isInternal) {
     const p = canvas._hoverPoint;
@@ -148,13 +178,16 @@ export function drawLineChart(canvasId, actual, forecast, labels, options = {}) 
     ctx.stroke();
 
     // Tooltip box
-    const tipW = 100;
-    const tipH = 45;
+    const uploadCount = p.uploads?.length || 0;
+    const tipW = uploadCount ? 260 : 100;
+    const tipH = uploadCount ? 94 : 45;
     let tipX = p.x + 10;
     let tipY = p.yActual - tipH - 10;
 
     if (tipX + tipW > width) tipX = p.x - tipW - 10;
     if (tipY < 0) tipY = p.yActual + 10;
+    tipX = Math.max(4, Math.min(tipX, width - tipW - 4));
+    tipY = Math.max(4, Math.min(tipY, height - tipH - 4));
 
     ctx.fillStyle = "rgba(28, 36, 48, 0.95)";
     ctx.beginPath();
@@ -168,6 +201,33 @@ export function drawLineChart(canvasId, actual, forecast, labels, options = {}) 
     ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
     const valText = Number(p.actualVal).toLocaleString() + (options.ySuffix ?? "K");
     ctx.fillText(valText, tipX + 8, tipY + 36);
+    if (uploadCount) {
+      const upload = p.uploads[0];
+      const thumbnail = canvas._markerImages?.get(upload.thumbnail);
+      const imageX = tipX + 8;
+      const imageY = tipY + 47;
+      if (thumbnail?.complete && thumbnail.naturalWidth) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(imageX, imageY, 64, 36, 4);
+        ctx.clip();
+        ctx.drawImage(thumbnail, imageX, imageY, 64, 36);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+        ctx.fillRect(imageX, imageY, 64, 36);
+      }
+      const maxTitleLength = uploadCount > 1 ? 25 : 31;
+      const title = upload.title.length > maxTitleLength
+        ? `${upload.title.slice(0, maxTitleLength - 1)}…`
+        : upload.title;
+      ctx.fillStyle = "white";
+      ctx.font = "600 11px Inter, sans-serif";
+      ctx.fillText(title, tipX + 80, tipY + 62);
+      ctx.fillStyle = colors.amber;
+      ctx.font = "600 10px Inter, sans-serif";
+      ctx.fillText(uploadCount > 1 ? `+${uploadCount - 1} more upload${uploadCount === 2 ? "" : "s"}` : "Uploaded", tipX + 80, tipY + 79);
+    }
   }
 
   // Attach event listeners once
@@ -204,4 +264,3 @@ export function drawLineChart(canvasId, actual, forecast, labels, options = {}) 
     canvas._hasListeners = true;
   }
 }
-
