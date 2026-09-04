@@ -39,7 +39,7 @@ import {
   buildGeminiTrendPlan,
   compactAdviceSummary,
   setGeminiCreatorContext
-} from "./insights-gemini.js?v=6";
+} from "./insights-gemini.js?v=7";
 import {
   buildGeminiChatReply,
   buildGeminiPageInsights,
@@ -109,7 +109,7 @@ const channelStorageKey = "viewcastYouTubeChannel";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 36;
+const insightsCacheVersion = 37;
 const insightsCacheMaxAge = 24 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -428,26 +428,22 @@ function updateReadMoreVisibility(item) {
   toggle.hidden = !isOverflowing;
 }
 
-function updateTrendingKeywords(summary, geminiInsights = null) {
-  const candidates = [
-    ...(summary.trendPlan?.queries || []).map(readableTrendQuery),
-    ...(summary.currentTrends || []),
-    ...currentTrendSignals(summary.trendVideos || []),
-    ...(summary.trendPlan?.nicheTerms || []).filter((term) => importantWords(term).length >= 2),
-    geminiInsights?.cards?.topTopicSignal?.value || ""
-  ];
-  const keywords = candidates.filter((keyword, index, values) => {
-    const normalized = String(keyword || "").trim().toLowerCase();
-    return normalized && values.findIndex(
-      (candidate) => String(candidate || "").trim().toLowerCase() === normalized
+function updateTrendingKeywords(summary) {
+  const entries = (summary.trendVideos || []).map((video) => {
+    const sourceTitle = String(video.snippet?.title || "").trim();
+    const phrase = titleTopicPhrases(sourceTitle)[0] || importantWords(sourceTitle).slice(0, 4).join(" ");
+    return {keyword: readableTrendQuery(phrase), sourceTitle};
+  }).filter((entry, index, values) => {
+    const normalized = entry.keyword.toLowerCase();
+    return importantWords(entry.keyword).length >= 2 && values.findIndex(
+      (candidate) => candidate.keyword.toLowerCase() === normalized
     ) === index;
   }).slice(0, 3);
-  const items = keywords.map((keyword, index) => {
-    const evidence = summary.trendVideos?.[index]?.snippet?.title || "current same-topic YouTube activity";
+  const items = entries.map(({keyword, sourceTitle}) => {
     return {
       title: keyword,
-      body: `A specific search phrase trending in your niche now. Supported by ${evidence}.`,
-      label: "Trending search",
+      body: `Taken directly from words in the current YouTube result: ${sourceTitle}.`,
+      label: "Verified trend",
       tone: "good"
     };
   });
@@ -689,7 +685,7 @@ function renderChannelInsights(summary) {
     cards.topTopicSignal?.detail || "Based on current same-topic videos",
     cards.topTopicSignal?.tone || "good"
   );
-  updateTrendingKeywords(summary, geminiInsights);
+  updateTrendingKeywords(summary);
   renderTrendSections(summary, geminiInsights, updateActivityItems);
   setChatSeedMessage(geminiInsights?.chatIntro || compactAdviceSummary(summary));
 }
