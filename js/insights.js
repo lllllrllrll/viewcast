@@ -428,7 +428,35 @@ function updateReadMoreVisibility(item) {
   toggle.hidden = !isOverflowing;
 }
 
-function updateRecommendations(items) {
+function updateTrendingKeywords(summary, geminiInsights = null) {
+  const candidates = [
+    ...(summary.currentTrends || []),
+    ...currentTrendSignals(summary.trendVideos || []),
+    geminiInsights?.cards?.topTopicSignal?.value || ""
+  ];
+  const keywords = candidates.filter((keyword, index, values) => {
+    const normalized = String(keyword || "").trim().toLowerCase();
+    return normalized && values.findIndex(
+      (candidate) => String(candidate || "").trim().toLowerCase() === normalized
+    ) === index;
+  }).slice(0, 3);
+  const items = keywords.map((keyword, index) => {
+    const evidence = summary.trendVideos?.[index]?.snippet?.title || "current same-topic YouTube activity";
+    return {
+      title: keyword,
+      body: `Trending in your niche now. Supported by ${evidence}.`,
+      label: "Trending",
+      tone: "good"
+    };
+  });
+  if (!items.length) {
+    items.push({
+      title: "No verified trending keyword yet",
+      body: "Refresh insights after more current same-topic videos are available.",
+      label: "Waiting",
+      tone: "warn"
+    });
+  }
   updateActivityItems(".search-terms-panel .activity-item", items);
 }
 
@@ -659,7 +687,7 @@ function renderChannelInsights(summary) {
     cards.topTopicSignal?.detail || "Based on current same-topic videos",
     cards.topTopicSignal?.tone || "good"
   );
-  updateRecommendations(geminiInsights?.recommendations || summary.topicIdeas);
+  updateTrendingKeywords(summary, geminiInsights);
   renderTrendSections(summary, geminiInsights, updateActivityItems);
   setChatSeedMessage(geminiInsights?.chatIntro || compactAdviceSummary(summary));
 }
