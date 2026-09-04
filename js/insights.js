@@ -109,7 +109,7 @@ const channelStorageKey = "viewcastYouTubeChannel";
 const insightsStorageKeyPrefix = "viewcastAiInsights:";
 const recentTrendsStorageKeyPrefix = "viewcastRecentTrends:";
 const channelContextStorageKeyPrefix = "viewcastChannelContext:";
-const insightsCacheVersion = 34;
+const insightsCacheVersion = 35;
 const insightsCacheMaxAge = 24 * 60 * 60 * 1000;
 
 let currentUser = null;
@@ -430,6 +430,8 @@ function updateReadMoreVisibility(item) {
 
 function updateTrendingKeywords(summary, geminiInsights = null) {
   const candidates = [
+    ...(summary.trendPlan?.nicheTerms || []),
+    ...(summary.trendPlan?.queries || []),
     ...(summary.currentTrends || []),
     ...currentTrendSignals(summary.trendVideos || []),
     geminiInsights?.cards?.topTopicSignal?.value || ""
@@ -825,6 +827,10 @@ async function generateChannelInsights({allowPrompt = true, focusVideoId = "", f
       ? [videos.find((video) => video.id === focusVideoId), ...videos.filter((video) => video.id !== focusVideoId)].filter(Boolean)
       : videos;
     const summary = buildChannelSummary(orderedVideos, trendVideos, channelProfile);
+    summary.trendPlan = {
+      queries: trendPlan.queries || [],
+      nicheTerms: trendPlan.nicheTerms || []
+    };
     setStatus("Asking Gemini for AI insights...");
     summary.geminiInsights = await buildGeminiPageInsights(summary, orderedVideos);
     if (!summary.geminiInsights) throw new Error("AI_INSIGHTS_GENERATION_FAILED");
