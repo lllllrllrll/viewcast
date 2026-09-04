@@ -71,7 +71,7 @@ function updateUI() {
   }));
   setUnlinkButton(true);
   if (connections.length >= MAX_LINKED_CHANNELS) setButton("5 Channels Linked", true);
-  else if (requiresChannelUpgrade(connections)) setButton("Upgrade to Link Another Channel");
+  else if (requiresChannelUpgrade(connections)) setButton("Reconnect YouTube");
   else setButton("Link New Channel");
 }
 
@@ -102,7 +102,6 @@ async function syncConnectionsFromFirestore(user) {
 
 async function connectYouTube() {
   if (!currentUser) return;
-  if (requiresChannelUpgrade()) return promptForChannelUpgrade();
   try {
     setButton("Connecting...", true);
     const accessToken = await requestYouTubeAccessToken(googleOAuthClientId, currentUser);

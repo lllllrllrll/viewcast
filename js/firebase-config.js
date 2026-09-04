@@ -12,14 +12,14 @@ export const firebaseConfig = {
 
 // Google OAuth 2.0 Web Client ID used only for YouTube API authorization.
 // Keep channel links in Firestore instead of linking Google providers to Firebase Auth.
-export const googleOAuthClientId = "";
+export const googleOAuthClientId = "109179683402-9u152t0gq2565t9rdci8b896ual2bba7.apps.googleusercontent.com";
 
 // Gemini is called only through Firebase Functions. Never place its API key in client code.
 export const geminiModel = "gemini-3.1-flash-lite";
 
 // Public, domain-restricted reCAPTCHA Enterprise key registered with Firebase
 // App Check. This is intentionally client-visible and is not a secret.
-export const firebaseAppCheckSiteKey = "";
+export const firebaseAppCheckSiteKey = "6LcpCqgtAAAAAOiJEgu7vF4CZRWTgu2md01ONltV";
 
 export const firebaseConfigured = Boolean(
   firebaseConfig.apiKey &&

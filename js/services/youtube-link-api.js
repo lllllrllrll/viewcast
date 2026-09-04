@@ -1,4 +1,3 @@
-import {exchangeYouTubeCode} from "../youtube-auth.js?v=4";
 import {fetchYouTubeJson} from "../insights-youtube.js?v=5";
 import {fetchStudioReport} from "./youtube-studio-analytics.js?v=2";
 
@@ -24,30 +23,25 @@ function loadGoogleIdentityServices() {
   return googleIdentityScriptPromise;
 }
 
-export async function requestYouTubeAccessToken(clientId, user) {
+export async function requestYouTubeAccessToken(clientId) {
   if (!clientId) throw new Error("Missing Google OAuth client ID. Add your Web OAuth client ID in js/firebase-config.js.");
   await loadGoogleIdentityServices();
   return new Promise((resolve, reject) => {
-    const codeClient = window.google.accounts.oauth2.initCodeClient({
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: scopes.join(" "),
-      access_type: "offline",
       include_granted_scopes: true,
       prompt: "consent select_account",
-      callback: async (response) => {
+      callback: (response) => {
         if (response.error) return reject(new Error(response.error_description || response.error));
-        try {
-          const result = await exchangeYouTubeCode(response.code, window.location.origin, user.uid);
-          resolve(result.accessToken);
-        } catch (error) {
-          reject(error);
-        }
+        if (!response.access_token) return reject(new Error("Google did not return a YouTube access token."));
+        resolve(response.access_token);
       },
       error_callback: (error) => reject(new Error(
         error.type === "popup_closed" ? "Connection canceled." : error.message || error.type || "Google authorization failed."
       ))
     });
-    codeClient.requestCode();
+    tokenClient.requestAccessToken();
   });
 }
 
