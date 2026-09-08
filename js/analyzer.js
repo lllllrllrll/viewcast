@@ -6,16 +6,13 @@ import {
 import { firebaseConfig, firebaseConfigured } from "./firebase-config.js";
 import {isGeminiAvailable} from "./gemini-client.js?v=8";
 import { addNotifications } from "../components/notifications.js";
-import {studioVideoCardsHtml, syncVideoLibrarySelection} from "../components/youtube-video-library.js?v=1";
-import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=4";
-import {getPrivateVideoAnalytics} from "./analyzer-private-analytics.js?v=3";
 import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
 import {createBusySetter, createStatusSetter, ensureStatusElement} from "./services/ui-state.js?v=1";
 import {createYouTubePageSession} from "./services/youtube-page-session.js?v=1";
 import {createVideoAnalysisCache} from "./services/video-analysis-cache.js?v=1";
 import {activeYouTubeChannelId} from "./services/youtube-session.js?v=1";
-import {buildGeminiVideoAnalysis, retentionDipContext} from "./modules/video-gemini-analysis.js?v=1";
-import {drawRetention, renderSearchTerms, renderTimeline} from "./modules/video-analysis-renderer.js?v=1";
+import {buildGeminiVideoAnalysis} from "./modules/video-gemini-analysis.js?v=1";
+import {drawRetention, fallbackTimeline, renderSearchTerms, renderTimeline} from "./modules/video-analysis-renderer.js?v=1";
 import {
   clearAnalyzerResults,
   setAnalyzerLoading,
@@ -24,19 +21,13 @@ import {
 } from "./modules/video-analysis-view.js?v=1";
 import {
   fetchChannelProfile,
-  fetchChannelVideos,
-  fetchVideoById
+  fetchChannelVideos
 } from "./insights-youtube.js?v=5";
+import {secondsFromIso} from "./insights-format.js?v=1";
 import {
-  durationFromIso,
-  durationFromSeconds,
-  numberValue,
-  secondsFromIso,
-  shortText,
-  youtubeCategoryName
-} from "./insights-format.js?v=1";
-
-/* global drawLineChart */
+  parseVideoId, renderAnalyzerVideoLibrary, selectLibraryVideo
+} from "./modules/analyzer-video-library.js?v=1";
+import {createVideoAnalysisLoader} from "./modules/video-analysis-loader.js?v=1";
 
 const form = document.getElementById("videoAnalysisForm");
 const videoUrlInput = document.getElementById("videoUrl");
@@ -50,7 +41,6 @@ let auth = null;
 let channelVideos = [];
 let selectedVideoId = "";
 let analysisRequestId = 0;
-let latestLinkedVideoContext = null;
 let initialVideoId = "";
 const {
   clearCachedAccessToken,
@@ -72,142 +62,36 @@ const setBusy = createBusySetter(submitButton, {
   busyLabel: "Analyzing...",
   idleLabel: "Analyze"
 });
-
-function percent(value) {
-  const number = numberValue(value);
-  if (number === null) return "";
-  return `${Math.round(number * 10) / 10}%`;
-}
-
-function isLivestream(video = {}) {
-  const broadcastState = video.snippet?.liveBroadcastContent;
-  return Boolean(video.liveStreamingDetails) ||
-    broadcastState === "live" ||
-    broadcastState === "upcoming";
-}
-
 const setLibraryStatus = createStatusSetter(videoLibraryStatus);
 const setLibraryBusy = createBusySetter(refreshVideosButton, {
   busyLabel: "Loading...",
   idleLabel: "Refresh Videos"
 });
 
+
 function updateLibrarySelection(videoId) {
-  selectedVideoId = videoId || "";
-  syncVideoLibrarySelection(videoLibrary, selectedVideoId);
+  selectedVideoId = selectLibraryVideo(videoLibrary, videoId);
 }
 
 function renderVideoLibrary(videos = channelVideos) {
-  channelVideos = Array.isArray(videos)
-    ? videos.filter((video) => !isLivestream(video))
-    : [];
-  if (!videoLibrary) return;
-
-  if (!channelVideos.length) {
-    videoLibrary.innerHTML = '<div class="video-library-empty">No uploads are loaded yet. Refresh videos to pull from your linked channel.</div>';
-    return;
-  }
-
-  videoLibrary.innerHTML = studioVideoCardsHtml(channelVideos);
-
-  if (!selectedVideoId || !channelVideos.some((video) => video.id === selectedVideoId)) {
-    selectedVideoId = channelVideos[0]?.id || "";
-  }
-  if (selectedVideoId && videoUrlInput && !parseVideoId(videoUrlInput.value)) {
-    videoUrlInput.value = `https://www.youtube.com/watch?v=${selectedVideoId}`;
-  }
-  updateLibrarySelection(selectedVideoId);
-}
-
-function parseVideoId(value) {
-  const trimmed = value.trim();
-  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
-
-  try {
-    const url = new URL(trimmed);
-    if (url.hostname.includes("youtu.be")) {
-      const id = url.pathname.split("/").filter(Boolean)[0];
-      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
-    }
-    const watchId = url.searchParams.get("v");
-    if (watchId) return /^[a-zA-Z0-9_-]{11}$/.test(watchId) ? watchId : "";
-    const shorts = url.pathname.match(/\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})/);
-    if (shorts) return shorts[2];
-  } catch (error) {
-    return "";
-  }
-
-  return "";
-}
-
-async function requestAccessToken() {
-  if (!currentUser) throw new Error("Sign in before analyzing a video.");
-  return getRenewedYouTubeAccessToken(currentUser.uid, activeYouTubeChannelId());
-}
-
-async function getAccessToken() {
-  return readCachedAccessToken() || requestAccessToken();
-}
-
-async function loadVideoDetailsWithRetry(videoId, accessToken) {
-  try {
-    return await fetchVideoById(videoId, accessToken);
-  } catch (error) {
-    if (error.status !== 401 && error.status !== 403) throw error;
-    clearCachedAccessToken();
-    setStatus("YouTube access needs to be refreshed. Please approve once to continue.");
-    const refreshedToken = await requestAccessToken();
-    return fetchVideoById(videoId, refreshedToken);
-  }
-}
-
-async function loadPrivateAnalytics(videoId, accessToken) {
-  try {
-    const data = await getPrivateVideoAnalytics(videoId, accessToken);
-    return {...data, retentionError: null, needsRefresh: false, errors: []};
-  } catch (error) {
-    return {
-      analytics: null,
-      retentionPoints: [],
-      searchTerms: [],
-      retentionError: error,
-      needsRefresh: false,
-      errors: [error]
-    };
-  }
-}
-
-async function loadVideoAnalysisWithRetry(videoId) {
-  let accessToken = "";
-  let video = channelVideos.find((item) => item.id === videoId) || null;
-  let privateData = {analytics: null, retentionPoints: [], searchTerms: [], errors: []};
-
-  try {
-    accessToken = await getAccessToken();
-    video = await loadVideoDetailsWithRetry(videoId, accessToken);
-    privateData = await loadPrivateAnalytics(videoId, accessToken);
-
-  } catch (error) {
-    if (!video) throw error;
-    console.warn("Private YouTube Studio data was unavailable.", error);
-    throw new Error("YouTube Studio analytics could not be loaded. Relink the channel and approve Analytics access.");
-  }
-
-  privateData.errors.forEach((error) => {
-    console.warn("Some private video analytics were not available.", error);
+  const result = renderAnalyzerVideoLibrary({
+    videos, library: videoLibrary, input: videoUrlInput, selectedVideoId
   });
-
-  return [
-    video,
-    privateData.analytics,
-    privateData.retentionPoints,
-    privateData.searchTerms,
-    accessToken,
-    privateData.errors,
-    privateData.retentionError
-  ];
+  channelVideos = result.videos;
+  selectedVideoId = result.selectedVideoId;
 }
-
+const {
+  getAccessToken,
+  loadPrivateAnalytics,
+  loadVideoAnalysisWithRetry,
+  requestAccessToken
+} = createVideoAnalysisLoader({
+  getUser: () => currentUser,
+  getVideos: () => channelVideos,
+  clearCachedAccessToken,
+  readCachedAccessToken,
+  setStatus
+});
 async function analyzeVideoById(videoId) {
   if (!videoId) return;
 
@@ -231,13 +115,6 @@ async function analyzeVideoById(videoId) {
     updateLibrarySelection(videoId);
     const [video, analytics, retentionPoints, searchTerms, accessToken, , retentionError] = await loadVideoAnalysisWithRetry(videoId);
     if (requestId !== analysisRequestId) return;
-    latestLinkedVideoContext = {
-      video,
-      analytics,
-      retentionPoints,
-      searchTerms
-    };
-
     const cachedGeminiAnalysis = readCachedGeminiVideoAnalysis(video, analytics, retentionPoints, searchTerms);
     let geminiAnalysis = cachedGeminiAnalysis;
     setStatus(cachedGeminiAnalysis
@@ -428,7 +305,6 @@ if (form && firebaseConfigured) {
     if (!privateData.analytics) return;
     const video = channelVideos.find((item) => item.id === selectedVideoId);
     if (!video) return;
-    latestLinkedVideoContext = {...privateData, video};
     updateAnalyzerMetrics(privateData.analytics);
     renderSearchTerms(privateData.searchTerms);
     requestAnimationFrame(() => drawRetention(

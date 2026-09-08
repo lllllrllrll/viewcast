@@ -1,7 +1,7 @@
 import {isGeminiAvailable, requestGeminiContent, requestGeminiText} from "./gemini-client.js?v=8";
 import {numberValue, shortText, youtubeCategoryName} from "./insights-format.js?v=1";
 import {parseJsonObject} from "./services/json.js?v=1";
-import {isShort, trendEvidence, uploadPerformanceContext} from "./insights-model.js?v=8";
+import {isShort, trendEvidence, uploadPerformanceContext} from "./insights-model.js?v=9";
 import {
   channelScanContext, compactChannelProfile,
   geminiCreatorContext

@@ -3,7 +3,7 @@ import {
   buildCrossoverTrendSuggestions,
   isGroundedTrendLabel,
   normalizedTitleWords
-} from "../insights-model.js?v=8";
+} from "../insights-model.js?v=9";
 
 function normalizeRecommendation(item = {}, fallback = {}) {
   return {
@@ -155,4 +155,3 @@ export function normalizeGeminiInsights(value, summary) {
     chatIntro: String(value.chatIntro || compactAdviceSummary(summary)).slice(0, 360)
   };
 }
-

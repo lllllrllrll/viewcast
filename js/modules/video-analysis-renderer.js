@@ -1,4 +1,5 @@
 import {durationFromSeconds, escapeHtml, secondsFromIso} from "../insights-format.js?v=1";
+import {retentionDipContext} from "./video-gemini-analysis.js?v=1";
 
 let dismissHandler = null;
 
@@ -45,6 +46,22 @@ export function renderSearchTerms(searchTerms) {
       <span>${escapeHtml(`${Math.round(row.views).toLocaleString()} views from search`)}</span></div>
       <time>${escapeHtml(row.periodLabel || " ")}</time>
     </div>`).join("");
+}
+
+export function fallbackTimeline(retentionPoints, video, edits = []) {
+  const dips = retentionDipContext(retentionPoints, video, 6);
+  if (dips.length) return dips.map((dip, index) => ({
+    timestamp: dip.time,
+    title: `${dip.fromPercent}% → ${dip.toPercent}% retention (${dip.dropPoints}-point drop)`,
+    suggestion: edits[index]?.recommendation || `${dip.phase}: analytics show viewers leaving between ${dip.startTime} and ${dip.time}. Check this window for slow pacing, repetition, or a delayed payoff, then tighten the edit or add a visual change before the drop.`,
+    severity: dip.dropPoints >= 10 ? "high" : "medium"
+  }));
+  return edits.slice(0, 5).map((item, index) => ({
+    timestamp: item.segment.match(/\d{1,2}:\d{2}(?::\d{2})?/)?.[0] || durationFromSeconds(index * 30),
+    title: item.issue,
+    suggestion: item.recommendation,
+    severity: index < 2 ? "high" : "medium"
+  }));
 }
 
 export function renderTimeline(points, durationSeconds = 0, recommendedEdits = []) {

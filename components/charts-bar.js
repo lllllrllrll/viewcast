@@ -1,4 +1,5 @@
 import {scaleCanvas} from "./charts-line.js?v=1";
+import {colors} from "./chart-colors.js?v=1";
 
 export function drawBarChart(canvasId, data, maxVal = 80) {
   const canvas = document.getElementById(canvasId);

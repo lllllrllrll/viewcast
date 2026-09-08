@@ -1,3 +1,6 @@
+import {bindLineHover, drawLineHover} from "./charts-line-hover.js?v=1";
+import {colors} from "./chart-colors.js?v=1";
+
 export function scaleCanvas(canvas) {
   const rect = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
@@ -154,113 +157,11 @@ export function drawLineChart(canvasId, actual, forecast, labels, options = {}) 
     ctx.restore();
   });
 
-  // Hover state handling
-  if (canvas._hoverPoint && !options.isInternal) {
-    const p = canvas._hoverPoint;
-
-    // Vertical line
-    ctx.beginPath();
-    ctx.setLineDash([4, 4]);
-    ctx.moveTo(p.x, pad.top);
-    ctx.lineTo(p.x, height - pad.bottom);
-    ctx.strokeStyle = colors.muted;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Actual point dot
-    ctx.beginPath();
-    ctx.arc(p.x, p.yActual, 5, 0, Math.PI * 2);
-    ctx.fillStyle = colors.teal;
-    ctx.fill();
-    ctx.strokeStyle = colors.surface;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Tooltip box
-    const uploadCount = p.uploads?.length || 0;
-    const tipW = uploadCount ? 260 : 100;
-    const tipH = uploadCount ? 94 : 45;
-    let tipX = p.x + 10;
-    let tipY = p.yActual - tipH - 10;
-
-    if (tipX + tipW > width) tipX = p.x - tipW - 10;
-    if (tipY < 0) tipY = p.yActual + 10;
-    tipX = Math.max(4, Math.min(tipX, width - tipW - 4));
-    tipY = Math.max(4, Math.min(tipY, height - tipH - 4));
-
-    ctx.fillStyle = "rgba(28, 36, 48, 0.95)";
-    ctx.beginPath();
-    ctx.roundRect(tipX, tipY, tipW, tipH, 6);
-    ctx.fill();
-
-    ctx.fillStyle = "white";
-    ctx.font = "bold 12px Inter, sans-serif";
-    ctx.fillText(p.label, tipX + 8, tipY + 18);
-    ctx.font = "12px Inter, sans-serif";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-    const valText = Number(p.actualVal).toLocaleString() + (options.ySuffix ?? "K");
-    ctx.fillText(valText, tipX + 8, tipY + 36);
-    if (uploadCount) {
-      const upload = p.uploads[0];
-      const thumbnail = canvas._markerImages?.get(upload.thumbnail);
-      const imageX = tipX + 8;
-      const imageY = tipY + 47;
-      if (thumbnail?.complete && thumbnail.naturalWidth) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(imageX, imageY, 64, 36, 4);
-        ctx.clip();
-        ctx.drawImage(thumbnail, imageX, imageY, 64, 36);
-        ctx.restore();
-      } else {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
-        ctx.fillRect(imageX, imageY, 64, 36);
-      }
-      const maxTitleLength = uploadCount > 1 ? 25 : 31;
-      const title = upload.title.length > maxTitleLength
-        ? `${upload.title.slice(0, maxTitleLength - 1)}…`
-        : upload.title;
-      ctx.fillStyle = "white";
-      ctx.font = "600 11px Inter, sans-serif";
-      ctx.fillText(title, tipX + 80, tipY + 62);
-      ctx.fillStyle = colors.amber;
-      ctx.font = "600 10px Inter, sans-serif";
-      ctx.fillText(uploadCount > 1 ? `+${uploadCount - 1} more upload${uploadCount === 2 ? "" : "s"}` : "Uploaded", tipX + 80, tipY + 79);
-    }
-  }
-
-  // Attach event listeners once
-  if (!canvas._hasListeners) {
-    canvas.addEventListener("mousemove", (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-
-      let closest = null;
-      let minDist = 30; // Threshold for snapping
-
-      (canvas._chartPoints || []).forEach(p => {
-        const dist = Math.abs(p.x - mx);
-        if (dist < minDist) {
-          minDist = dist;
-          closest = p;
-        }
-      });
-
-      if (closest !== canvas._hoverPoint) {
-        canvas._hoverPoint = closest;
-        const { actual, forecast, labels, options } = canvas._chartData;
-        drawLineChart(canvasId, actual, forecast, labels, { ...options, isInternal: false });
-      }
+  drawLineHover({canvas, ctx, width, height, pad, options});
+  bindLineHover(canvas, () => {
+    const data = canvas._chartData;
+    drawLineChart(canvasId, data.actual, data.forecast, data.labels, {
+      ...data.options, isInternal: false
     });
-
-    canvas.addEventListener("mouseleave", () => {
-      canvas._hoverPoint = null;
-      const { actual, forecast, labels, options } = canvas._chartData;
-      drawLineChart(canvasId, actual, forecast, labels, { ...options, isInternal: false });
-    });
-
-    canvas._hasListeners = true;
-  }
+  });
 }

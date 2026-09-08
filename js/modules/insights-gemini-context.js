@@ -1,5 +1,5 @@
 import {durationFromIso, numberValue, shortText, youtubeCategoryName} from "../insights-format.js?v=1";
-import {importantWords, isShort} from "../insights-model.js?v=8";
+import {importantWords, isShort} from "../insights-model.js?v=9";
 
 let savedChannelContext = {channelTopic: "", channelContext: ""};
 
@@ -17,29 +17,6 @@ export function geminiCreatorContext() {
 export function compactAdviceSummary(summary) {
   const trendTitle = summary.trendVideos[0]?.snippet?.title || "Similar trend signals unavailable";
   return `I classified this as ${summary.channelLane?.label || "a general creator channel"}. Start with ${summary.topicIdeas[0]?.title || "a direct follow-up"}, post long-form near ${summary.videoUploadTime}, test Shorts near ${summary.shortUploadTime}, aim for ${summary.nextVideoLength} on the next video and ${summary.nextShortLength} on the next Short. Trend reference: ${trendTitle}.`;
-}
-
-function channelVideoContext(videos) {
-  return videos.slice(0, 40).map((video) => ({
-    title: video.snippet?.title || "Untitled video",
-    description: shortText(video.snippet?.description || "", 260),
-    tags: (video.snippet?.tags || []).slice(0, 12),
-    publishedAt: video.snippet?.publishedAt || "",
-    views: numberValue(video.ownerAnalytics?.views) || 0,
-    likes: numberValue(video.ownerAnalytics?.likes) || 0,
-    comments: numberValue(video.ownerAnalytics?.comments) || 0,
-    shares: numberValue(video.ownerAnalytics?.shares) || 0,
-    watchMinutes: numberValue(video.ownerAnalytics?.estimatedMinutesWatched) || 0,
-    averageViewPercentage: numberValue(video.ownerAnalytics?.averageViewPercentage) || 0,
-    subscribersGained: numberValue(video.ownerAnalytics?.subscribersGained) || 0,
-    subscribersLost: numberValue(video.ownerAnalytics?.subscribersLost) || 0,
-    analyticsSource: "youtube-studio",
-    analyticsPeriod: video.ownerAnalytics?.periodLabel || "90D",
-    duration: durationFromIso(video.contentDetails?.duration),
-    format: isShort(video) ? "Short" : "Video",
-    youtubeCategoryId: video.snippet?.categoryId || "",
-    youtubeCategoryName: youtubeCategoryName(video.snippet?.categoryId)
-  }));
 }
 
 export function channelScanContext(videos, profile = {}, {includeCatalog = true} = {}) {
@@ -143,4 +120,3 @@ export function inferChannelNicheTerms(videos, profile = {}) {
     .map(([word]) => word)
     .slice(0, 10);
 }
-

@@ -3,7 +3,7 @@ import {
   buildCrossoverTrendSuggestions, creatorContextLabel, importantWords,
   isEnglishTrendVideo, readableTrendQuery, trendAgeDays,
   trendMomentumScore
-} from "../js/insights-model.js?v=8";
+} from "../js/insights-model.js?v=9";
 
 function videoEngagementRate(video) {
   const views = numberValue(video.statistics?.viewCount) || 0;

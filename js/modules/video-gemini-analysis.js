@@ -148,23 +148,6 @@ function normalizeGeminiVideoAnalysis(value) {
   };
 }
 
-function retentionEditSuggestions(retentionPoints, video) {
-  const dips = retentionDipContext(retentionPoints, video, 5);
-  if (!dips.length) return [];
-
-  return dips.map((dip) => {
-    const isIntro = dip.positionPercent <= 15;
-    return [
-      dip.time,
-      `${dip.dropPoints} point retention drop (${dip.fromPercent}% → ${dip.toPercent}%)`,
-      isIntro
-        ? "Tighten the opening: state the payoff sooner, cut setup, and show the strongest visual or result before the drop."
-        : "Review this moment for repetition, slow setup, or a promise mismatch. Cut dead air, add a pattern interrupt, or move the next payoff before this timestamp.",
-      "Retention dip"
-    ];
-  });
-}
-
 export async function buildGeminiVideoAnalysis({video, analytics, retentionPoints, searchTerms, channelProfile, videos}) {
   if (!isGeminiAvailable()) return null;
 

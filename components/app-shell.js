@@ -20,12 +20,12 @@ function hideEmptyPrimaryButtons(root = document) {
   });
 }
 
-window.addEventListener("resize", redrawThemedCharts);
+window.addEventListener("resize", () => window.redrawThemedCharts?.());
 document.addEventListener("DOMContentLoaded", () => {
-  initCharts();
+  window.initCharts?.();
   hideEmptyPrimaryButtons();
 
-  const themeObserver = new MutationObserver(redrawThemedCharts);
+  const themeObserver = new MutationObserver(() => window.redrawThemedCharts?.());
   themeObserver.observe(document.body, {
     attributes: true,
     attributeFilter: ["class"]
@@ -98,7 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-authInitialization.catch((error) => {
+window.authInitialization?.catch((error) => {
   console.error("Authentication failed to initialize.", error);
   document.body.classList.add("auth-ready");
 });
