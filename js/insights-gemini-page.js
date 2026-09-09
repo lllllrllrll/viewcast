@@ -5,7 +5,7 @@ import {isShort, trendEvidence, uploadPerformanceContext} from "./insights-model
 import {
   channelScanContext, compactChannelProfile,
   geminiCreatorContext
-} from "./insights-gemini.js?v=5";
+} from "./insights-gemini.js?v=8";
 import {normalizeGeminiInsights} from "./modules/insights-gemini-normalize.js?v=1";
 
 export {normalizeGeminiInsights};
@@ -63,29 +63,26 @@ export async function buildGeminiPageInsights(summary, videos) {
   const prompt = [
     "You are ViewCast's YouTube strategist. Return compact JSON only. No trailing commas.",
     "Use only supplied channel stats, trend references, and upload patterns. Do not invent analytics.",
-    "Before writing any card or recommendation, scan channelWideScan across the available uploadCatalog, recurringTags, categories, formatMix, recentUploads, and topPerformers. Base advice on repeated channel-wide evidence rather than one upload.",
-    "Use uploadsScanned and scanCoveragePercent as confidence signals. If the scan is partial or metadata is missing, make narrower claims and never imply Gemini watched video or accessed data that is not supplied.",
+    "Base advice on repeated channel-wide evidence, using scan coverage as confidence. Never imply access to unsupplied data.",
     "Treat creatorProvidedContext as the primary source for the channel niche, audience, goals, and requested content direction.",
     "Classify the channel niche from repeated upload patterns, then make every card and suggestion match that niche.",
     "Use contentInterpretations to understand what the creator's titles mean and which media they reference. Treat the raw title only as a lookup key and performance label, never as a ready-made topic.",
-    "Base concepts on the resolved mediaReferences, premise, audienceAppeal, and external trend evidence. Do not paste a creator title into a suggestion, tell the creator to expand it, or merely propose a follow-up/part 2.",
+    "Base concepts on resolved references, premise, audience appeal, and external trends. Never recycle an upload title or merely propose a follow-up.",
     "When an interpretation has low confidence or no resolved media reference, do not build a recommendation around that interpretation.",
     "Use 12-hour time like 'Tue 6 PM'. Avoid generic advice such as make a follow-up, post more, extend the video, or improve the hook.",
     "Return exactly 3 nextVideoSuggestions and exactly 3 recommendations. Every item needs a non-empty title, body, label, and tone.",
-    "Exactly 2 of the 3 nextVideoSuggestions must be specific new concepts grounded in two different external trendReferences. The third must be grounded in the creator's own channel performance.",
-    "For each trend-grounded suggestion, name the external reference, state its published date and viewsPerDay, explain why it fits this channel, and use the label 'Current trend'. Never present a search query itself as proof of a trend.",
+    "Ground 2 suggestions in distinct accepted trendReferences and 1 in channel performance. Cite the trend title/date/viewsPerDay or a supplied performance number; label them Current trend or Channel data.",
     "For the channel-grounded suggestion, cite a supplied performance number and use the label 'Channel data'.",
     "A trend reference is supporting evidence, not a concept to copy. Transform its viewer demand into an original angle for this channel.",
     "recommendations must be 3 important strategic tips the creator can act on now, such as packaging, upload timing, format length, niche/trend fit, Shorts strategy, or weak-angle avoidance.",
-    "topTopicSignal.value must be a short, recognizable trend name (2-6 words), not a sentence or a fragment copied from a video title.",
-    "topTopicSignal.value must describe the central idea or viewer interest shared by the evidence. It must not equal, abbreviate, or lightly rewrite a source video's title.",
+    "topTopicSignal.value must be a supported 2-6 word shared viewer interest, not a copied or lightly rewritten title.",
     "topTopicSignal.detail must credit the strongest supporting trendReference by its exact video title and channel name.",
     "Every word in topTopicSignal.value must be supported by the supplied external YouTube trend references or trend queries. Do not invent a trend.",
-    "Review every trendReference for semantic relevance to creatorProvidedContext and present-day usefulness. Reject videos that only share a broad category word, discuss an old event/topic despite being newly uploaded, are archival/reuploads, or do not help this specific creator.",
+    "Reject trend references that are broad-only matches, stale topics, archival/reuploads, or irrelevant to creator context.",
     "Return validatedTrends as up to 3 exact, character-for-character title strings copied from distinct accepted trendReferences. Use fewer than 3 when fewer are genuinely current and relevant; never fill space with a weak match.",
     "Use only references included in validatedTrends for trend-grounded nextVideoSuggestions. If fewer than 2 references pass, replace the unsupported trend suggestion with channel-data advice instead of using a rejected reference.",
     "Return exactly 3 crossoverTrends as relevant Shorts opportunities for this channel, using three distinct accepted trendReferences when available.",
-    "Every crossover trend must name its exact same-topic reference, explain why its proven viewer demand fits this channel, and transform that demand into a specific original Short with a hook, format, and payoff. Use the label 'Relevant opportunity'. Never use outsideTrendReferences or unrelated platform-wide subjects for this section, and never copy the reference's concept.",
+    "Each crossover trend must cite a same-topic reference and turn its demand into an original Short with hook, format, and payoff. Label it Relevant opportunity.",
     "JSON shape:",
     `{"cards":{"bestUploadTime":{"value":"","detail":"","tone":"good"},"nextVideoLength":{"value":"","detail":"","tone":"good"},"nextShortLength":{"value":"","detail":"","tone":"warn"},"topTopicSignal":{"value":"","detail":"","tone":"good"}},"validatedTrends":["","",""],"nextVideoSuggestions":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"crossoverTrends":[{"title":"","body":"","label":"Relevant opportunity","tone":"good"},{"title":"","body":"","label":"Relevant opportunity","tone":"good"},{"title":"","body":"","label":"Relevant opportunity","tone":"good"}],"recommendations":[{"title":"","body":"","label":"","tone":"good"},{"title":"","body":"","label":"","tone":"warn"},{"title":"","body":"","label":"","tone":"good"}],"chatIntro":""}`,
     "",
@@ -103,7 +100,7 @@ export async function buildGeminiPageInsights(summary, videos) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 850
+        maxOutputTokens: 700
       }
     });
 
@@ -153,10 +150,10 @@ export async function buildGeminiChatReply(question, summary, chatHistory = []) 
 
   try {
     const text = await requestGeminiText({
-      contents: chatHistory.slice(-4),
+      contents: chatHistory.slice(-3),
       systemInstruction,
       generationConfig: {
-        maxOutputTokens: 120
+        maxOutputTokens: 96
       }
     });
 

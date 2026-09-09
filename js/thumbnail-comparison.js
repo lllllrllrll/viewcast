@@ -109,7 +109,7 @@ form.addEventListener("submit", async (event) => {
         {inlineData: version2},
         {text: 'Return this exact JSON shape: {"winner":"Version 1, Version 2, or Tie","version1Score":0.0,"version2Score":0.0,"summary":"2-3 sentence comparison tied to the title","winnerReasons":["reason","reason","reason"],"feedback":["specific Version 1 feedback","specific Version 2 feedback","shared lesson"],"recommendation":"best combined redesign direction for this title"}'}
       ]}],
-      generationConfig: {temperature: 0.25, maxOutputTokens: 480, responseMimeType: "application/json"}
+      generationConfig: {temperature: 0.25, maxOutputTokens: 360, responseMimeType: "application/json"}
     });
     const comparison = {...parseJson(response), _videoTitle: videoTitle};
     saveCachedResult(cacheKey, comparison);

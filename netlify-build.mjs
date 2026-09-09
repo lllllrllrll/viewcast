@@ -24,7 +24,7 @@ await Promise.all([
 
 const stylesheetEntry = await readFile("css/style.css", "utf8");
 const modulePaths = [...stylesheetEntry.matchAll(/@import url\("([^"]+)"\);/g)]
-  .map((match) => join("css", match[1]));
+  .map((match) => join("css", match[1].split("?")[0]));
 const bundledStyles = await Promise.all(
   modulePaths.map((path) => readFile(path, "utf8")),
 );

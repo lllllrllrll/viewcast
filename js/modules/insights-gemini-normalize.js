@@ -1,4 +1,4 @@
-import {compactAdviceSummary} from "../insights-gemini.js?v=5";
+import {compactAdviceSummary} from "../insights-gemini.js?v=8";
 import {
   buildCrossoverTrendSuggestions,
   isGroundedTrendLabel,

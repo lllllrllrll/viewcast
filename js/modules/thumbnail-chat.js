@@ -54,7 +54,7 @@ export function createThumbnailChat({getFile, getTitle}) {
       const reply = await requestGeminiText({
         systemInstruction: "Answer thumbnail follow-ups concisely using only the supplied analysis. Be specific and honest about uncertainty.",
         contents: [{role: "user", parts: [{text: `Analysis:${JSON.stringify({score: analysis.score, verdict: analysis.verdict, titleAlignment: analysis.titleAlignment, improvements: analysis.improvements, recommendation: analysis.recommendation})}\nTitle:${getTitle()}\nRecent chat:${recentConversation}\nAnswer the latest question directly.`}]}],
-        generationConfig: {temperature: 0.3, maxOutputTokens: 120}
+        generationConfig: {temperature: 0.3, maxOutputTokens: 96}
       });
       const answer = reply || "I could not produce a useful answer for that question.";
       append("assistant", answer);

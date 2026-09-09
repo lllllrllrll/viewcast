@@ -80,7 +80,10 @@ function videoAnalysisContext(video, analytics, retentionPoints, searchTerms, ch
   const retentionDips = retentionDipContext(retentionPoints, video);
 
   return {
-    channelProfile: channelProfile || {},
+    channelProfile: {
+      title: channelProfile?.title || channelProfile?.snippet?.title || "",
+      description: shortText(channelProfile?.description || channelProfile?.snippet?.description || "", 120)
+    },
     selectedVideo: {
       id: video.id || "",
       title: video.snippet?.title || "Untitled video",
@@ -155,9 +158,7 @@ export async function buildGeminiVideoAnalysis({video, analytics, retentionPoint
     "You are ViewCast's YouTube video analyst. Return compact JSON only.",
     "Inspect the attached public YouTube video directly, then combine what you observe with the supplied private analytics, retention samples, search terms, and compact channel comparison.",
     "Metric labels must be short: Above avg, Needs lift, Strong, Watch drop, or Unavailable.",
-    "Actively analyze retentionDips when present. Rank them by dropPoints, consider fromPercent, toPercent, windowSeconds, video phase, and nearby retention samples.",
-    "For every major dip, state what the analytics prove, then label the cause as a likely hypothesis—not a certainty—because analytics alone cannot reveal the exact on-screen cause.",
-    "Recommended edits must prioritize the largest retention drops. Each suggestion must name the exact dip timestamp, quantify the drop, explain likely viewer friction, and give a concrete edit or content change.",
+    "Prioritize retentionDips by dropPoints. For each major dip, cite its timestamp and measured change, label causes as hypotheses, and give a concrete edit.",
     "Use practical fixes: shorten/rewrite the intro, move payoff earlier, cut repetition, add pattern interrupts, add chapter/card/pinned-comment recovery, tighten title-thumbnail promise, or make a follow-up/Shorts cutdown.",
     "If retention samples exist but retentionDips is empty, explicitly say there was no significant 2+ point drop in the sampled curve. If retention data is absent, say it is unavailable.",
     "Create timelineInterestPoints for the major retention drops before adding other opportunities. Use exact timestamps and include the measured before-to-after percentages in each title or suggestion.",
@@ -186,7 +187,7 @@ export async function buildGeminiVideoAnalysis({video, analytics, retentionPoint
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 520
+        maxOutputTokens: 420
       }
     });
     const text = payload.candidates?.[0]?.content?.parts

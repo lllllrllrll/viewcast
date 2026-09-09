@@ -119,20 +119,17 @@ export async function buildGeminiTrendPlan(videos, channelProfile = null) {
 
   const prompt = [
     "You are classifying a YouTube channel for ViewCast.",
-    "Scan the complete channel evidence supplied below before choosing trends. Use the creator-provided topic and context first, then repeated patterns across the channel profile, recent uploads, top performers, descriptions, tags, YouTube categories, formats, dates, and performance.",
-    "Treat uploadsScanned and scanCoveragePercent as confidence signals. When only part of the channel is available, say so internally and rely only on repeated evidence; never invent unavailable channel details.",
+    "Use creator context first, then repeated profile, upload, tag, category, format, date, and performance evidence. Treat scan coverage as confidence; never invent missing details.",
     "TREND SOURCE RULE: when creator-provided context is non-empty, it is the exclusive source for queries and trend discovery. Do not use, quote, paraphrase, or derive any trend query from upload titles. Uploads may still be interpreted for later performance analysis, but they must not steer what counts as a current trend.",
     "Decide the channel's broad category and, when possible, a specific subcategory. Do not classify from one ambiguous word or one outlier upload.",
     "Use clean creator categories. Examples: Music, Gaming, Roblox, Minecraft, Fortnite, Anime, Memes, Sports, Beauty, Education, Tech, Vlogs, Cooking.",
     "If the channel is broad gaming, primaryCategory should be Gaming and specificCategory should be General gaming. If it is mostly Roblox, primaryCategory should be Gaming and specificCategory should be Roblox.",
     "If a channel has music videos, songs, covers, albums, beats, or artist content, classify it as Music. Use a specific subcategory like Rap, Covers, Beats, or Artist edits only when clear.",
     "If the channel mixes memes with another fandom, game, anime, or music niche, classify the primary content type and put the fandom/game/style in specificCategory.",
-    "Semantically interpret every upload title using its description, tags, category, and the repeated context across the channel. Identify what the title actually means, the media or real-world entity it references (game, show, film, song, artist, character, person, event, product, or meme), the video's underlying premise, and why that premise appeals to viewers.",
-    "Do not treat title wording as the topic by itself. Resolve slang, abbreviations, character names, quotes, episode references, memes, and fandom-specific language when the surrounding metadata supports it.",
-    "Never invent a media reference. If a reference is ambiguous, use an empty mediaReferences list, explain the likely premise conservatively, and set confidence to low.",
+    "Interpret up to 12 representative titles using their metadata and repeated channel context. Resolve references only when supported; otherwise leave mediaReferences empty and use low confidence.",
     "Then choose exactly 4 highly specific, search-ready trend queries from terms explicitly present in the creator context or resolved channel evidence, not by copying full upload titles. Each query must be a focused 3-7 word phrase. Do not add content-format or intent words such as challenge, guide, reaction, comparison, build, tips, or review unless that exact concept is present in the supplied evidence. Avoid category-only or one-word queries. The queries must cover 4 meaningfully different evidenced subtopics within the same category—not synonyms or rephrasings.",
     "Every query must contain a specific named game, franchise, fandom, genre, product, skill, audience problem, or recurring subject proven by the channel evidence. Never return broad queries such as gaming trends, viral gaming, popular games, YouTube trends, or general entertainment.",
-    "Return 4-10 nicheTerms that uniquely identify this creator's actual lane. Prefer repeated named entities, subgenres, recurring audience problems, and signature formats. Exclude generic category words such as gaming, videos, Shorts, trends, funny, and viral.",
+    "Return 4-8 distinctive nicheTerms; exclude generic words such as gaming, videos, Shorts, trends, funny, and viral.",
     "When creator-provided context exists, ignore resolved upload media references while choosing queries and use only that creator context. Each query must contain at least one meaningful term written in the creator context.",
     "Also choose exactly 5 expansionCategoryIds for popular trends outside the current topic. Choose from Film & Animation=1, Music=10, Sports=17, Gaming=20, Comedy=23, Entertainment=24, Education=27, and Science & Technology=28.",
     "The expansion categories must remain outside the creator's current topic, but they must offer a credible bridge to the audience interests, tone, skills, goals, or presentation style explicitly described in creator-provided context. Rank the strongest bridge first.",
@@ -142,7 +139,7 @@ export async function buildGeminiTrendPlan(videos, channelProfile = null) {
     "Channel profile:",
     JSON.stringify(channelProfile || {}),
     "",
-    "Channel-wide scan (available YouTube metadata, up to 200 uploads):",
+    "Representative channel scan:",
     JSON.stringify(channelScanContext(videos, channelProfile || {})),
     "",
     "Creator-provided channel topic and context (use this as the primary niche guidance):",
@@ -160,7 +157,7 @@ export async function buildGeminiTrendPlan(videos, channelProfile = null) {
       ],
       generationConfig: {
         responseMimeType: "application/json",
-        maxOutputTokens: 800
+        maxOutputTokens: 600
       }
     });
     const text = payload.candidates?.[0]?.content?.parts

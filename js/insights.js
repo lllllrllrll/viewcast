@@ -13,7 +13,7 @@ import {createBusySetter, createStatusSetter, ensureStatusElement} from "./servi
 import {createYouTubePageSession} from "./services/youtube-page-session.js?v=1";
 import {activeYouTubeChannelId} from "./services/youtube-session.js?v=1";
 import {fetchChannelVideos} from "./insights-youtube.js?v=5";
-import {setGeminiCreatorContext} from "./insights-gemini.js?v=7";
+import {setGeminiCreatorContext} from "./insights-gemini.js?v=8";
 import {
   currentTrendSignals, setInsightsCreatorContext
 } from "./insights-model.js?v=9";

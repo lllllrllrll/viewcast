@@ -11,7 +11,7 @@ import {createBusySetter, createStatusSetter, ensureStatusElement} from "./servi
 import {createYouTubePageSession} from "./services/youtube-page-session.js?v=1";
 import {createVideoAnalysisCache} from "./services/video-analysis-cache.js?v=1";
 import {activeYouTubeChannelId} from "./services/youtube-session.js?v=1";
-import {buildGeminiVideoAnalysis} from "./modules/video-gemini-analysis.js?v=1";
+import {buildGeminiVideoAnalysis} from "./modules/video-gemini-analysis.js?v=2";
 import {drawRetention, fallbackTimeline, renderSearchTerms, renderTimeline} from "./modules/video-analysis-renderer.js?v=1";
 import {
   clearAnalyzerResults,

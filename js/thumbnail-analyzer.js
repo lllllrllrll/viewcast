@@ -120,7 +120,7 @@ document.querySelectorAll("[data-thumbnail-tab]").forEach((tab) => tab.addEventL
   const activeMode = tab.dataset.thumbnailTab || "analysis";
   const comparisonActive = activeMode === "comparison";
   if (comparisonActive && !comparisonModulePromise) {
-    comparisonModulePromise = import("./thumbnail-comparison.js?v=4");
+    comparisonModulePromise = import("./thumbnail-comparison.js?v=5");
   }
   if (activeMode === "videos" && !videoPickerModulePromise) {
     videoPickerModulePromise = import("../components/thumbnail-video-picker.js?v=5");
@@ -167,7 +167,7 @@ form.addEventListener("submit", async (event) => {
           { inlineData: optimized }
         ]
       }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 480, responseMimeType: "application/json" }
+      generationConfig: {temperature: 0.3, maxOutputTokens: 360, responseMimeType: "application/json"}
     });
     const analysis = {...parseJson(response), _videoTitle: videoTitle};
     saveCachedResult(cacheKey, analysis);

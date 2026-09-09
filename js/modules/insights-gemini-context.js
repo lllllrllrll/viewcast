@@ -44,8 +44,8 @@ export function channelScanContext(videos, profile = {}, {includeCatalog = true}
 
   const compactUpload = (video) => ({
     title: video.snippet?.title || "Untitled video",
-    description: shortText(video.snippet?.description || "", 220),
-    tags: (video.snippet?.tags || []).slice(0, 10),
+    description: shortText(video.snippet?.description || "", 120),
+    tags: (video.snippet?.tags || []).slice(0, 6),
     publishedAt: video.snippet?.publishedAt || "",
     views: numberValue(video.ownerAnalytics?.views) || 0,
     likes: numberValue(video.ownerAnalytics?.likes) || 0,
@@ -71,26 +71,25 @@ export function channelScanContext(videos, profile = {}, {includeCatalog = true}
       .map(([name, count]) => ({name, count})),
     recurringTags: [...tagCounts.values()]
       .sort((a, b) => b.count - a.count)
-      .slice(0, 25),
+      .slice(0, 12),
     inferredNicheTerms: inferChannelNicheTerms(uploads, profile),
-    uploadCatalog: includeCatalog ? uploads.slice(0, 200).map((video) => ({
+    uploadCatalog: includeCatalog ? uploads.slice(0, 60).map((video) => ({
       title: video.snippet?.title || "Untitled video",
-      tags: (video.snippet?.tags || []).slice(0, 4),
+      tags: (video.snippet?.tags || []).slice(0, 3),
       category: youtubeCategoryName(video.snippet?.categoryId),
       format: isShort(video) ? "Short" : "Video",
       publishedAt: video.snippet?.publishedAt || "",
       views: numberValue(video.ownerAnalytics?.views) || 0,
-      analyticsPeriod: video.ownerAnalytics?.periodLabel || "90D"
     })) : [],
-    recentUploads: uploads.slice(0, 24).map(compactUpload),
-    topPerformers: sortedByViews.slice(0, 10).map(compactUpload)
+    recentUploads: uploads.slice(0, 12).map(compactUpload),
+    topPerformers: sortedByViews.slice(0, 6).map(compactUpload)
   };
 }
 
 export function compactChannelProfile(profile = {}) {
   return {
     title: profile.title || profile.snippet?.title || "",
-    description: shortText(profile.description || profile.snippet?.description || "", 180),
+    description: shortText(profile.description || profile.snippet?.description || "", 120),
     subscriberCount: profile.subscriberCount || profile.statistics?.subscriberCount || "",
     videoCount: profile.videoCount || profile.statistics?.videoCount || ""
   };

@@ -1,5 +1,5 @@
 import {durationFromSeconds, escapeHtml, secondsFromIso} from "../insights-format.js?v=1";
-import {retentionDipContext} from "./video-gemini-analysis.js?v=1";
+import {retentionDipContext} from "./video-gemini-analysis.js?v=2";
 
 let dismissHandler = null;
 
