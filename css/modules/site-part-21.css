@@ -1,0 +1,140 @@
+.auth-intro-copy > p:last-child {
+  max-width: 540px;
+  margin: 22px 0 0;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.auth-panel {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: clamp(24px, 6vw, 80px);
+}
+
+.auth-card {
+  width: min(100%, 440px);
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 34px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.auth-tabs button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-tabs button.active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgba(30, 41, 59, 0.08);
+}
+
+.auth-card-heading h2 {
+  margin: 0;
+  font-size: 30px;
+}
+
+.auth-card-heading p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.auth-message {
+  margin-top: 20px;
+  padding: 11px 12px;
+  border: 1px solid #f4bec9;
+  border-radius: 8px;
+  color: #8f324a;
+  background: #fff1f4;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.auth-message.success {
+  border-color: #a9ddc8;
+  color: #176448;
+  background: #edf9f3;
+}
+
+.auth-message.status {
+  border-color: #a9ddc8;
+  color: #176448;
+  background: #edf9f3;
+}
+
+.auth-message.setup {
+  border-color: #efd19b;
+  color: #79500d;
+  background: #fff8e8;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+
+.auth-signup-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-signup-fields[hidden] {
+  display: none;
+}
+
+.auth-form label,
+.auth-password-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.auth-form input:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(15, 139, 141, 0.12);
+}
+
+.auth-password-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.auth-password-label button {
+  padding: 0;
+  border: 0;
+  color: var(--teal);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
