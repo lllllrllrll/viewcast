@@ -1,0 +1,321 @@
+/* AI Insights page components and states. */
+
+.insight-error-panel[hidden] {
+  display: none;
+}
+
+.insight-error-panel {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  border-color: rgba(208, 77, 103, 0.36);
+  background: linear-gradient(180deg, rgba(255, 245, 247, 0.96), rgba(255, 255, 255, 0.94));
+}
+
+.insight-error-content {
+  max-width: 680px;
+  display: grid;
+  gap: 12px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.insight-error-content strong {
+  color: var(--rose);
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.08;
+}
+
+.insight-error-content p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.insight-error-content code {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.insight-refresh-empty[hidden] {
+  display: none;
+}
+
+.insight-refresh-empty {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+}
+
+.insight-refresh-empty-content {
+  display: grid;
+  place-items: center;
+}
+
+.insight-channel-empty[hidden] {
+  display: none;
+}
+
+.insight-channel-empty {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+}
+
+.insight-channel-empty-content {
+  width: min(520px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.insight-channel-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.insight-channel-empty-icon svg {
+  width: 27px;
+  height: 27px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.insight-channel-empty-content h3 {
+  margin: 0;
+  font-size: clamp(24px, 4vw, 34px);
+}
+
+.insight-channel-empty-content p {
+  max-width: 470px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.insight-channel-empty-content .primary-button {
+  text-decoration: none;
+}
+
+body.insights-page .metric-card {
+  align-content: start;
+  min-height: auto;
+  overflow: visible;
+}
+
+body.insights-page .metric-value {
+  font-size: clamp(20px, 2vw, 30px);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+body.insights-page .insights-trends-card {
+  min-height: 230px;
+}
+
+body.insights-page .insights-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  width: max-content;
+  max-width: 100%;
+  gap: 4px;
+  margin: 0 0 16px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+body.insights-page .insights-tab {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+
+
+
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+body.insights-page .insights-tab.active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgba(30, 41, 59, 0.08);
+}
+
+body.insights-page .insights-tab:focus-visible {
+  outline: 2px solid rgba(15, 139, 141, 0.28);
+  outline-offset: 2px;
+}
+
+body.insights-page [data-insights-panel][hidden] {
+  display: none !important;
+}
+
+body.insights-page .metric-card[data-insights-panel="analysis"] {
+  grid-column: span 4;
+}
+
+body.insights-page .search-terms-panel[data-insights-panel="analysis"] {
+  grid-column: 1 / -1;
+}
+
+body.insights-page .insights-trends-card[data-insights-panel="trends"] {
+  grid-column: span 4;
+}
+
+.youtube-trend-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 28px;
+  font-size: clamp(16px, 1.5vw, 21px);
+  line-height: 1.25;
+}
+
+.youtube-trend-list li {
+  padding-left: 3px;
+}
+
+body.insights-page .trend {
+  max-width: 58%;
+  line-height: 1.25;
+  text-align: right;
+  white-space: normal;
+}
+
+body.insights-page .panel.large,
+body.insights-page .panel.side {
+  min-height: auto;
+}
+
+body.insights-page .activity {
+  gap: 18px;
+}
+
+body.insights-page .activity-item,
+body.insights-page .search-terms-panel .activity-item {
+  grid-template-columns: 10px minmax(0, 1fr);
+}
+
+body.insights-page .activity-item b {
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+body.insights-page .search-terms-panel .activity-item b {
+  font-size: 17px;
+}
+
+body.insights-page .activity-item span {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+body.insights-page .activity-item.is-collapsible span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+body.insights-page .activity-item.is-expanded span {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+body.insights-page .read-more-button {
+  justify-self: start;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--teal);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+body.insights-page .read-more-button:hover,
+body.insights-page .read-more-button:focus-visible {
+  color: #167b7d;
+  text-decoration: underline;
+  outline: none;
+}
+
+body.insights-page .trend-video-examples {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+body.insights-page .trend-video-examples > small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+body.insights-page .trend-video-example {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+
+  text-decoration: none;
+}
+
+body.insights-page .trend-video-example img {
+  width: 72px;
+  aspect-ratio: 16 / 9;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+body.insights-page .trend-video-example:hover span,
+body.insights-page .trend-video-example:focus-visible span {
+  color: var(--teal);
+  text-decoration: underline;
+}
+
+body.insights-page .activity-item time {
+  grid-column: 2;
+  justify-self: start;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+body.settings-dark .insights-tab.active {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+body.settings-dark .insight-error-panel {
+  background: linear-gradient(180deg, rgba(208, 77, 103, 0.12), rgba(24, 35, 45, 0.96));
+}

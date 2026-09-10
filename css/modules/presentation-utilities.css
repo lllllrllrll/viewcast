@@ -1,0 +1,115 @@
+/* CSP-safe presentation helpers: dynamic state is expressed with classes and data attributes. */
+.plan-indicator-spaced { margin-top: 8px; }
+.settings-upgrade-row { margin-top: 10px; }
+.settings-upgrade-button,
+.plan-choice-button { width: 100%; }
+.settings-upgrade-button { background: var(--blue); }
+.account-id-code { color: var(--muted); font-size: 12px; }
+.analyzer-url-search { width: min(320px, 42vw); }
+.analyzer-url-input { width: 100%; border: 0; outline: 0; background: transparent; }
+.modal-status-message { padding: 0 32px 24px; color: var(--rose); font-size: 13px; font-weight: 600; text-align: center; }
+.connection-prompt-error { color: var(--rose); font-weight: 700; }
+.primary-button.is-current-plan { background: var(--line); color: var(--muted); }
+.primary-button.is-unavailable-plan { background: var(--surface-2); color: var(--muted); }
+
+.timeline-position-0 { left: 0%; }
+.timeline-position-1 { left: 1%; }
+.timeline-position-2 { left: 2%; }
+.timeline-position-3 { left: 3%; }
+.timeline-position-4 { left: 4%; }
+.timeline-position-5 { left: 5%; }
+.timeline-position-6 { left: 6%; }
+.timeline-position-7 { left: 7%; }
+.timeline-position-8 { left: 8%; }
+.timeline-position-9 { left: 9%; }
+.timeline-position-10 { left: 10%; }
+.timeline-position-11 { left: 11%; }
+.timeline-position-12 { left: 12%; }
+.timeline-position-13 { left: 13%; }
+.timeline-position-14 { left: 14%; }
+.timeline-position-15 { left: 15%; }
+.timeline-position-16 { left: 16%; }
+.timeline-position-17 { left: 17%; }
+.timeline-position-18 { left: 18%; }
+.timeline-position-19 { left: 19%; }
+.timeline-position-20 { left: 20%; }
+.timeline-position-21 { left: 21%; }
+.timeline-position-22 { left: 22%; }
+.timeline-position-23 { left: 23%; }
+.timeline-position-24 { left: 24%; }
+.timeline-position-25 { left: 25%; }
+.timeline-position-26 { left: 26%; }
+.timeline-position-27 { left: 27%; }
+.timeline-position-28 { left: 28%; }
+.timeline-position-29 { left: 29%; }
+.timeline-position-30 { left: 30%; }
+.timeline-position-31 { left: 31%; }
+.timeline-position-32 { left: 32%; }
+.timeline-position-33 { left: 33%; }
+.timeline-position-34 { left: 34%; }
+.timeline-position-35 { left: 35%; }
+.timeline-position-36 { left: 36%; }
+.timeline-position-37 { left: 37%; }
+.timeline-position-38 { left: 38%; }
+.timeline-position-39 { left: 39%; }
+.timeline-position-40 { left: 40%; }
+.timeline-position-41 { left: 41%; }
+.timeline-position-42 { left: 42%; }
+.timeline-position-43 { left: 43%; }
+.timeline-position-44 { left: 44%; }
+.timeline-position-45 { left: 45%; }
+.timeline-position-46 { left: 46%; }
+.timeline-position-47 { left: 47%; }
+.timeline-position-48 { left: 48%; }
+.timeline-position-49 { left: 49%; }
+.timeline-position-50 { left: 50%; }
+.timeline-position-51 { left: 51%; }
+.timeline-position-52 { left: 52%; }
+.timeline-position-53 { left: 53%; }
+.timeline-position-54 { left: 54%; }
+.timeline-position-55 { left: 55%; }
+.timeline-position-56 { left: 56%; }
+.timeline-position-57 { left: 57%; }
+.timeline-position-58 { left: 58%; }
+.timeline-position-59 { left: 59%; }
+.timeline-position-60 { left: 60%; }
+.timeline-position-61 { left: 61%; }
+.timeline-position-62 { left: 62%; }
+.timeline-position-63 { left: 63%; }
+.timeline-position-64 { left: 64%; }
+.timeline-position-65 { left: 65%; }
+.timeline-position-66 { left: 66%; }
+.timeline-position-67 { left: 67%; }
+.timeline-position-68 { left: 68%; }
+.timeline-position-69 { left: 69%; }
+.timeline-position-70 { left: 70%; }
+.timeline-position-71 { left: 71%; }
+.timeline-position-72 { left: 72%; }
+.timeline-position-73 { left: 73%; }
+.timeline-position-74 { left: 74%; }
+.timeline-position-75 { left: 75%; }
+.timeline-position-76 { left: 76%; }
+.timeline-position-77 { left: 77%; }
+.timeline-position-78 { left: 78%; }
+.timeline-position-79 { left: 79%; }
+.timeline-position-80 { left: 80%; }
+.timeline-position-81 { left: 81%; }
+.timeline-position-82 { left: 82%; }
+.timeline-position-83 { left: 83%; }
+.timeline-position-84 { left: 84%; }
+.timeline-position-85 { left: 85%; }
+.timeline-position-86 { left: 86%; }
+.timeline-position-87 { left: 87%; }
+.timeline-position-88 { left: 88%; }
+.timeline-position-89 { left: 89%; }
+.timeline-position-90 { left: 90%; }
+.timeline-position-91 { left: 91%; }
+.timeline-position-92 { left: 92%; }
+.timeline-position-93 { left: 93%; }
+.timeline-position-94 { left: 94%; }
+.timeline-position-95 { left: 95%; }
+.timeline-position-96 { left: 96%; }
+.timeline-position-97 { left: 97%; }
+.timeline-position-98 { left: 98%; }
+.timeline-position-99 { left: 99%; }
+.timeline-position-100 { left: 100%; }
