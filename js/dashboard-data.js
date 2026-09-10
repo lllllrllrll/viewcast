@@ -9,7 +9,7 @@ import {
   getFirestore
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import {startStudioAutoRefresh} from "./services/studio-auto-refresh.js?v=1";
-import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=4";
+import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=5";
 import {
   readCachedYouTubeAccessToken
 } from "./services/youtube-session.js?v=1";

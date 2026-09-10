@@ -1,5 +1,5 @@
 import {getPrivateVideoAnalytics} from "../analyzer-private-analytics.js?v=3";
-import {getRenewedYouTubeAccessToken} from "../youtube-auth.js?v=4";
+import {getRenewedYouTubeAccessToken} from "../youtube-auth.js?v=5";
 import {activeYouTubeChannelId} from "../services/youtube-session.js?v=1";
 import {fetchVideoById} from "../insights-youtube.js?v=5";
 

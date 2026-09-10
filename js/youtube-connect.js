@@ -3,7 +3,7 @@ import {getAuth, onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12
 import {doc, getDoc, getFirestore, serverTimestamp, setDoc, updateDoc} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import {firebaseConfig, firebaseConfigured, googleOAuthClientId} from "./firebase-config.js";
 import {createChannelContextController} from "./modules/youtube-channel-context.js?v=1";
-import {revokeStoredYouTubeAuthorization} from "./youtube-auth.js?v=4";
+import {revokeStoredYouTubeAuthorization} from "./youtube-auth.js?v=5";
 import {
   createYouTubeConnections,
   MAX_LINKED_CHANNELS
@@ -12,7 +12,7 @@ import {
   fetchAnalyticsSummary,
   fetchOwnedChannel,
   requestYouTubeAccessToken
-} from "./services/youtube-link-api.js?v=1";
+} from "./services/youtube-link-api.js?v=2";
 import {createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
 
 const connectButton = document.getElementById("connectYouTube");

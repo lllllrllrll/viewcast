@@ -1,4 +1,4 @@
-import {getRenewedYouTubeAccessToken} from "../youtube-auth.js?v=4";
+import {getRenewedYouTubeAccessToken} from "../youtube-auth.js?v=5";
 import {fetchStudioReport} from "./youtube-studio-analytics.js?v=2";
 import {fetchYouTubeJson} from "../insights-youtube.js?v=5";
 import {clearCachedYouTubeAccessToken} from "./youtube-session.js?v=1";

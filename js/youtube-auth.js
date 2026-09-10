@@ -1,7 +1,32 @@
+import {initializeApp, getApps} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+import {getFunctions, httpsCallable} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
+import {firebaseConfig} from "./firebase-config.js";
+
 const tokenStorageKey = "viewcastYouTubeAccessToken";
-// Access tokens remain session-only. The Spark-compatible browser flow cannot
-// renew them silently, so users reconnect after Google expires the token.
+// Remove bearer tokens left by older builds. Renewable credentials stay on the
+// authenticated backend, so reopening still works without persistent JS access.
 localStorage.removeItem(tokenStorageKey);
+const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const functions = getFunctions(app, "us-central1");
+
+function saveToken(result, uid) {
+  const token = {
+    accessToken: result.accessToken,
+    expiresAt: Number(result.expiresAt || 0),
+    channelId: result.channelId || "",
+    uid
+  };
+  sessionStorage.setItem(tokenStorageKey, JSON.stringify(token));
+  localStorage.removeItem(tokenStorageKey);
+  return token.accessToken;
+}
+
+export async function exchangeYouTubeCode(code, redirectUri, uid) {
+  const call = httpsCallable(functions, "exchangeYouTubeAuthorizationCode");
+  const response = await call({code, redirectUri});
+  return {...response.data, accessToken: saveToken(response.data || {}, uid)};
+}
+
 export async function getRenewedYouTubeAccessToken(uid, channelId = "") {
   try {
     const cached = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null");
@@ -13,16 +38,18 @@ export async function getRenewedYouTubeAccessToken(uid, channelId = "") {
   } catch {
     sessionStorage.removeItem(tokenStorageKey);
   }
-  throw new Error("Your YouTube session expired. Open My Channel and reconnect to refresh analytics.");
+  const call = httpsCallable(functions, "getYouTubeAccessToken");
+  const response = await call();
+  if (channelId && response.data?.channelId !== channelId) {
+    throw new Error("The linked Google account does not own the active YouTube channel.");
+  }
+  return saveToken(response.data || {}, uid);
 }
 
 export async function revokeStoredYouTubeAuthorization() {
-  let accessToken = "";
+  const call = httpsCallable(functions, "revokeYouTubeAuthorization");
   try {
-    accessToken = JSON.parse(sessionStorage.getItem(tokenStorageKey) || "null")?.accessToken || "";
-    if (accessToken && window.google?.accounts?.oauth2?.revoke) {
-      await new Promise((resolve) => window.google.accounts.oauth2.revoke(accessToken, resolve));
-    }
+    await call();
   } finally {
     localStorage.removeItem(tokenStorageKey);
     sessionStorage.removeItem(tokenStorageKey);

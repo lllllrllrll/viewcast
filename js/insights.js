@@ -1,5 +1,5 @@
 import {isGeminiAvailable} from "./gemini-client.js?v=8";
-import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=4";
+import {getRenewedYouTubeAccessToken} from "./youtube-auth.js?v=5";
 import {createBusySetter, createStatusSetter, ensureStatusElement} from "./services/ui-state.js?v=1";
 import {createYouTubePageSession} from "./services/youtube-page-session.js?v=1";
 import {activeYouTubeChannelId} from "./services/youtube-session.js?v=1";

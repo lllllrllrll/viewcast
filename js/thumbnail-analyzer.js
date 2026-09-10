@@ -123,7 +123,7 @@ document.querySelectorAll("[data-thumbnail-tab]").forEach((tab) => tab.addEventL
     comparisonModulePromise = import("./thumbnail-comparison.js?v=5");
   }
   if (activeMode === "videos" && !videoPickerModulePromise) {
-    videoPickerModulePromise = import("../components/thumbnail-video-picker.js?v=5");
+    videoPickerModulePromise = import("../components/thumbnail-video-picker.js?v=6");
   }
   document.querySelectorAll("[data-thumbnail-tab]").forEach((button) => {
     const active = button === tab;
