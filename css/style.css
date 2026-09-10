@@ -1,4 +1,9 @@
-@import url("modules/interface.css?v=16");
-@import url("modules/presentation-utilities.css?v=16");
-@import url("modules/bar-chart-values.css?v=16");
-@import url("modules/thumbnail-score-values.css?v=16");
+@import url("modules/interface.css?v=21");
+@import url("modules/account.css?v=21");
+@import url("modules/thumbnails.css?v=21");
+@import url("modules/analysis.css?v=21");
+@import url("modules/insights.css?v=21");
+@import url("modules/chatbox.css?v=21");
+@import url("modules/presentation-utilities.css?v=21");
+@import url("modules/bar-chart-values.css?v=21");
+@import url("modules/thumbnail-score-values.css?v=21");
