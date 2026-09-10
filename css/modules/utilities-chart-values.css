@@ -113,27 +113,3 @@
 .timeline-position-98 { left: 98%; }
 .timeline-position-99 { left: 99%; }
 .timeline-position-100 { left: 100%; }
-
-.bar i[data-value="0"] { --value: 0%; }
-.bar i[data-value="1"] { --value: 1%; }
-.bar i[data-value="2"] { --value: 2%; }
-.bar i[data-value="3"] { --value: 3%; }
-.bar i[data-value="4"] { --value: 4%; }
-.bar i[data-value="5"] { --value: 5%; }
-.bar i[data-value="6"] { --value: 6%; }
-.bar i[data-value="7"] { --value: 7%; }
-.bar i[data-value="8"] { --value: 8%; }
-.bar i[data-value="9"] { --value: 9%; }
-.bar i[data-value="10"] { --value: 10%; }
-.bar i[data-value="11"] { --value: 11%; }
-.bar i[data-value="12"] { --value: 12%; }
-.bar i[data-value="13"] { --value: 13%; }
-.bar i[data-value="14"] { --value: 14%; }
-.bar i[data-value="15"] { --value: 15%; }
-.bar i[data-value="16"] { --value: 16%; }
-.bar i[data-value="17"] { --value: 17%; }
-.bar i[data-value="18"] { --value: 18%; }
-.bar i[data-value="19"] { --value: 19%; }
-.bar i[data-value="20"] { --value: 20%; }
-.bar i[data-value="21"] { --value: 21%; }
-.bar i[data-value="22"] { --value: 22%; }
