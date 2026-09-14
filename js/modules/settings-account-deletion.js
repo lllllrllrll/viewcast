@@ -8,6 +8,7 @@ import {
   reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {getFunctions, httpsCallable} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
+import {ensureAppCheck, ensureAppCheckToken} from "../firebase-app-check.js";
 import {createStatusSetter, setControlsDisabled} from "../services/ui-state.js?v=1";
 
 function clearLocalAccountData() {
@@ -25,7 +26,9 @@ function deleteErrorMessage(error) {
     "auth/popup-closed-by-user": "The sign-in confirmation was closed.",
     "auth/requires-recent-login": "Please sign out, sign back in, and try again.",
     "auth/too-many-requests": "Too many attempts. Please wait and try again.",
-    "permission-denied": "ViewCast could not delete your stored profile. Please try again."
+    "functions/failed-precondition": "Please sign out, sign back in, and try again.",
+    "functions/unauthenticated": "Your identity could not be verified. Refresh the page and try again.",
+    "functions/permission-denied": "ViewCast could not authorize account deletion. Please try again."
   };
   return messages[error?.code] || "Your account could not be deleted. Please try again.";
 }
@@ -41,6 +44,13 @@ export function initializeAccountDeletion({firebaseConfig, firebaseConfigured}) 
   let shouldOpen = new URLSearchParams(window.location.search).get("delete") === "1";
   let accountUser = null;
   let usesPasswordProvider = false;
+  const app = firebaseConfigured
+    ? (getApps().length ? getApps()[0] : initializeApp(firebaseConfig))
+    : null;
+
+  // The callable deletion endpoint enforces App Check, so initialize it before
+  // Auth or Firestore can start using the Firebase app on this page.
+  if (app) ensureAppCheck(app);
 
   function close() {
     if (!modal) return;
@@ -93,7 +103,7 @@ export function initializeAccountDeletion({firebaseConfig, firebaseConfigured}) 
     try {
       await reauthenticate(accountUser);
       setStatus("Deleting your account…", "info");
-      const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+      await ensureAppCheckToken(app);
       await httpsCallable(getFunctions(app), "deleteAccount")();
       clearLocalAccountData();
       window.location.replace("../login.html?deleted=1");
@@ -105,7 +115,6 @@ export function initializeAccountDeletion({firebaseConfig, firebaseConfigured}) 
   });
 
   if (!firebaseConfigured) return;
-  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   onAuthStateChanged(getAuth(app), (user) => {
     accountUser = user;
     usesPasswordProvider = Boolean(user?.providerData.some((provider) => provider.providerId === "password"));

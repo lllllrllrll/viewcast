@@ -1111,60 +1111,6 @@ body.settings-dark .plan-indicator {
 }
 
 
-.settings-stack {
-  display: grid;
-  gap: 20px;
-  padding: 10px;
-}
-
-.settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.settings-label-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.settings-label-copy small {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.settings-select {
-  min-height: 38px;
-  padding: 0 34px 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  background: var(--surface);
-  cursor: pointer;
-}
-
-.settings-status {
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #a9ddc8;
-  border-radius: 8px;
-  color: #176448;
-  background: #edf9f3;
-  font-size: 13px;
-}
-
-
-
-
-
-
-body.settings-dark .settings-status {
-  color: #c9f4df;
-  background: rgba(47, 155, 108, 0.14);
-}
-
 .chart-wrap {
   position: relative;
   width: 100%;

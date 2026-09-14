@@ -1,9 +1,6 @@
 /* CSP-safe presentation helpers: dynamic state is expressed with classes and data attributes. */
 .plan-indicator-spaced { margin-top: 8px; }
-.settings-upgrade-row { margin-top: 10px; }
-.settings-upgrade-button,
 .plan-choice-button { width: 100%; }
-.settings-upgrade-button { background: var(--blue); }
 .account-id-code { color: var(--muted); font-size: 12px; }
 .analyzer-url-search { width: min(320px, 42vw); }
 .analyzer-url-input { width: 100%; border: 0; outline: 0; background: transparent; }

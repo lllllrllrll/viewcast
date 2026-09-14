@@ -1,7 +1,9 @@
 @import url("modules/interface.css?v=21");
 @import url("modules/account.css?v=21");
+@import url("modules/settings.css?v=1");
 @import url("modules/thumbnails.css?v=21");
 @import url("modules/analysis.css?v=21");
+@import url("modules/video-library.css?v=1");
 @import url("modules/insights.css?v=21");
 @import url("modules/chatbox.css?v=21");
 @import url("modules/presentation-utilities.css?v=21");
