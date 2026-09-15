@@ -1,5 +1,5 @@
 import {addNotifications} from "../../components/notifications.js";
-import {isGeminiAvailable} from "../gemini-client.js?v=8";
+import {isGeminiAvailable} from "../gemini-client.js?v=9";
 import {fetchChannelProfile} from "../insights-youtube.js?v=5";
 import {buildGeminiTrendPlan} from "../insights-gemini.js?v=8";
 import {buildGeminiPageInsights} from "../insights-gemini-page.js?v=5";

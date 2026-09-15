@@ -59,13 +59,6 @@
                   <button type="button" data-value="on" aria-pressed="false">On</button>
                  </div>
               </div>
-              <div class="settings-row">
-                 <span class="settings-label-copy">Email Notifications<small>Coming soon — no notification emails are sent yet.</small></span>
-                 <div class="segmented settings-toggle" role="group" aria-label="Email notifications" data-setting="emailNotifications">
-                  <button class="active" type="button" data-value="enabled" aria-pressed="true">Enabled</button>
-                  <button type="button" data-value="disabled" aria-pressed="false">Disabled</button>
-                 </div>
-              </div>
               <p class="settings-status" id="settingsStatus" role="status" aria-live="polite" hidden></p>
             </div>
           </article>
@@ -78,16 +71,12 @@
               </div>
             </div>
             <div class="progress-stack">
-              <div class="progress-item" data-usage-item="videos">
-                <div class="progress-meta"><b>Video analysis access</b><span data-usage-label="videos">&nbsp;</span></div>
-                <div class="bar"><i data-usage-bar="videos" data-value="0"></i></div>
-              </div>
               <div class="progress-item" data-usage-item="channels">
                 <div class="progress-meta"><b>Channels connected</b><span data-usage-label="channels">&nbsp;</span></div>
                 <div class="bar"><i data-usage-bar="channels" data-value="0"></i></div>
               </div>
               <div class="progress-item" data-usage-item="aiAnalyses">
-                <div class="progress-meta"><b>AI feature access</b><span data-usage-label="aiAnalyses">&nbsp;</span></div>
+                <div class="progress-meta"><b>AI feature uses today</b><span data-usage-label="aiAnalyses">&nbsp;</span></div>
                 <div class="bar"><i data-usage-bar="aiAnalyses" data-value="0"></i></div>
               </div>
               <div class="settings-upgrade-row">
@@ -204,7 +193,7 @@
     </div>
 
     <script src="../components/sidebar.js?v=3"></script>
-    <script type="module" src="../components/plan-modal.js?v=4"></script>
+    <script type="module" src="../components/plan-modal.js?v=5"></script>
     <script src="../components/app-bootstrap.js?v=3"></script>
     <script type="module" src="../components/charts.js?v=6"></script>
     <script src="../components/app-shell.js?v=1"></script>

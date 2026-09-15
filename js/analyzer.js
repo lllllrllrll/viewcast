@@ -1,4 +1,4 @@
-import {isGeminiAvailable} from "./gemini-client.js?v=8";
+import {isGeminiAvailable} from "./gemini-client.js?v=9";
 import {createBusySetter, createStatusSetter, ensureStatusElement} from "./services/ui-state.js?v=1";
 import {createYouTubePageSession} from "./services/youtube-page-session.js?v=1";
 import {createVideoAnalysisCache} from "./services/video-analysis-cache.js?v=1";

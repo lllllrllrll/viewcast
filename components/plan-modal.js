@@ -16,7 +16,7 @@ import {createStatusSetter, setControlsDisabled} from "../js/services/ui-state.j
             <h4>Basic</h4>
             <div class="plan-price">$0<span>/mo</span></div>
             <ul>
-              <li>Unlimited feature access</li>
+              <li>5 AI feature uses per day</li>
               <li>Link 1 YouTube channel</li>
               <li>Swap channels anytime</li>
               <li>Community support</li>

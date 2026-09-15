@@ -1,4 +1,4 @@
-import {isGeminiAvailable, requestGeminiText} from "./gemini-client.js?v=8";
+import {isGeminiAvailable, requestGeminiText} from "./gemini-client.js?v=9";
 import {addNotifications} from "../components/notifications.js";
 import {createBusySetter, createStatusSetter, setControlsDisabled} from "./services/ui-state.js?v=1";
 import {createImageUpload} from "./modules/image-upload.js?v=1";
@@ -122,7 +122,9 @@ form.addEventListener("submit", async (event) => {
     setStatus("Comparison complete.", "success");
   } catch (error) {
     console.error("Thumbnail comparison failed.", error);
-    setStatus("Gemini could not compare these images. Please try again.", "error");
+    setStatus(error.code === "plan/basic-feature-limit-reached"
+      ? error.message
+      : "Gemini could not compare these images. Please try again.", "error");
   } finally {
     setComparisonBusy(false);
     updateButton();

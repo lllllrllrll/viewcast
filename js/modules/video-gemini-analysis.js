@@ -1,4 +1,4 @@
-import {isGeminiAvailable, requestGeminiContent} from "../gemini-client.js?v=8";
+import {isGeminiAvailable, requestGeminiContent} from "../gemini-client.js?v=9";
 import {parseJsonObject} from "../services/json.js?v=1";
 import {
   durationFromIso,
@@ -196,6 +196,7 @@ export async function buildGeminiVideoAnalysis({video, analytics, retentionPoint
       .trim();
     return normalizeGeminiVideoAnalysis(parseJsonObject(text));
   } catch (error) {
+    if (error.code === "plan/basic-feature-limit-reached") throw error;
     console.warn("Gemini video analysis failed.", error);
     return null;
   }

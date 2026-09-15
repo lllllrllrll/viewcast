@@ -1,4 +1,4 @@
-import {isGeminiAvailable, requestGeminiContent} from "./gemini-client.js?v=8";
+import {isGeminiAvailable, requestGeminiContent} from "./gemini-client.js?v=9";
 import {parseJsonObject} from "./services/json.js?v=1";
 import {detectChannelLane, importantWords, trendQueriesForLane} from "./insights-model.js?v=9";
 import {

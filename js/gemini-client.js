@@ -7,6 +7,7 @@ import {
   geminiModel
 } from "./firebase-config.js?v=2";
 import {ensureAppCheck, ensureAppCheckToken} from "./firebase-app-check.js";
+import {recordFeatureUse, requireAvailableFeatureUse} from "./services/plan-usage.js?v=1";
 
 const fallbackGeminiModel = "gemini-3.1-flash-lite";
 const allowedGeminiModels = new Set([
@@ -37,31 +38,6 @@ function safeGeminiModel(modelName) {
   return allowedGeminiModels.has(model) ? model : fallbackGeminiModel;
 }
 
-function recordAiAnalysis(usageMetadata = {}) {
-  if (typeof window === "undefined") return;
-  const now = new Date();
-  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const key = "viewcastAiAnalysesUsed";
-  let usage = {day, count: 0, promptTokens: 0, outputTokens: 0, totalTokens: 0};
-  try {
-    const saved = JSON.parse(localStorage.getItem(key) || "null");
-    if (saved?.day === day) {
-      usage.count = Number(saved.count) || 0;
-      usage.promptTokens = Number(saved.promptTokens) || 0;
-      usage.outputTokens = Number(saved.outputTokens) || 0;
-      usage.totalTokens = Number(saved.totalTokens) || 0;
-    }
-  } catch (error) {
-    localStorage.removeItem(key);
-  }
-  usage.count += 1;
-  usage.promptTokens += Number(usageMetadata.promptTokenCount) || 0;
-  usage.outputTokens += Number(usageMetadata.candidatesTokenCount) || 0;
-  usage.totalTokens += Number(usageMetadata.totalTokenCount) || 0;
-  localStorage.setItem(key, JSON.stringify(usage));
-  window.dispatchEvent(new CustomEvent("viewcast:ai-usage-updated", {detail: usage}));
-}
-
 async function requestGeminiFunction({contents, systemInstruction, generationConfig, modelName}) {
   if (!firebaseConfigured) throw new Error("Firebase is not configured.");
   const app = firebaseApp || (getApps().length ? getApps()[0] : initializeApp(firebaseConfig));
@@ -69,12 +45,22 @@ async function requestGeminiFunction({contents, systemInstruction, generationCon
   if (!appCheck) throw new Error("App Check is not configured.");
   await ensureAppCheckToken(app);
   const callGenerateGeminiContent = httpsCallable(getFunctions(app), "generateGeminiContent");
-  const result = await callGenerateGeminiContent({
-    contents,
-    systemInstruction,
-    generationConfig,
-    modelName: safeGeminiModel(modelName)
-  });
+  let result;
+  try {
+    result = await callGenerateGeminiContent({
+      contents,
+      systemInstruction,
+      generationConfig,
+      modelName: safeGeminiModel(modelName)
+    });
+  } catch (error) {
+    if (error.code === "functions/resource-exhausted" && error.message?.includes("Basic plan")) {
+      const planError = new Error(error.message);
+      planError.code = "plan/basic-feature-limit-reached";
+      throw planError;
+    }
+    throw error;
+  }
   return result.data || {};
 }
 
@@ -141,10 +127,11 @@ export async function requestGeminiContent(options) {
   const cached = readPersistentResponse(cacheKey);
   if (cached) return cached;
   if (pendingRequests.has(key)) return pendingRequests.get(key);
+  requireAvailableFeatureUse();
 
   const request = requestGeminiFunction(options)
     .then((result) => {
-      recordAiAnalysis(result.usageMetadata);
+      recordFeatureUse(result.usageMetadata);
       savePersistentResponse(cacheKey, result);
       return result;
     })

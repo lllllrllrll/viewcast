@@ -1,13 +1,12 @@
 import {createStatusSetter, setControlsDisabled} from "../services/ui-state.js?v=1";
+import {BASIC_DAILY_FEATURE_LIMIT, readFeatureUsage} from "../services/plan-usage.js?v=1";
 
-const featureAvailability = {emailNotifications: false};
 const defaults = {
   darkMode: "off",
-  emailNotifications: "enabled",
   plan: "basic"
 };
 const planLimits = {
-  basic: {label: "Basic", videos: Infinity, channels: 1, aiAnalyses: Infinity},
+  basic: {label: "Basic", channels: 1, aiAnalyses: BASIC_DAILY_FEATURE_LIMIT},
   pro: {label: "Pro", videos: Infinity, channels: 5, aiAnalyses: Infinity},
   premium: {label: "Premium", videos: Infinity, channels: 5, aiAnalyses: Infinity}
 };
@@ -97,22 +96,13 @@ export function initializeSettingsPreferences() {
           : button.dataset.planChoice === "pro" ? "Upgrade to Pro" : "Choose Premium";
       button.classList.toggle("is-current-plan", isCurrent);
     });
-    updateUsageBar("videos", 0, plan.videos);
     updateUsageBar("channels", readChannelsConnected(), plan.channels);
-    updateUsageBar("aiAnalyses", 0, plan.aiAnalyses);
+    updateUsageBar("aiAnalyses", readFeatureUsage().count, plan.aiAnalyses);
   }
 
   toggles.forEach((group) => {
     const setting = group.dataset.setting;
     updateToggle(group, readSetting(setting));
-    if (setting === "emailNotifications" && !featureAvailability.emailNotifications) {
-      group.querySelectorAll("button").forEach((button) => {
-        setControlsDisabled(button, true);
-        button.title = "Email notifications are coming soon";
-      });
-      group.setAttribute("aria-disabled", "true");
-      return;
-    }
     group.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-value]");
       if (!button) return;

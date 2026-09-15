@@ -1,4 +1,4 @@
-import {requestGeminiText} from "../gemini-client.js?v=8";
+import {requestGeminiText} from "../gemini-client.js?v=9";
 import {createBusySetter, createStatusSetter} from "../services/ui-state.js?v=1";
 
 export function createThumbnailChat({getFile, getTitle}) {
@@ -62,8 +62,11 @@ export function createThumbnailChat({getFile, getTitle}) {
       setStatus("");
     } catch (error) {
       console.error("Thumbnail follow-up failed.", error);
-      append("assistant", "I couldn’t answer that right now. Please try again.");
-      setStatus("Gemini could not answer this question.", "error");
+      const message = error.code === "plan/basic-feature-limit-reached"
+        ? error.message
+        : "Gemini could not answer this question.";
+      append("assistant", message);
+      setStatus(message, "error");
     } finally {
       setBusy(false);
       input.focus();

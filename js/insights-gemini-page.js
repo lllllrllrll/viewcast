@@ -1,4 +1,4 @@
-import {isGeminiAvailable, requestGeminiContent, requestGeminiText} from "./gemini-client.js?v=8";
+import {isGeminiAvailable, requestGeminiContent, requestGeminiText} from "./gemini-client.js?v=9";
 import {numberValue, shortText, youtubeCategoryName} from "./insights-format.js?v=1";
 import {parseJsonObject} from "./services/json.js?v=1";
 import {isShort, trendEvidence, uploadPerformanceContext} from "./insights-model.js?v=9";
@@ -160,6 +160,7 @@ export async function buildGeminiChatReply(question, summary, chatHistory = []) 
     return text || "I couldn't generate a response. Please try again.";
   } catch (error) {
     console.error("Gemini advice failed.", error);
+    if (error.code === "plan/basic-feature-limit-reached") return error.message;
     return "AI chat is temporarily unavailable, but the recommendations above still use your channel uploads and YouTube performance data.";
   }
 }

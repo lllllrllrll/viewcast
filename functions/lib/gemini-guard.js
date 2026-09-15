@@ -5,7 +5,7 @@ const {createHash} = require("crypto");
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_REQUESTS = 12;
 const MAX_RATE_LIMIT_USERS = 5000;
-const DAILY_USER_REQUESTS = 50;
+const BASIC_DAILY_FEATURE_REQUESTS = 5;
 const DAILY_PROJECT_REQUESTS = 5000;
 const recentRequests = new Map();
 const responseCache = new Map();
@@ -105,11 +105,14 @@ async function enforceDailyQuota(uid) {
     const projectCount = projectData.day === day ?
       Number(projectData.count || 0) :
       0;
-    if (userCount >= DAILY_USER_REQUESTS ||
+    if (userCount >= BASIC_DAILY_FEATURE_REQUESTS ||
         projectCount >= DAILY_PROJECT_REQUESTS) {
       throw new HttpsError(
           "resource-exhausted",
-          "The daily AI usage limit has been reached.",
+          userCount >= BASIC_DAILY_FEATURE_REQUESTS ?
+            "Your Basic plan includes 5 AI feature uses per day. " +
+              "Your uses reset tomorrow." :
+            "The daily AI usage limit has been reached.",
       );
     }
     transaction.set(userRef, {count: userCount + 1, day});
