@@ -1,0 +1,28 @@
+/* Shared status badges and state colors. */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.status.live {
+  color: #10694a;
+  background: #def6eb;
+}
+
+.status.review {
+  color: #8a560c;
+  background: #fff0d5;
+}
+
+.status.paused {
+
+  color: #994157;
+  background: #ffe6eb;
+}

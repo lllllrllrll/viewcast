@@ -1,0 +1,40 @@
+/* Region breakdown rows and value bars. */
+
+.region-list {
+  display: grid;
+  gap: 13px;
+}
+
+.region-row {
+  display: grid;
+  grid-template-columns: 92px 1fr 56px;
+  gap: 12px;
+  align-items: center;
+  min-height: 34px;
+}
+
+.region-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8eef5;
+}
+
+.bar i {
+  display: block;
+  width: var(--value);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--blue));
+}
+
+@media (max-width: 520px) {
+  .region-row {
+    grid-template-columns: 74px 1fr 44px;
+  }
+}

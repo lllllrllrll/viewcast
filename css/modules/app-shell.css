@@ -1,0 +1,7 @@
+/* Root authenticated application layout. */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: 100vh;
+}

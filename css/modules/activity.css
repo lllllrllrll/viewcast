@@ -1,0 +1,44 @@
+/* Activity feed rows and status dots. */
+
+.activity {
+  display: grid;
+  gap: 14px;
+}
+
+.activity-item {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--teal);
+
+}
+
+.activity-item:nth-child(2) .dot { background: var(--amber); }
+.activity-item:nth-child(3) .dot { background: var(--blue); }
+.activity-item:nth-child(4) .dot { background: var(--rose); }
+
+.activity-item b {
+  display: block;
+  font-size: 13px;
+}
+
+.activity-item span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.activity-item time {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}

@@ -1,0 +1,12 @@
+/* Shared chart container and canvas sizing. */
+
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 266px;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+}

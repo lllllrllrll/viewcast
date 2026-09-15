@@ -1,0 +1,81 @@
+/* Intelligence summaries, discovery grids, and ranked signals. */
+
+.intelligence-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.intelligence-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.intelligence-card span,
+.intelligence-card small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.intelligence-card strong {
+  display: block;
+  margin: 7px 0 5px;
+  color: var(--ink);
+  font-size: 19px;
+}
+
+.discovery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.discovery-grid h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.ranked-signal-list {
+  display: grid;
+  gap: 7px;
+}
+
+.ranked-signal-list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.ranked-signal-list b { text-align: right; }
+
+.ranked-signal-list b small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.signal-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .intelligence-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .intelligence-grid,
+  .discovery-grid {
+    grid-template-columns: 1fr;
+  }
+}

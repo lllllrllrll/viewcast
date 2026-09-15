@@ -1,0 +1,61 @@
+/* Channel connection and channel context controls. */
+
+.channel-link-input {
+  width: min(320px, 42vw);
+}
+
+.channel-connect-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-start;
+  padding: 10px;
+}
+
+.channel-context-form {
+  display: grid;
+  gap: 16px;
+}
+
+.channel-context-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.channel-context-form input,
+.channel-context-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+}
+
+.channel-context-form input {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.channel-context-form textarea {
+  min-height: 104px;
+  padding: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.channel-context-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+#channelContextStatus {
+  color: var(--muted);
+  font-size: 13px;
+}

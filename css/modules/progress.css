@@ -1,0 +1,22 @@
+/* Progress stacks and metadata. */
+
+.progress-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.progress-item {
+  display: grid;
+  gap: 8px;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.progress-meta b {
+  font-size: 14px;
+}
