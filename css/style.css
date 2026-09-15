@@ -1,4 +1,10 @@
 @import url("modules/interface.css?v=21");
+@import url("modules/app.css?v=1");
+@import url("modules/sidebar.css?v=1");
+@import url("modules/main.css?v=1");
+@import url("modules/dashboard.css?v=1");
+@import url("modules/body-settings.css?v=1");
+@import url("modules/verification-gate.css?v=1");
 @import url("modules/account.css?v=21");
 @import url("modules/settings.css?v=1");
 @import url("modules/thumbnails.css?v=21");

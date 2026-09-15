@@ -1,0 +1,83 @@
+/* Dashboard grid, controls, links, and channel-specific layout. */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboard-control-bar {
+  position: sticky;
+  top: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+  backdrop-filter: blur(12px);
+}
+
+.dashboard-control-bar label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dashboard-control-bar select {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 32px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+}
+
+.dashboard-video-link {
+  color: var(--teal);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.dashboard-video-link:hover {
+  text-decoration: underline;
+}
+
+.positive { color: var(--green); }
+.negative { color: var(--rose); }
+
+.channel-dashboard-grid > .channel-connections-panel {
+  grid-column: span 12;
+}
+
+.channel-dashboard-grid > .channel-metric-card {
+  grid-column: span 4;
+}
+
+.channel-dashboard-grid > .channel-metric-wide {
+  grid-column: span 6;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-control-bar { flex-wrap: wrap; }
+}
+
+@media (max-width: 700px) {
+  .dashboard-control-bar label { flex: 1 1 42%; }
+  .dashboard-control-bar select { width: 100%; }
+}
+
+@media (max-width: 780px) {
+  .channel-dashboard-grid > .channel-metric-card,
+  .channel-dashboard-grid > .channel-metric-wide {
+    grid-column: span 12;
+  }
+}
