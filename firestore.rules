@@ -311,9 +311,14 @@ service cloud.firestore {
         && isValidUser(request.resource.data)
         && hasValidUpdateTimestamps(request.resource.data);
 
-      // Account deletion is handled by the authenticated Cloud Function so
-      // profile data and the Firebase Authentication account stay consistent.
-      allow delete: if false;
+      allow delete: if isOwner(userId);
+    }
+
+    // YouTube refresh tokens remain unreadable and unwritable from the client.
+    // The owner may only remove their own credential while deleting the account.
+    match /_internalYouTubeAuth/{userId} {
+      allow read, create, update: if false;
+      allow delete: if isOwner(userId);
     }
   }
 }

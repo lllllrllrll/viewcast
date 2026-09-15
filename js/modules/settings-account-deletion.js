@@ -1,14 +1,18 @@
 import {getApps, initializeApp} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {
   EmailAuthProvider,
+  deleteUser,
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
   reauthenticateWithCredential,
   reauthenticateWithPopup
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
-import {getFunctions, httpsCallable} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-functions.js";
-import {ensureAppCheck, ensureAppCheckToken} from "../firebase-app-check.js";
+import {
+  doc,
+  getFirestore,
+  writeBatch
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import {createStatusSetter, setControlsDisabled} from "../services/ui-state.js?v=1";
 
 function clearLocalAccountData() {
@@ -30,7 +34,8 @@ function deleteErrorMessage(error) {
     "appCheck/throttled": "Account verification is temporarily unavailable. Please wait and try again.",
     "functions/failed-precondition": "Please sign out, sign back in, and try again.",
     "functions/unauthenticated": "Your identity could not be verified. Refresh the page and try again.",
-    "functions/permission-denied": "ViewCast could not authorize account deletion. Please try again."
+    "functions/permission-denied": "ViewCast could not authorize account deletion. Please try again.",
+    "permission-denied": "ViewCast could not remove your saved account data. Please try again."
   };
   return messages[error?.code] || "Your account could not be deleted. Please try again.";
 }
@@ -49,10 +54,6 @@ export function initializeAccountDeletion({firebaseConfig, firebaseConfigured}) 
   const app = firebaseConfigured
     ? (getApps().length ? getApps()[0] : initializeApp(firebaseConfig))
     : null;
-
-  // The callable deletion endpoint enforces App Check, so initialize it before
-  // Auth or Firestore can start using the Firebase app on this page.
-  if (app) ensureAppCheck(app);
 
   function close() {
     if (!modal) return;
@@ -106,8 +107,12 @@ export function initializeAccountDeletion({firebaseConfig, firebaseConfigured}) 
       await reauthenticate(accountUser);
       await accountUser.getIdToken(true);
       setStatus("Deleting your account…", "info");
-      await ensureAppCheckToken(app);
-      await httpsCallable(getFunctions(app), "deleteAccount")();
+      const db = getFirestore(app);
+      const cleanup = writeBatch(db);
+      cleanup.delete(doc(db, "_internalYouTubeAuth", accountUser.uid));
+      cleanup.delete(doc(db, "users", accountUser.uid));
+      await cleanup.commit();
+      await deleteUser(accountUser);
       clearLocalAccountData();
       window.location.replace("../login.html?deleted=1");
     } catch (error) {

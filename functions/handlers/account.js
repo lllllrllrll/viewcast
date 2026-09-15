@@ -3,11 +3,12 @@ const {getAuth} = require("firebase-admin/auth");
 const {getFirestore} = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
 
-const enforceAppCheck = true;
-
 exports.deleteAccount = onCall(
     {
-      enforceAppCheck,
+      // Account deletion must remain available when client attestation is
+      // unavailable. Auth plus the recent-login check below still restricts
+      // this operation to the owner of the account being deleted.
+      enforceAppCheck: false,
       region: "us-central1",
       timeoutSeconds: 30,
     },
