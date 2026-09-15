@@ -26,6 +26,8 @@ function deleteErrorMessage(error) {
     "auth/popup-closed-by-user": "The sign-in confirmation was closed.",
     "auth/requires-recent-login": "Please sign out, sign back in, and try again.",
     "auth/too-many-requests": "Too many attempts. Please wait and try again.",
+    "appCheck/recaptcha-error": "Account verification could not start. Refresh the page and try again.",
+    "appCheck/throttled": "Account verification is temporarily unavailable. Please wait and try again.",
     "functions/failed-precondition": "Please sign out, sign back in, and try again.",
     "functions/unauthenticated": "Your identity could not be verified. Refresh the page and try again.",
     "functions/permission-denied": "ViewCast could not authorize account deletion. Please try again."
@@ -102,6 +104,7 @@ export function initializeAccountDeletion({firebaseConfig, firebaseConfigured}) 
     setStatus("Confirming your identity…", "info");
     try {
       await reauthenticate(accountUser);
+      await accountUser.getIdToken(true);
       setStatus("Deleting your account…", "info");
       await ensureAppCheckToken(app);
       await httpsCallable(getFunctions(app), "deleteAccount")();

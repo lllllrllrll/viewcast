@@ -2,6 +2,7 @@ import {getApps, initializeApp} from "https://www.gstatic.com/firebasejs/12.14.0
 import {getAuth, onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {getFirestore} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import {firebaseConfig, firebaseConfigured} from "./firebase-config.js";
+import {ensureAppCheck} from "./firebase-app-check.js";
 import {configureAuthPersistence, initializeLoginForm} from "./modules/auth-login-form.js?v=1";
 import {applyPendingProfile, updateUserInterface} from "./modules/auth-profile.js?v=1";
 import {
@@ -37,6 +38,9 @@ function handleMissingConfiguration() {
 
 async function initializeAuthentication() {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  // Protected callable functions require App Check. Initialize attestation
+  // before Auth or Firestore can win the Firebase service startup race.
+  ensureAppCheck(app);
   const auth = getAuth(app);
   const db = getFirestore(app);
   await configureAuthPersistence(auth);
