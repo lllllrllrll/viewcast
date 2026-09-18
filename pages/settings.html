@@ -52,13 +52,7 @@
               </div>
             </div>
             <div class="settings-stack">
-              <div class="settings-row">
-                 <span>Dark Mode</span>
-                 <div class="segmented settings-toggle" role="group" aria-label="Dark mode" data-setting="darkMode">
-                  <button class="active" type="button" data-value="off" aria-pressed="true">Off</button>
-                  <button type="button" data-value="on" aria-pressed="false">On</button>
-                 </div>
-              </div>
+              <div data-component="settings-rows" data-group="general"></div>
               <p class="settings-status" id="settingsStatus" role="status" aria-live="polite" hidden></p>
             </div>
           </article>
@@ -93,18 +87,7 @@
               </div>
             </div>
             <div class="settings-stack">
-              <div class="settings-row">
-                <span>Account ID</span>
-                <code class="account-id-code" id="accountId">Loading...</code>
-              </div>
-              <div class="settings-row">
-                <span>Member Since</span>
-                <span id="memberSince">Loading...</span>
-              </div>
-              <div class="settings-row">
-                <span>Last Sign In</span>
-                <span id="lastSignIn">Loading...</span>
-              </div>
+              <div data-component="settings-rows" data-group="account-details"></div>
             </div>
           </article>
 
@@ -195,6 +178,7 @@
     <script src="../components/sidebar.js?v=3"></script>
     <script type="module" src="../components/plan-modal.js?v=5"></script>
     <script src="../components/app-bootstrap.js?v=3"></script>
+    <script src="../components/settings-rows.js?v=1"></script>
     <script type="module" src="../components/charts.js?v=6"></script>
     <script src="../components/app-shell.js?v=1"></script>
     <script type="module" src="../js/settings.js?v=10"></script>
