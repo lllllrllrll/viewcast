@@ -28,16 +28,20 @@ Then open the Hosting URL printed by the emulator, usually `http://localhost:500
 2. Add a Web app from **Project settings > Your apps**.
 3. In **Authentication > Sign-in method**, enable **Email/Password**.
 4. Copy the Firebase web configuration into `js/firebase-config.js`.
-5. Keep the production hostnames in `firebase.json` under `auth.authorizedDomains`. The checked-in list allows `localhost`, `viewcast1.netlify.app`, `viewcast2.firebaseapp.com`, and `viewcast2.web.app`; add any other custom hostname before deploying it.
+5. In **Authentication > Settings > Authorized domains**, allow `localhost`, `viewcast1.netlify.app`, `viewcast2.firebaseapp.com`, and `viewcast2.web.app`. Add any custom hostname there before using it.
 6. Open **Firestore Database**, create the default database, and choose a production location.
 7. In **Firestore Database > Rules**, publish the contents of `firestore.rules`.
+
+If you add a production hostname, also add its exact HTTPS origin to
+`productionOrigins` in `functions/handlers/youtube-oauth.js`. This keeps OAuth
+authorization codes from being redirected through an untrusted site.
 
 For local testing, use `http://localhost:4173` rather than `127.0.0.1`, or add `127.0.0.1` as an authorized domain. For GitHub Pages, add your `username.github.io` hostname.
 
 The app supports:
 
 - Email/password account creation
-- Immediate dashboard access after account creation
+- Verified-email access to the dashboard after account creation
 - Verified-email access for dashboard features and Firestore profile data
 - Persistent email/password sign-in
 - Password reset emails

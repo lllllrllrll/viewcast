@@ -2,7 +2,8 @@ const {HttpsError} = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 
 const MAX_TEXT_CHARS = 18000;
-const MAX_INLINE_DATA_CHARS = 21 * 1024 * 1024;
+const MAX_INLINE_DATA_CHARS = 8 * 1024 * 1024;
+const MAX_TOTAL_INLINE_DATA_CHARS = 12 * 1024 * 1024;
 const MAX_SYSTEM_CHARS = 3000;
 const MAX_OUTPUT_TOKENS = 800;
 
@@ -21,6 +22,7 @@ function validateContents(contents) {
 
   let textChars = 0;
   let mediaPartCount = 0;
+  let inlineDataChars = 0;
   contents.forEach((message) => {
     if (!message || typeof message !== "object" ||
         !["user", "model"].includes(message.role) ||
@@ -74,14 +76,18 @@ function validateContents(contents) {
           !["image/jpeg", "image/png", "image/webp", "video/mp4",
             "video/webm", "video/quicktime", "video/x-m4v"]
               .includes(inlineData.mimeType) ||
-          inlineData.data.length > MAX_INLINE_DATA_CHARS) {
+          inlineData.data.length > MAX_INLINE_DATA_CHARS ||
+          inlineData.data.length % 4 !== 0 ||
+          !/^[A-Za-z0-9+/]*={0,2}$/.test(inlineData.data)) {
         throw new HttpsError("invalid-argument", "Invalid inline media data.");
       }
+      inlineDataChars += inlineData.data.length;
       mediaPartCount += 1;
     });
   });
 
-  if (textChars > MAX_TEXT_CHARS || mediaPartCount > 2) {
+  if (textChars > MAX_TEXT_CHARS || mediaPartCount > 2 ||
+      inlineDataChars > MAX_TOTAL_INLINE_DATA_CHARS) {
     throw new HttpsError("invalid-argument", "AI request is too large.");
   }
 }

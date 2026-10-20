@@ -3,7 +3,7 @@ import {getAuth, onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12
 import {firebaseConfig, firebaseConfigured} from "../firebase-config.js";
 import {startStudioAutoRefresh} from "../services/studio-auto-refresh.js?v=1";
 import {activeYouTubeChannelId} from "../services/youtube-session.js?v=1";
-import {parseVideoId} from "./analyzer-video-library.js?v=1";
+import {parseVideoId} from "./analyzer-video-library.js?v=2";
 
 export const pendingAnalyzerVideoKey = "viewcastPendingAnalyzerVideo";
 

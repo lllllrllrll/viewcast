@@ -1,5 +1,5 @@
 import {fetchChannelVideos} from "../insights-youtube.js?v=5";
-import {renderAnalyzerVideoLibrary, selectLibraryVideo} from "./analyzer-video-library.js?v=1";
+import {renderAnalyzerVideoLibrary, selectLibraryVideo} from "./analyzer-video-library.js?v=2";
 
 export function createAnalyzerLibraryController({
   library,

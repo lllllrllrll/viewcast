@@ -82,7 +82,12 @@
     const map = analyticsMap();
     const rows = [["Video", "Format", "Views", "Average viewed %", "Watch hours", "Subscribers", "Likes", "Comments", "Shares"]];
     visibleVideos().forEach((video) => { const item = map.get(String(video.id)); if (item) rows.push([video.snippet?.title || "Untitled", videoFormat(video), item.views, item.retention, item.watchMinutes / 60, item.subscribers, item.likes, item.comments, item.shares]); });
-    const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const csvCell = (value) => {
+      const text = String(value);
+      const safe = /^\s*[=+\-@]/.test(text) ? `'${text}` : text;
+      return `"${safe.replaceAll('"', '""')}"`;
+    };
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
     const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], {type: "text/csv"}));
     link.download = `viewcast-dashboard-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(link.href);
   }

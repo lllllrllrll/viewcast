@@ -2,6 +2,7 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
 const {GoogleGenerativeAI} = require("@google/generative-ai");
 const logger = require("firebase-functions/logger");
+const {requireVerifiedAuth} = require("../lib/callable-auth");
 const {
   validateContents,
   validatedGenerationConfig,
@@ -30,13 +31,10 @@ exports.generateGeminiContent = onCall(
     },
     async (request) => {
       // 1. Authentication check
-      if (!request.auth) {
-        logger.warn("Unauthenticated request to generateGeminiContent");
-        throw new HttpsError(
-            "unauthenticated",
-            "The function must be called while authenticated.",
-        );
-      }
+      requireVerifiedAuth(
+          request,
+          "The function must be called while authenticated.",
+      );
       if (!request.data || typeof request.data !== "object") {
         throw new HttpsError("invalid-argument", "Request data is required.");
       }
@@ -108,28 +106,28 @@ exports.generateGeminiContent = onCall(
         saveGeminiCache(responseCacheKey, responseValue);
         return responseValue;
       } catch (error) {
-        logger.error("Gemini API error:", error);
+        logger.error("Gemini API request failed", {
+          status: Number(error && error.status) || null,
+          name: String(error && error.name || "Error").slice(0, 80),
+        });
 
         // Handle specific Gemini errors
         if (error.status === 503) {
           throw new HttpsError(
               "unavailable",
               "The AI model is overloaded. Please try again in a few seconds.",
-              error.message,
           );
         }
         if (error.status === 404) {
           throw new HttpsError(
               "not-found",
               `The model '${selectedModel}' was not found or is deprecated.`,
-              error.message,
           );
         }
 
         throw new HttpsError(
             "internal",
             "An error occurred while communicating with the Gemini API.",
-            error.message,
         );
       }
     },

@@ -1,3 +1,5 @@
+const appShellLoginUrl = new URL("../login.html", document.currentScript.src);
+
 function hasVisibleButtonLabel(button) {
   return Boolean(
     button.textContent.replace(/\s+/g, " ").trim()
@@ -100,5 +102,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
 window.authInitialization?.catch((error) => {
   console.error("Authentication failed to initialize.", error);
-  document.body.classList.add("auth-ready");
+  const loginUrl = new URL(appShellLoginUrl.href);
+  loginUrl.searchParams.set("auth", "error");
+  loginUrl.searchParams.set(
+    "returnTo",
+    `${window.location.pathname}${window.location.search}`
+  );
+  window.location.replace(loginUrl.href);
 });

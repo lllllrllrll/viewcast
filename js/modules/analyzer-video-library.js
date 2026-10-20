@@ -5,9 +5,13 @@ export function parseVideoId(value = "") {
   if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
   try {
     const url = new URL(trimmed);
-    if (url.hostname.includes("youtu.be")) {
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (hostname === "youtu.be") {
       const id = url.pathname.split("/").filter(Boolean)[0];
       return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
+    }
+    if (!["youtube.com", "m.youtube.com", "music.youtube.com"].includes(hostname)) {
+      return "";
     }
     const watchId = url.searchParams.get("v");
     if (watchId) return /^[a-zA-Z0-9_-]{11}$/.test(watchId) ? watchId : "";

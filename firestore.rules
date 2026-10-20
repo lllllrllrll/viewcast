@@ -33,6 +33,11 @@ service cloud.firestore {
         && request.auth.uid == userId;
     }
 
+    function isVerifiedOwner(userId) {
+      return isOwner(userId)
+        && request.auth.token.email_verified == true;
+    }
+
     function uidUnchanged(userId) {
       return request.resource.data.uid == userId
         && request.resource.data.uid == request.auth.uid;
@@ -299,26 +304,26 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow create: if isOwner(userId)
+      allow create: if isVerifiedOwner(userId)
         && uidUnchanged(userId)
         && isValidUser(request.resource.data)
         && hasValidCreateTimestamps(request.resource.data);
 
-      allow read: if isOwner(userId);
+      allow read: if isVerifiedOwner(userId);
 
-      allow update: if isOwner(userId)
+      allow update: if isVerifiedOwner(userId)
         && uidNotModified()
         && isValidUser(request.resource.data)
         && hasValidUpdateTimestamps(request.resource.data);
 
+      // Account deletion remains available to an authenticated owner even if
+      // their email-verification state changes after account creation.
       allow delete: if isOwner(userId);
     }
 
-    // YouTube refresh tokens remain unreadable and unwritable from the client.
-    // The owner may only remove their own credential while deleting the account.
+    // YouTube credentials are managed exclusively by Admin SDK callables.
     match /_internalYouTubeAuth/{userId} {
-      allow read, create, update: if false;
-      allow delete: if isOwner(userId);
+      allow read, write: if false;
     }
   }
 }

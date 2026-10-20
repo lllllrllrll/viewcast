@@ -1,5 +1,9 @@
 import {getApps, initializeApp} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
-import {getAuth, onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {getFirestore} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
 import {firebaseConfig, firebaseConfigured} from "./firebase-config.js";
 import {ensureAppCheck} from "./firebase-app-check.js";
@@ -50,6 +54,15 @@ async function initializeAuthentication() {
     warnIfUnauthorizedHost({isLoginPage, firebaseConfigured, showMessage});
     if (new URLSearchParams(window.location.search).get("deleted") === "1") {
       showMessage("Your ViewCast account was permanently deleted.", "success");
+    } else if (new URLSearchParams(window.location.search).get("verify") === "required") {
+      showMessage(
+        "Verify your email using the message Firebase sent you, then sign in again.",
+        "success"
+      );
+    } else if (new URLSearchParams(window.location.search).get("auth") === "timeout") {
+      showMessage("Sign-in verification timed out. Check your connection and try again.");
+    } else if (new URLSearchParams(window.location.search).get("auth") === "error") {
+      showMessage("Sign-in verification could not start. Refresh the page and try again.");
     }
   }
 
@@ -60,6 +73,13 @@ async function initializeAuthentication() {
     }
     if (!user) {
       window.location.replace(loginUrlForCurrentPage());
+      return;
+    }
+    if (!user.emailVerified) {
+      await signOut(auth);
+      const verifyUrl = new URL(loginUrl.href);
+      verifyUrl.searchParams.set("verify", "required");
+      window.location.replace(verifyUrl.href);
       return;
     }
     updateUserInterface(user, auth);
@@ -80,7 +100,13 @@ if (!firebaseConfigured) {
       showMessage("Firebase could not initialize. Check the project configuration and authorized domains.", "error");
       disableAuthForm();
     } else {
-      document.body.classList.add("auth-ready");
+      const errorUrl = new URL(loginUrl.href);
+      errorUrl.searchParams.set("auth", "error");
+      errorUrl.searchParams.set(
+        "returnTo",
+        `${window.location.pathname}${window.location.search}`
+      );
+      window.location.replace(errorUrl.href);
     }
   }
 }

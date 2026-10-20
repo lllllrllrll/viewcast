@@ -2,9 +2,11 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
+  signOut,
   updateProfile
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 import {createBusySetter, createStatusSetter} from "../services/ui-state.js?v=1";
@@ -23,6 +25,23 @@ const errorMessages = {
   "auth/user-disabled": "This account has been disabled.",
   "auth/weak-password": "Use a password with at least six characters."
 };
+
+async function requireVerifiedEmail(auth, user, showMessage) {
+  if (user.emailVerified) return true;
+
+  try {
+    await sendEmailVerification(user);
+  } catch (error) {
+    console.warn("Could not send the verification email.", error);
+  }
+
+  await signOut(auth);
+  showMessage(
+    "Verify your email using the message Firebase sent you, then sign in again.",
+    "success"
+  );
+  return false;
+}
 
 export function friendlyAuthError(error) {
   if (error?.code === "permission-denied") return "Your account was created, but Firestore blocked the profile save.";
@@ -75,10 +94,20 @@ export function initializeLoginForm(auth, showMessage, onActionChange) {
         setSubmitStatus("Creating account...");
         const credential = await createUserWithEmailAndPassword(auth, email, password);
         rememberPendingProfile(credential.user, displayName, {isNewAccount: true});
-        void updateProfile(credential.user, {displayName}).catch((error) => console.warn("Profile save will be retried.", error));
+        await updateProfile(credential.user, {displayName});
+        if (!(await requireVerifiedEmail(auth, credential.user, showMessage))) {
+          onActionChange(false);
+          setBusy(false);
+          return;
+        }
       } else {
         setSubmitStatus("Signing in...");
-        await signInWithEmailAndPassword(auth, email, password);
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+        if (!(await requireVerifiedEmail(auth, credential.user, showMessage))) {
+          onActionChange(false);
+          setBusy(false);
+          return;
+        }
       }
       window.location.replace(safeReturnUrl());
     } catch (error) {

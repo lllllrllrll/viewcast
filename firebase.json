@@ -6,7 +6,10 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "public": ".",
+    "public": "dist",
+    "predeploy": [
+      "node netlify-build.mjs"
+    ],
     "headers": [
       {
         "source": "**/*.@(html|js|css)",
@@ -125,12 +128,6 @@
     }
   ],
   "auth": {
-    "authorizedDomains": [
-      "localhost",
-      "viewcast1.netlify.app",
-      "viewcast2.firebaseapp.com",
-      "viewcast2.web.app"
-    ],
     "providers": {
       "emailPassword": true,
       "googleSignIn": {

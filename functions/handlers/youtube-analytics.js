@@ -1,4 +1,5 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {requireVerifiedAuth} = require("../lib/callable-auth");
 const {
   firstPrivateReport,
   googleOAuthClientSecret,
@@ -15,12 +16,10 @@ exports.getPrivateYouTubeVideoAnalytics = onCall(
       timeoutSeconds: 30,
     },
     async (request) => {
-      if (!request.auth) {
-        throw new HttpsError(
-            "unauthenticated",
-            "Sign in before loading private YouTube analytics.",
-        );
-      }
+      requireVerifiedAuth(
+          request,
+          "Sign in before loading private YouTube analytics.",
+      );
       const videoId = String(request.data && request.data.videoId || "");
       if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
         throw new HttpsError("invalid-argument", "Invalid YouTube video ID.");

@@ -14,7 +14,7 @@ import {
   fetchChannelProfile
 } from "./insights-youtube.js?v=5";
 import {secondsFromIso} from "./insights-format.js?v=1";
-import {parseVideoId} from "./modules/analyzer-video-library.js?v=1";
+import {parseVideoId} from "./modules/analyzer-video-library.js?v=2";
 import {createVideoAnalysisLoader} from "./modules/video-analysis-loader.js?v=1";
 import {createAnalyzerLibraryController} from "./modules/analyzer-library-controller.js?v=1";
 import {notifyVideoAnalysisComplete} from "./modules/video-analysis-notifications.js?v=1";

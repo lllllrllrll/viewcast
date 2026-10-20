@@ -1,5 +1,6 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {getFirestore} = require("firebase-admin/firestore");
+const {requireVerifiedAuth} = require("../lib/callable-auth");
 const {
   googleOAuthClientSecret,
   googleTokenRequest,
@@ -9,6 +10,27 @@ const {
 const GOOGLE_OAUTH_CLIENT_ID =
   "109179683402-9u152t0gq2565t9rdci8b896ual2bba7.apps.googleusercontent.com";
 const enforceAppCheck = true;
+const productionOrigins = new Set([
+  "https://viewcast1.netlify.app",
+  "https://viewcast2.firebaseapp.com",
+  "https://viewcast2.web.app",
+]);
+
+/**
+ * Accepts only configured production origins and explicit localhost origins.
+ * @param {string} value Requested OAuth redirect origin.
+ * @return {boolean} Whether the redirect origin is allowed.
+ */
+function isAllowedRedirectOrigin(value) {
+  try {
+    const url = new URL(value);
+    if (value !== url.origin) return false;
+    if (productionOrigins.has(url.origin)) return true;
+    return url.protocol === "http:" && url.hostname === "localhost";
+  } catch (error) {
+    return false;
+  }
+}
 
 exports.exchangeYouTubeAuthorizationCode = onCall(
     {
@@ -18,16 +40,12 @@ exports.exchangeYouTubeAuthorizationCode = onCall(
       timeoutSeconds: 30,
     },
     async (request) => {
-      if (!request.auth) {
-        throw new HttpsError(
-            "unauthenticated",
-            "Sign in before linking YouTube.",
-        );
-      }
+      requireVerifiedAuth(request, "Sign in before linking YouTube.");
       const data = request.data || {};
       const code = String(data.code || "");
       const redirectUri = String(data.redirectUri || "");
-      if (!code || code.length > 4096 || !/^https?:\/\//.test(redirectUri)) {
+      if (!code || code.length > 4096 ||
+          !isAllowedRedirectOrigin(redirectUri)) {
         throw new HttpsError(
             "invalid-argument",
             "Invalid Google authorization response.",
@@ -77,12 +95,7 @@ exports.getYouTubeAccessToken = onCall(
       timeoutSeconds: 30,
     },
     async (request) => {
-      if (!request.auth) {
-        throw new HttpsError(
-            "unauthenticated",
-            "Sign in before using YouTube.",
-        );
-      }
+      requireVerifiedAuth(request, "Sign in before using YouTube.");
       const credentialRef = getFirestore()
           .doc(`_internalYouTubeAuth/${request.auth.uid}`);
       const snapshot = await credentialRef.get();
@@ -125,12 +138,7 @@ exports.getYouTubeAccessToken = onCall(
 exports.revokeYouTubeAuthorization = onCall(
     {enforceAppCheck, region: "us-central1", timeoutSeconds: 30},
     async (request) => {
-      if (!request.auth) {
-        throw new HttpsError(
-            "unauthenticated",
-            "Sign in before unlinking YouTube.",
-        );
-      }
+      requireVerifiedAuth(request, "Sign in before unlinking YouTube.");
       const credentialRef = getFirestore()
           .doc(`_internalYouTubeAuth/${request.auth.uid}`);
       const snapshot = await credentialRef.get();
